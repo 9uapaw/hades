@@ -22,7 +22,7 @@
 
 ## Overview
 
-Hades is a CLI tool, that shares a common interface between various Hadoop distributions. It is a collection of commands most frequently used by developers of Hadoop components.
+Hades is a CLI tool, that shares a common interface between various Hadoop distributions. It is a collection of commands most frequently used by developers of Hadoop components. Please note that it is in pre-alpha development status and expect breaking changes. Do not use it on production clusters.
 
 
 <a id="org0784c9c"></a>
