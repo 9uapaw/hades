@@ -1,0 +1,19 @@
+{
+  "hadoopPath": "/Users/andrasgyori/Programming/upstream/hadoop",
+  "hadoopJarPath": "/Users/andrasgyori/Programming/upstream/hadoop/hadoop-dist/target/hadoop-3.4.0-SNAPSHOT/share",
+  "defaultModules": ["hadoop-common", "hadoop-yarn-server-common", "hadoop-yarn-api"],
+  "cluster": {
+    "cluster_type": "CM",
+    "context": {
+        "Yarn": {
+          "name": "Yarn-1",
+          "roles": {
+            "ResourceManager-1": {
+              "type": "ResourceManager",
+              "host": "localhost"
+            }
+          }
+        }
+      }
+  }
+}
