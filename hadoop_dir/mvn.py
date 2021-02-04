@@ -2,21 +2,19 @@ import logging
 
 from core.cmd import RunnableCommand
 from core.error import CommandExecutionException
-from hadoop_dir.module import HadoopModules
-import sh
-
+from hadoop_dir.module import HadoopDir, HadoopModules
 
 logger = logging.getLogger(__name__)
 
 
 class MavenCompiler:
-    BASE_COMPILE_CMD = "mvn package -Pdist -Dtar -Dmaven.javadoc.skip=true -DskipTests -fail-at-end"
+    BASE_COMPILE_CMD = "mvn package -Pdist -Dtar -Dmaven.javadoc.skip=true -DskipTests -fail-at-end -Pyarn-ui"
     MODULE_PREFIX = "org.apache.hadoop"
 
     def __init__(self):
         pass
 
-    def compile(self, modules: HadoopModules):
+    def compile(self, modules: HadoopDir):
         cmd = self.BASE_COMPILE_CMD
         for module in modules.get_modules():
             cmd += " -pl {}:{}".format(self.MODULE_PREFIX, module)
@@ -37,4 +35,6 @@ class MavenCompiler:
             if err:
                 raise CommandExecutionException("Error while running compilation command\n{}".format(err), cmd)
 
-
+    def compile_single_module(self, hadoop_dir: HadoopDir, module: HadoopModules):
+        compile_cmd = RunnableCommand(self.BASE_COMPILE_CMD, work_dir=hadoop_dir.get_module_abs_path(module))
+        compile_cmd.run_async()

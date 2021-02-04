@@ -25,7 +25,7 @@ class HadoopOperationExecutor(ABC):
     def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand):
         raise NotImplementedError()
 
-    def update_config(self, *args: HadoopRoleInstance, file: HadoopConfigFile, properties: List[str], values: List[str], no_backup: bool = False):
+    def update_config(self, *args: HadoopRoleInstance, file: HadoopConfigFile, properties: List[str], values: List[str], no_backup: bool = False, source: str = None):
         raise NotImplementedError()
 
     def restart_roles(self, *args: HadoopRoleInstance):

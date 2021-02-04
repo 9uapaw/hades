@@ -4,8 +4,9 @@ this_module = sys.modules[__name__]
 
 
 class ApplicationCommand:
-    def __init__(self, path: str = None):
+    def __init__(self, path: str = None, queue: str = None):
         self.path = path
+        self.queue = queue
 
     def build(self):
         raise NotImplementedError()
@@ -17,26 +18,35 @@ class DistributedShellApp(ApplicationCommand):
     KLASS = "org.apache.hadoop.yarn.applications.distributedshell.Client"
     JAR = "{path}/yarn/hadoop-yarn-applications-distributedshell*.jar"
 
-    def __init__(self, path: str = None, cmd: str = None):
-        super().__init__(path)
+    def __init__(self, path: str = None, cmd: str = None, queue: str = None):
+        super().__init__(path, queue)
         self.cmd = cmd or 'sleep 100'
 
     def build(self) -> str:
-        return self.YARN_CMD.format(klass=self.KLASS,
+        cmd = self.YARN_CMD.format(klass=self.KLASS,
                                     jar=self.JAR.format(path=self.path),
                                     cmd="-shell_command \"{}\"".format(self.cmd))
+        if self.queue:
+            cmd += " -queue {}".format(self.queue)
+
+        return cmd
 
 
 class MapReduceApp(ApplicationCommand):
-    MAPREDUCE_JAR = "{path}/mapreduce/hadoop-mapreduce-examples*.jar"
-    YARN_CMD = "yarn jar {jar} {cmd}"
+    MAPREDUCE_JAR = "{path}/mapreduce/hadoop-mapreduce-client-jobclient-*-tests.jar"
+    YARN_CMD = "yarn jar {jar} {cmd} {prop} -m 1 -r 1 -mt 1 -rt 1"
 
-    def __init__(self, path: str = None, cmd: str = None):
-        super().__init__(path)
-        self.cmd = cmd or 'pi 16 100000'
+    def __init__(self, path: str = None, cmd: str = None, queue: str = None):
+        super().__init__(path, queue)
+        self.cmd = cmd or 'sleep'
 
     def build(self):
-        return self.YARN_CMD.format(jar=self.MAPREDUCE_JAR.format(path=self.path), cmd=self.cmd)
+        prop = ""
+        if self.queue:
+            prop += " -Dmapreduce.job.queuename={}".format(self.queue)
+        cmd = self.YARN_CMD.format(jar=self.MAPREDUCE_JAR.format(path=self.path), cmd=self.cmd, prop=prop)
+
+        return cmd
 
 
 class Application(Enum):

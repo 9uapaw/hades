@@ -5,12 +5,10 @@ from typing import Dict, List, Tuple, Type
 
 from tabulate import tabulate
 
-import script
 from core.config import Config
 from core.context import HadesContext
 from core.error import ConfigSetupException, HadesException
 from format.blob import BlobFormat
-from format.table import TableFormat
 from format.tree import TreeFormat
 from hadoop.action import RoleAction
 from hadoop.app.example import DistributedShellApp, Application, MapReduceApp
@@ -20,9 +18,8 @@ from hadoop.cm.cm_api import CmApi
 from hadoop.cm.executor import CmExecutor
 from hadoop.hadock.executor import HadockExecutor
 from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopModules
+from hadoop_dir.module import HadoopDir, HadoopModules
 from hadoop_dir.mvn import MavenCompiler
-from script import *
 from script.base import HadesScriptBase
 
 logger = logging.getLogger(__name__)
@@ -94,24 +91,30 @@ class MainCommandHandler:
 
         logger.info("Created config file {}".format(config_path))
 
-    def compile(self, changed=False, deploy=False, modules=None, no_copy=False):
+    def compile(self, changed=False, deploy=False, modules=None, no_copy=False, single=None):
         if not self.ctx.config.hadoop_jar_path:
             raise ConfigSetupException("hadoopJarPath", "not set")
 
-        hadoop_modules = HadoopModules(self.ctx.config.hadoop_path)
+        mvn = MavenCompiler()
+        hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
+
+        if single:
+            mvn.compile_single_module(hadoop_modules, single)
+            hadoop_modules.copy_module_to_dist(single)
+            return
 
         if modules:
             hadoop_modules.add_modules(*modules, with_jar=True)
 
-        if changed:
+        if changed and not modules:
+            hadoop_modules.add_modules(*self.ctx.config.default_modules, with_jar=True)
             hadoop_modules.extract_changed_modules()
 
         logger.info("Found modules: {}".format(hadoop_modules.get_modules()))
-        mvn = MavenCompiler()
         mvn.compile(hadoop_modules)
 
         if not no_copy:
-            hadoop_modules.copy_module_jars(self.ctx.config.hadoop_jar_path)
+            hadoop_modules.copy_modules_to_dist(self.ctx.config.hadoop_jar_path)
 
     def log(self, selector: str, follow: bool, tail: int, grep: str):
         cluster = self._create_cluster()
@@ -140,19 +143,20 @@ class MainCommandHandler:
 
         return HadoopCluster.from_config(self.ctx.config.cluster, self.executor)
 
-    def run_app(self, app: str, cmd: str = None):
+    def run_app(self, app: str, cmd: str = None, queue: str = None):
         cluster = self._create_cluster()
         application = None
         if app.lower() == Application.DISTRIBUTED_SHELL.name.lower():
-            application = DistributedShellApp(cmd=cmd)
+            application = DistributedShellApp(cmd=cmd, queue=queue)
         elif app.lower() == Application.MAPREDUCE.name.lower():
-            application = MapReduceApp(cmd=cmd)
+            application = MapReduceApp(cmd=cmd, queue=queue)
 
         cluster.run_app(application)
 
-    def update_config(self, selector: str, file: HadoopConfigFile, properties: List[str], values: List[str], no_backup: bool = False):
+    def update_config(self, selector: str, file: HadoopConfigFile, properties: List[str], values: List[str],
+                      no_backup: bool = False, source: str = None):
         cluster = self._create_cluster()
-        cluster.update_config(selector, file, properties, values, no_backup)
+        cluster.update_config(selector, file, properties, values, no_backup, source)
 
     def role_action(self, selector: str, action: RoleAction):
         cluster = self._create_cluster()
@@ -163,7 +167,6 @@ class MainCommandHandler:
         pass
 
     def run_script(self, name: str):
-
         mod = __import__('script.{}'.format(name))
         script_module = getattr(mod, name, None)
         if not script_module:

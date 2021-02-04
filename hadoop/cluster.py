@@ -88,11 +88,13 @@ class HadoopCluster:
 
     @staticmethod
     def _generate_role_output(logger: logging.Logger, target: HadoopRoleInstance, grep: str or None) -> Callable[[str], None]:
-        return lambda line: logger.info("{} {}".format(target.get_colorized_output(), line.replace("\n", ""))) if grep in line else ""
+        return lambda line: logger.info("{} {}".format(target.get_colorized_output(), line.replace("\n", ""))) \
+            if not grep or grep in line else ""
 
-    def update_config(self, selector: str, file: HadoopConfigFile, properties: List[str], values: List[str], no_backup: bool = False):
+    def update_config(self, selector: str, file: HadoopConfigFile, properties: List[str], values: List[str],
+                      no_backup: bool = False, source: str = None):
         selected = self._select_roles(selector)
-        self._executor.update_config(*selected, file=file, properties=properties, values=values, no_backup=no_backup)
+        self._executor.update_config(*selected, file=file, properties=properties, values=values, no_backup=no_backup, source=source)
 
     def restart_roles(self, selector: str):
         selected = self._select_roles(selector)

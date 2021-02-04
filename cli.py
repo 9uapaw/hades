@@ -14,6 +14,7 @@ from core.context import HadesContext
 from core.error import HadesException, ConfigSetupException, CliArgException
 from core.handler import MainCommandHandler
 from hadoop.xml_config import HadoopConfigFile
+from hadoop_dir.module import HadoopModules
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,9 @@ def cli(ctx, config: str, debug: bool):
 @click.option('-c', '--changed', is_flag=True, help='compiles only the changed modules')
 @click.option('-d', '--deploy', is_flag=True, help='deploy the changed modules to cluster')
 @click.option('-n', '--no-copy', default=False, is_flag=True, help='do not copy the compiled modules jar to hadoop jar path')
-@click.option('-m', '--module', multiple=True, help='compiles the given module')
-def compile(ctx, changed: bool, deploy: bool, module: List[str], no_copy: bool):
+@click.option('-m', '--module', multiple=True, help='adds a module to the aggregated compilation')
+@click.option('-s', '--single', type=click.Choice([m.name for m in HadoopModules]), help='only compiles a single module')
+def compile(ctx, changed: bool, deploy: bool, module: List[str], no_copy: bool, single: str):
     """
     Compiles hadoop modules
     """
@@ -63,7 +65,7 @@ def compile(ctx, changed: bool, deploy: bool, module: List[str], no_copy: bool):
         all_modules.extend(handler.ctx.config.default_modules)
         all_modules.extend(module)
 
-    handler.compile(changed, deploy, modules=all_modules, no_copy=no_copy)
+    handler.compile(changed, deploy, modules=all_modules, no_copy=no_copy, single=HadoopModules[single])
 
 
 @cli.command()
@@ -127,12 +129,13 @@ def status(ctx):
 @click.pass_context
 @click.argument('app', type=click.Choice([n.name for n in Application], case_sensitive=False))
 @click.option('-c', '--cmd', help='defines the command to run')
-def run_app(ctx, app: str, cmd: str = None):
+@click.option('-q', '--queue', help='defines the queue to which the application will be submitted')
+def run_app(ctx, app: str, cmd: str = None, queue: str = None):
     """
     Runs an application on the defined cluster
     """
     handler: MainCommandHandler = ctx.obj['handler']
-    handler.run_app(app, cmd)
+    handler.run_app(app, cmd, queue)
 
 
 @cli.command()
@@ -152,8 +155,10 @@ def run_script(ctx, script: str):
 @click.option('-f', '--file', type=click.Choice([n.value for n in HadoopConfigFile]), required=True, help='which config file to update')
 @click.option('-p', '--property', multiple=True, help='property name')
 @click.option('-v', '--value', multiple=True, help='property value')
+@click.option('-s', '--source', help='update the config from a local file')
 @click.option('-n', '--no-backup', is_flag=True, help='do not create a backup file before making any change to the config file')
-def update_config(ctx, selector: str, file: str, property: Tuple[str], value: Tuple[str], no_backup: bool = False):
+def update_config(ctx, selector: str, file: str, property: Tuple[str], value: Tuple[str], no_backup: bool = False,
+                  source: str = None):
     """
     Update properties on a config file for selected roles
     """
@@ -162,7 +167,7 @@ def update_config(ctx, selector: str, file: str, property: Tuple[str], value: Tu
 
     handler: MainCommandHandler = ctx.obj['handler']
     file = HadoopConfigFile(file)
-    handler.update_config(selector, file, list(property), list(value), no_backup)
+    handler.update_config(selector, file, list(property), list(value), no_backup, source)
 
 
 @cli.command()

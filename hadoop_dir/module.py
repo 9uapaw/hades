@@ -1,4 +1,8 @@
+import enum
+import glob
 import logging
+import distutils
+from distutils import dir_util
 from typing import Dict, List
 import shutil
 
@@ -8,12 +12,21 @@ from core.error import CommandExecutionException
 logger = logging.getLogger(__name__)
 
 
-class HadoopModules:
+class HadoopModules(enum.Enum):
+    YARN_UI2 = "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-ui"
+    HADOOP_DIST = "hadoop-dist"
+
+
+class HadoopDir:
     CHANGED_MODULES_CMD = "git status --porcelain | grep \".*hadoop.*\" | sed -E \"s/.*\\/(.*)\\/src.*/\\1/g\""
     FIND_JAR_OF_MODULE_TEMPLATE = "find . -name \"*{module}*\" -print | grep \".*{module}/target.*-SNAPSHOT.jar\""
+
     MAPREDUCE_JAR_DIR = "hadoop/mapreduce"
     HDFS_JAR_DIR = "hadoop/hdfs"
     YARN_JAR_DIR = "hadoop/yarn"
+
+    YARN_UI2_MODULE_PATH = HadoopModules.YARN_UI2.value + "/target/hadoop-yarn-ui-*-SNAPSHOT"
+    YARN_UI2_DIST_PATH = HadoopModules.HADOOP_DIST.value + "/target/hadoop-*-SNAPSHOT/share/hadoop/yarn/webapps/ui2"
 
     def __init__(self, hadoop_dir: str):
         self._modules: Dict[str, str] = {}
@@ -30,7 +43,7 @@ class HadoopModules:
         for module in module_cmd.stdout:
             self._modules[module] = self._find_jar(module)
 
-    def copy_module_jars(self, dest: str, *args):
+    def copy_modules_to_dist(self, dest: str, *args):
         if not args:
             args = list(self._modules.keys())
 
@@ -48,6 +61,17 @@ class HadoopModules:
                 full_path = "{}/{}".format(dest, new_path)
                 logger.info("Copying {} to {}".format(original_jar, full_path))
                 shutil.copy2(original_jar, full_path)
+
+    def get_module_abs_path(self, module: HadoopModules):
+        return "{}/{}".format(self._hadoop_dir, module.value)
+
+    def copy_module_to_dist(self, module: HadoopModules):
+        logger.info("Copying module {}".format(module.name))
+        if module == HadoopModules.YARN_UI2:
+            for module_path, dist_path in zip(glob.glob("{}/{}".format(self._hadoop_dir, self.YARN_UI2_MODULE_PATH)),
+                                    glob.glob("{}/{}".format(self._hadoop_dir, self.YARN_UI2_DIST_PATH))):
+                logger.info("Copying {} to {}".format(module_path, dist_path))
+                dir_util.copy_tree(module_path, dist_path)
 
     def _find_jar(self, module: str) -> str:
         jar_cmd = RunnableCommand(self.FIND_JAR_OF_MODULE_TEMPLATE.format(module=module), work_dir=self._hadoop_dir)

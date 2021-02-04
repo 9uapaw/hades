@@ -84,9 +84,21 @@ class HadockExecutor(HadoopOperationExecutor):
         cmd.run_async()
 
     def update_config(self, *args: HadoopRoleInstance, file: HadoopConfigFile,
-                      properties: List[str], values: List[str], no_backup: bool = False):
+                      properties: List[str], values: List[str], no_backup: bool = False, source: str = None):
         config_name = file.value.split(".")[0]
         config_ext = file.value.split(".")[1]
+        all_properties = properties.copy()
+        all_values = values.copy()
+
+        if source:
+            source_xml = ET.parse(source)
+            root: Element = source_xml.getroot()
+
+            for prop in root.findall('property'):  # type: Element
+                prop_name = prop[0].text
+                prop_value = prop.findall('value')[0].text
+                all_properties.append(prop_name)
+                all_values.append(prop_value)
 
         for role in args:
             logger.info("Setting config {} on {}".format(file.value, role.get_colorized_output()))
@@ -99,12 +111,12 @@ class HadockExecutor(HadoopOperationExecutor):
             xml_cmd.run()
             xml_file = ET.parse(local_file)
             root: Element = xml_file.getroot()
-            properties_to_set = properties.copy()
+            properties_to_set = all_properties.copy()
 
             for prop in root.findall('property'):  # type: Element
                 prop_name = prop[0].text
                 if prop_name in properties_to_set:
-                    prop.findall('value')[0].text = values[properties.index(prop_name)]
+                    prop.findall('value')[0].text = all_values[all_properties.index(prop_name)]
                     logger.debug("Setting {} to {}".format(prop_name, prop[1].text))
                     properties_to_set.remove(prop_name)
 
@@ -113,7 +125,7 @@ class HadockExecutor(HadoopOperationExecutor):
                 new_config_prop_name = Element('name')
                 new_config_prop_name.text = remaining_prop
                 new_config_value = Element('value')
-                new_config_value.text = values[properties.index(remaining_prop)]
+                new_config_value.text = all_values[all_properties.index(remaining_prop)]
 
                 logger.debug("Adding new property {} with value {}".format(remaining_prop, new_config_value.text))
 
