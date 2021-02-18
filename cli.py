@@ -61,11 +61,12 @@ def compile(ctx, changed: bool, deploy: bool, module: List[str], no_copy: bool, 
     """
     handler: MainCommandHandler = ctx.obj['handler']
     all_modules = []
+    single_module = HadoopModules[single] if single else None
     if module:
         all_modules.extend(handler.ctx.config.default_modules)
         all_modules.extend(module)
 
-    handler.compile(changed, deploy, modules=all_modules, no_copy=no_copy, single=HadoopModules[single])
+    handler.compile(changed, deploy, modules=all_modules, no_copy=no_copy, single=single_module)
 
 
 @cli.command()

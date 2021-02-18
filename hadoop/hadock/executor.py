@@ -115,9 +115,14 @@ class HadockExecutor(HadoopOperationExecutor):
 
             for prop in root.findall('property'):  # type: Element
                 prop_name = prop[0].text
+                prop_value = prop.findall('value')[0].text
+
                 if prop_name in properties_to_set:
-                    prop.findall('value')[0].text = all_values[all_properties.index(prop_name)]
-                    logger.debug("Setting {} to {}".format(prop_name, prop[1].text))
+                    value_to_change = all_values[all_properties.index(prop_name)]
+                    if prop_value != value_to_change:
+                        prop.findall('value')[0].text = all_values[all_properties.index(prop_name)]
+                        logger.debug("Setting {} to {}".format(prop_name, prop[1].text))
+
                     properties_to_set.remove(prop_name)
 
             for remaining_prop in properties_to_set:

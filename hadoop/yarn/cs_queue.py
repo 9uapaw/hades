@@ -39,7 +39,7 @@ class CapacitySchedulerQueue:
                       is_dynamic=creation_method == CapacitySchedulerQueue.DYNAMIC_FLEXIBLE
                                  or creation_method == CapacitySchedulerQueue.DYNAMIC_LEGACY)
         if 'queues' in queue_data:
-            q.children.extend([CapacitySchedulerQueue._traverse(iq) for iq in queue_data['queues']['queue']])
+            q.children.extend([CapacitySchedulerQueue._traverse(iq) for iq in queue_data['queues'].get('queue', [])])
 
         return q
 

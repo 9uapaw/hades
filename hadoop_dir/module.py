@@ -40,7 +40,7 @@ class HadoopDir:
         if not module_cmd.stdout:
             raise CommandExecutionException("\n".join(module_cmd.stdout), self.CHANGED_MODULES_CMD)
 
-        for module in module_cmd.stdout:
+        for module in set(module_cmd.stdout):
             self._modules[module] = self._find_jar(module)
 
     def copy_modules_to_dist(self, dest: str, *args):

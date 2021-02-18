@@ -20,11 +20,13 @@ class RunnableCommand:
 
     def run(self) -> Tuple[List[str], List[str]]:
         logger.debug("Running command {}".format(self.cmd))
-        output = sh.bash(_cwd=self.work_dir, c=self.cmd)
-        self.stdout = list(filter(bool, output.stdout.decode().split("\n")))
-        self.stderr = list(filter(bool, output.stderr.decode().split("\n")))
-
-        return self.stdout, self.stderr
+        try:
+            output = sh.bash(_cwd=self.work_dir, c=self.cmd)
+            self.stdout = list(filter(bool, output.stdout.decode().split("\n")))
+            self.stderr = list(filter(bool, output.stderr.decode().split("\n")))
+            return self.stdout, self.stderr
+        except Exception as e:
+            raise CommandExecutionException(str(e), self.cmd)
 
     def run_async(self, stdout: Callable[[str], None] = None, stderr: Callable[[str], None] = None, block=True):
         try:
