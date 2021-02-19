@@ -2,37 +2,25 @@ from abc import ABC
 
 
 class HadoopHostInstance(ABC):
-    pass
 
-    def get_host(self) -> str:
-        raise NotImplementedError()
-
-
-class CmHostInstance(HadoopHostInstance):
-
-    def __init__(self, host: str):
-        self._host = host
+    def __init__(self, address: str):
+        self._address = address
 
     def __repr__(self) -> str:
-        return self._host
+        return self._address
 
     def __str__(self):
-        return self._host
+        return self._address
 
-    def get_host(self) -> str:
-        return self._host
+    def get_address(self) -> str:
+        return self._address
+
+
+class RemoteHostInstance(HadoopHostInstance):
+    pass
 
 
 class DockerContainerInstance(HadoopHostInstance):
 
-    def __init__(self, container: str):
-        self._container = container
-
-    def __repr__(self) -> str:
-        return self._container
-
-    def __str__(self):
-        return self._container
-
-    def get_host(self) -> str:
+    def get_address(self) -> str:
         return "localhost"

@@ -1,6 +1,7 @@
 import logging
 from typing import Dict
 
+from core.error import HadesException
 from hadoop.xml_config import HadoopConfigFile
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ElementTree, Element
@@ -11,22 +12,25 @@ logger = logging.getLogger(__name__)
 
 class HadoopConfig:
 
-    def __init__(self, file: HadoopConfigFile, base: str):
+    def __init__(self, file: HadoopConfigFile, base: str = None):
         self._file = file
         self._extension: Dict[str, str] = {}
-        self._base_xml = ET.parse(base)
+        if base:
+            self._base_xml = ET.parse(base)
+        else:
+            self._base_xml = None
 
     @property
-    def file_name(self):
-        return self._file.value.split(".")[0]
+    def file(self) -> str:
+        return str(self._file.value)
 
     @property
-    def file_extension(self):
-        return self._file.value.split(".")[1]
-
-    @property
-    def xml(self):
+    def xml(self) -> ElementTree:
         return self._base_xml
+
+    @xml.setter
+    def xml(self, path: str):
+        self._base_xml = ET.parse(path)
 
     def extend_with_xml(self, path: str):
         source_xml = ET.parse(path)
@@ -42,6 +46,9 @@ class HadoopConfig:
         self._extension.update(args)
 
     def merge(self):
+        if not self._base_xml:
+            raise HadesException("Can not merge without base xml. Set base xml before calling merge.")
+
         properties_to_set = set(self._extension.keys())
         for prop in self._base_xml.getroot().findall('property'):  # type: Element
             prop_name = prop[0].text
@@ -66,3 +73,6 @@ class HadoopConfig:
             new_config_prop.append(new_config_prop_name)
             new_config_prop.append(new_config_value)
             self._base_xml.getroot().append(new_config_prop)
+
+    def commit(self):
+        self._base_xml.write(self._file.value)

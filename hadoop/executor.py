@@ -1,15 +1,21 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Type
 
 from core.cmd import RunnableCommand
 from core.config import ClusterConfig
 from hadoop.app.example import ApplicationCommand
+from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry
+from hadoop.host import HadoopHostInstance
 from hadoop.role import HadoopRoleInstance
-from hadoop.xml_config import HadoopConfigFile
 
 
 class HadoopOperationExecutor(ABC):
+
+    @property
+    @abstractmethod
+    def role_host_type(self) -> Type[HadoopHostInstance]:
+        raise NotImplementedError()
 
     @abstractmethod
     def discover(self) -> ClusterConfig:
@@ -25,8 +31,9 @@ class HadoopOperationExecutor(ABC):
     def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand):
         raise NotImplementedError()
 
-    def update_config(self, *args: HadoopRoleInstance, file: HadoopConfigFile, properties: List[str], values: List[str], no_backup: bool = False, source: str = None):
+    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool):
         raise NotImplementedError()
 
     def restart_roles(self, *args: HadoopRoleInstance):
         raise NotImplementedError()
+

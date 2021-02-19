@@ -5,3 +5,4 @@ class ClusterType(enum.Enum):
     CM = "ClouderaManager"
     HADOCK = "Hadock"
     STANDARD = "Standard"
+    UNKOWN = ""

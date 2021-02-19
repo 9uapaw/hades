@@ -22,7 +22,7 @@ class ClusterContextConfig:
 @dataclass_json(letter_case=LetterCase.CAMEL)
 @dataclass
 class ClusterConfig:
-    cluster_type: str = 'STANDARD'
+    cluster_type: str = ''
     cluster_name: str = ''
     context: Dict[str, ClusterContextConfig] = dataclasses.field(default_factory=dict)
     specific_context: Dict[str, str] = dataclasses.field(default_factory=dict)
@@ -33,7 +33,6 @@ class ClusterConfig:
 class Config:
     hadoop_path: str = ''
     hadoop_jar_path: str = ''
-    cluster: ClusterConfig = dataclasses.field(default_factory=lambda: ClusterConfig())
     default_modules: List[str] = dataclasses.field(default_factory=lambda: ["hadoop-common", "hadoop-yarn-server-common", "hadoop-yarn-api"])
 
     @classmethod

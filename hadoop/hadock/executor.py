@@ -2,7 +2,7 @@ import logging
 import time
 import xml.etree.ElementTree as ET
 import os
-from typing import List
+from typing import List, Type
 from xml.etree.ElementTree import ElementTree, Element
 
 import yaml
@@ -11,8 +11,10 @@ from core.cmd import RunnableCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from hadoop.app.example import ApplicationCommand
 from hadoop.cluster_type import ClusterType
+from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry
 from hadoop.executor import HadoopOperationExecutor
+from hadoop.host import HadoopHostInstance, DockerContainerInstance
 from hadoop.role import HadoopRoleType, HadoopRoleInstance
 from hadoop.xml_config import HadoopConfigFile
 
@@ -28,6 +30,10 @@ class HadockExecutor(HadoopOperationExecutor):
     def __init__(self, hadock_repository: str, hadock_compose: str = None):
         self._hadock_repository = hadock_repository
         self._hadock_compose = hadock_compose or self.DEFAULT_COMPOSE
+
+    @property
+    def role_host_type(self) -> Type[HadoopHostInstance]:
+        return DockerContainerInstance
 
     def discover(self) -> ClusterConfig:
         cluster = ClusterConfig(ClusterType.HADOCK)
@@ -83,67 +89,28 @@ class HadockExecutor(HadoopOperationExecutor):
         cmd = RunnableCommand("docker exec {} bash -c '{}'".format(random_selected.host, application.build()))
         cmd.run_async()
 
-    def update_config(self, *args: HadoopRoleInstance, file: HadoopConfigFile,
-                      properties: List[str], values: List[str], no_backup: bool = False, source: str = None):
-        config_name = file.value.split(".")[0]
-        config_ext = file.value.split(".")[1]
-        all_properties = properties.copy()
-        all_values = values.copy()
-
-        if source:
-            source_xml = ET.parse(source)
-            root: Element = source_xml.getroot()
-
-            for prop in root.findall('property'):  # type: Element
-                prop_name = prop[0].text
-                prop_value = prop.findall('value')[0].text
-                all_properties.append(prop_name)
-                all_values.append(prop_value)
+    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False):
+        config_name, config_ext = config.file.split(".")
 
         for role in args:
-            logger.info("Setting config {} on {}".format(file.value, role.get_colorized_output()))
+            logger.info("Setting config {} on {}".format(config.file, role.get_colorized_output()))
             local_file = "{config}-{container}-{time}.{ext}".format(
                 container=role.host, config=config_name, time=int(time.time()), ext=config_ext)
-            logger.info("Copying config file {} from {} as {}".format(file.value, role.host, local_file))
+            logger.info("Copying config file {} from {} as {}".format(config.file, role.host, local_file))
             xml_cmd = RunnableCommand("docker cp {container}:/etc/hadoop/{config}.{ext} {local}".format(
                 container=role.host, config=config_name, time=time.time(), ext=config_ext, local=local_file
             ))
             xml_cmd.run()
-            xml_file = ET.parse(local_file)
-            root: Element = xml_file.getroot()
-            properties_to_set = all_properties.copy()
 
-            for prop in root.findall('property'):  # type: Element
-                prop_name = prop[0].text
-                prop_value = prop.findall('value')[0].text
+            config.xml = local_file
+            config.merge()
+            config.commit()
 
-                if prop_name in properties_to_set:
-                    value_to_change = all_values[all_properties.index(prop_name)]
-                    if prop_value != value_to_change:
-                        prop.findall('value')[0].text = all_values[all_properties.index(prop_name)]
-                        logger.debug("Setting {} to {}".format(prop_name, prop[1].text))
-
-                    properties_to_set.remove(prop_name)
-
-            for remaining_prop in properties_to_set:
-                new_config_prop = Element('property')
-                new_config_prop_name = Element('name')
-                new_config_prop_name.text = remaining_prop
-                new_config_value = Element('value')
-                new_config_value.text = all_values[all_properties.index(remaining_prop)]
-
-                logger.debug("Adding new property {} with value {}".format(remaining_prop, new_config_value.text))
-
-                new_config_prop.append(new_config_prop_name)
-                new_config_prop.append(new_config_value)
-                root.append(new_config_prop)
-
-            logger.info("Uploading {}".format(file.value))
-            xml_file.write(file.value)
+            logger.info("Uploading {}".format(config.file))
             xml_upload_cmd = RunnableCommand("docker cp {config} {container}:/etc/hadoop/{config}".format(
-                container=role.host, config=file.value))
+                container=role.host, config=config.file))
             xml_upload_cmd.run()
-            os.remove(file.value)
+            os.remove(config.file)
 
             if no_backup:
                 logger.info("Backup is turned off. Deleting file {}".format(local_file))

@@ -6,7 +6,7 @@ from typing import List, Tuple
 
 import click
 
-from core.config import Config
+from core.config import Config, ClusterConfig
 from hadoop.action import RoleAction
 from hadoop.app.example import Application
 from hadoop.cluster_type import ClusterType
@@ -21,9 +21,10 @@ logger = logging.getLogger(__name__)
 
 @click.group()
 @click.option('-c', '--config', default='config.json', help='path to config file')
+@click.option('--cluster', default='cluster.json', help='path to cluster manifest file')
 @click.option('-d', '--debug', is_flag=True, help='turn on DEBUG level logging')
 @click.pass_context
-def cli(ctx, config: str, debug: bool):
+def cli(ctx, config: str, cluster: str, debug: bool):
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=level)
     sh_log = logging.getLogger("sh")
@@ -33,8 +34,8 @@ def cli(ctx, config: str, debug: bool):
     logger.info("Invoked command {}".format(ctx.invoked_subcommand))
 
     if ctx.invoked_subcommand == "init":
-        ctx.obj['handler'] = MainCommandHandler(None)
-        ctx.obj['config_path'] = config
+        hades_ctx = HadesContext(config_path=config, cluster_config_path=cluster)
+        ctx.obj['handler'] = MainCommandHandler(hades_ctx)
         return
 
     if not path.exists(config):
@@ -42,9 +43,16 @@ def cli(ctx, config: str, debug: bool):
 
     with open(config) as file:
         json_str = file.read()
-        config = Config.from_json(json_str)
-        context = HadesContext(config=config)
+        config_file = Config.from_json(json_str)
 
+    if path.exists(cluster):
+        with open(cluster) as file:
+            json_str = file.read()
+            cluster_file = ClusterConfig.from_json(json_str)
+    else:
+        cluster_file = None
+
+    context = HadesContext(config=config_file, cluster_config=cluster_file, config_path=config, cluster_config_path=cluster)
     ctx.obj['handler'] = MainCommandHandler(context)
 
 
@@ -71,23 +79,45 @@ def compile(ctx, changed: bool, deploy: bool, module: List[str], no_copy: bool, 
 
 @cli.command()
 @click.pass_context
-@click.option('-c', '--cluster-type', type=click.Choice([n.value for n in ClusterType], case_sensitive=False), help='compiles only the changed modules')
+def init(ctx):
+    """
+    Initializes an empty config
+    :param ctx:
+    :return:
+    """
+    handler: MainCommandHandler = ctx.obj['handler']
+    config_path = handler.ctx.config_path
+    if not path.exists(config_path):
+        with open(config_path, 'w') as f:
+            f.write(Config().to_json())
+
+        logger.info("Initialized config file {}".format(config_path))
+    else:
+        logger.info("Config already exists")
+
+@cli.command()
+@click.pass_context
+@click.option('-c', '--cluster-type', type=click.Choice([n.value for n in ClusterType], case_sensitive=False), help='Sets the type of the cluster', required=True)
 @click.option('-h', '--host', help='set the Cloudera Manager host')
 @click.option('-u', '--username', default="admin", help='sets the username credential when communicating with Cloudera Manager')
 @click.option('-p', '--password', default="admin", help='sets the password credential when communicating with Cloudera Manager')
 @click.option('-d', '--hadock-path', help='sets the Hadock repository path')
-def init(ctx, cluster_type: ClusterType or None, host: str or None, username: str or None, password: str or None, hadock_path: str or None):
+def discover(ctx, cluster_type: str or None, host: str or None, username: str or None, password: str or None, hadock_path: str or None):
     """
-    Initializes config file
+    Discovers a cluster manifest file
     """
-    handler: MainCommandHandler = ctx.obj['handler']
-    handler.init(ctx.obj['config_path'], ClusterType(cluster_type), {
-        'host': host,
-        'username': username,
-        'password': password,
-        'hadock_path': hadock_path
-    })
+    ctx: HadesContext = ctx.obj['handler'].ctx
+    ctx.cluster_config = ClusterConfig()
+    if cluster_type == ClusterType.CM.value:
+        ctx.cluster_config.specific_context['username'] = username
+        ctx.cluster_config.specific_context['host'] = host
+        ctx.cluster_config.specific_context['password'] = password
+    elif cluster_type == ClusterType.HADOCK.value:
+        ctx.cluster_config.specific_context['hadock_path'] = hadock_path
 
+    ctx.cluster_config.cluster_type = cluster_type
+    handler: MainCommandHandler = MainCommandHandler(ctx)
+    handler.discover()
 
 @cli.command()
 @click.pass_context

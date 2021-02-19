@@ -5,7 +5,6 @@ from typing import Dict, List, Tuple, Type
 
 from tabulate import tabulate
 
-from core.config import Config
 from core.context import HadesContext
 from core.error import ConfigSetupException, HadesException
 from format.blob import BlobFormat
@@ -16,6 +15,7 @@ from hadoop.cluster import HadoopCluster
 from hadoop.cluster_type import ClusterType
 from hadoop.cm.cm_api import CmApi
 from hadoop.cm.executor import CmExecutor
+from hadoop.config import HadoopConfig
 from hadoop.hadock.executor import HadockExecutor
 from hadoop.xml_config import HadoopConfigFile
 from hadoop_dir.module import HadoopDir, HadoopModules
@@ -37,59 +37,40 @@ class MainCommandHandler:
         self.executor = None
 
         if not self.ctx:
+            raise HadesException("No context is received")
+
+        if not self.ctx.cluster_config or not self.ctx.cluster_config.cluster_type:
             return
 
-        if ctx.config.cluster.cluster_type.lower() == ClusterType.CM.value.lower():
-            cm_api = CmApi(ctx.config.cluster.specific_context[self.CM_HOST],
-                           ctx.config.cluster.specific_context[self.CM_USERNAME],
-                           ctx.config.cluster.specific_context[self.CM_PASSWORD])
+        if ctx.cluster_config.cluster_type.lower() == ClusterType.CM.value.lower():
+            cm_api = CmApi(ctx.cluster_config.specific_context[self.CM_HOST],
+                           ctx.cluster_config.specific_context[self.CM_USERNAME],
+                           ctx.cluster_config.specific_context[self.CM_PASSWORD])
             self.executor = CmExecutor(cm_api)
-        elif ctx.config.cluster.cluster_type.lower() == ClusterType.HADOCK.value.lower():
-            if self.HADOCK_REPOSITORY not in ctx.config.cluster.specific_context:
-                raise ConfigSetupException("hadockPath is not set in config")
+        elif ctx.cluster_config.cluster_type.lower() == ClusterType.HADOCK.value.lower():
+            if self.HADOCK_REPOSITORY not in ctx.cluster_config.specific_context:
+                raise ConfigSetupException("Hadock repository is not set")
 
-            self.executor = HadockExecutor(ctx.config.cluster.specific_context[self.HADOCK_REPOSITORY],
-                                           ctx.config.cluster.specific_context.get(self.HADOCK_COMPOSE))
+            self.executor = HadockExecutor(ctx.cluster_config.specific_context[self.HADOCK_REPOSITORY],
+                                           ctx.cluster_config.specific_context.get(self.HADOCK_COMPOSE))
         else:
-            logger.warning("No executor is set")
+            logger.warning("Unknown cluster type")
             self.executor = None
 
-    def init(self, config_path: str, cluster_type: ClusterType = None, cluster_specific: Dict[str, str] = None):
-        config = None
-        if path.exists(config_path):
-            config = Config.from_file(config_path)
-            if not cluster_type or not cluster_specific:
-                logger.info("No action taken")
-                return
-        else:
-            config = Config()
+    def discover(self):
+        if not self.executor:
+            raise HadesException("No executor is set. Set cluster config.")
 
-        hadock_path = cluster_specific.get('hadock_path', None)
-        host = cluster_specific.get('host', None)
-        username = cluster_specific.get('username', None)
-        password = cluster_specific.get('password', None)
+        if path.exists(self.ctx.cluster_config_path):
+            logger.info("Cluster manifest already exists.")
+            return
 
-        executor = None
-        if cluster_type:
-            if cluster_type == ClusterType.HADOCK and hadock_path:
-                executor = HadockExecutor(hadock_path, "docker-compose.yml")
-                config.cluster.cluster_type = ClusterType.HADOCK.value
-                config.cluster.specific_context = {'hadockPath': hadock_path}
-            elif cluster_type == ClusterType.CM:
-                if not host:
-                    raise ConfigSetupException("CM host is not set")
-                executor = CmExecutor(CmApi(host, username, password))
-                config.cluster.cluster_type = ClusterType.CM.value
-                config.cluster.specific_context = {'host': host, 'username': username, 'password': password}
+        with open(self.ctx.cluster_config_path, 'w') as f:
+            cluster_config = self.executor.discover()
+            cluster_config.specific_context = self.ctx.cluster_config.specific_context
+            f.write(cluster_config.to_json())
 
-        if executor:
-            config.cluster = executor.discover()
-
-        with open(config_path, 'w') as f:
-            config_json = config.to_json()
-            f.write(config_json)
-
-        logger.info("Created config file {}".format(config_path))
+        logger.info("Created cluster file {}".format(self.ctx.cluster_config_path))
 
     def compile(self, changed=False, deploy=False, modules=None, no_copy=False, single=None):
         if not self.ctx.config.hadoop_jar_path:
@@ -156,7 +137,12 @@ class MainCommandHandler:
     def update_config(self, selector: str, file: HadoopConfigFile, properties: List[str], values: List[str],
                       no_backup: bool = False, source: str = None):
         cluster = self._create_cluster()
-        cluster.update_config(selector, file, properties, values, no_backup, source)
+        config = HadoopConfig(file)
+        config.extend_with_args({k: v for k, v in zip(properties, values)})
+        if source:
+            config.extend_with_xml(source)
+
+        cluster.update_config(selector, config, no_backup)
 
     def role_action(self, selector: str, action: RoleAction):
         cluster = self._create_cluster()
