@@ -1,9 +1,8 @@
 from typing import Dict
 
 import pptree as pptree
-import yaml
 
-from hadoop.host import DockerContainerInstance
+from hadoop.hadock.docker_host import DockerContainerInstance
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
 import requests
 

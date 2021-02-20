@@ -95,6 +95,7 @@ def init(ctx):
     else:
         logger.info("Config already exists")
 
+
 @cli.command()
 @click.pass_context
 @click.option('-c', '--cluster-type', type=click.Choice([n.value for n in ClusterType], case_sensitive=False), help='Sets the type of the cluster', required=True)
@@ -119,6 +120,7 @@ def discover(ctx, cluster_type: str or None, host: str or None, username: str or
     handler: MainCommandHandler = MainCommandHandler(ctx)
     handler.discover()
 
+
 @cli.command()
 @click.pass_context
 @click.argument('selector')
@@ -135,14 +137,15 @@ def log(ctx, selector: str, follow: bool, tail: int or None, grep: str or None):
 
 @cli.command()
 @click.argument("selector", default="")
-@click.option('-f', '--file', multiple=True, help='path of local file to distribute to role hosts')
+@click.option('-s', '--source', help='path of local file to distribute to role hosts')
+@click.option('-d', '--dest', help='path of remote destination path on role hosts')
 @click.pass_context
-def distribute(ctx, selector: str, file: Tuple[str]):
+def distribute(ctx, selector: str, source: str, dest: str):
     """
     Distributes files to selected roles
     """
     handler: MainCommandHandler = ctx.obj['handler']
-    handler.distribute(selector, file)
+    handler.distribute(selector, source, dest)
 
 
 @cli.command()

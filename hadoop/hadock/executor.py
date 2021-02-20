@@ -1,9 +1,7 @@
 import logging
 import time
-import xml.etree.ElementTree as ET
 import os
 from typing import List, Type
-from xml.etree.ElementTree import ElementTree, Element
 
 import yaml
 
@@ -14,9 +12,9 @@ from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry
 from hadoop.executor import HadoopOperationExecutor
-from hadoop.host import HadoopHostInstance, DockerContainerInstance
+from hadoop.host import HadoopHostInstance
+from hadoop.hadock.docker_host import DockerContainerInstance
 from hadoop.role import HadoopRoleType, HadoopRoleInstance
-from hadoop.xml_config import HadoopConfigFile
 
 logger = logging.getLogger(__name__)
 
@@ -96,20 +94,14 @@ class HadockExecutor(HadoopOperationExecutor):
             logger.info("Setting config {} on {}".format(config.file, role.get_colorized_output()))
             local_file = "{config}-{container}-{time}.{ext}".format(
                 container=role.host, config=config_name, time=int(time.time()), ext=config_ext)
-            logger.info("Copying config file {} from {} as {}".format(config.file, role.host, local_file))
-            xml_cmd = RunnableCommand("docker cp {container}:/etc/hadoop/{config}.{ext} {local}".format(
-                container=role.host, config=config_name, time=time.time(), ext=config_ext, local=local_file
-            ))
-            xml_cmd.run()
+            config_file_path = "/etc/hadoop/{}".format(config.file)
+            role.host.download(config_file_path, local_file)
 
             config.xml = local_file
             config.merge()
             config.commit()
 
-            logger.info("Uploading {}".format(config.file))
-            xml_upload_cmd = RunnableCommand("docker cp {config} {container}:/etc/hadoop/{config}".format(
-                container=role.host, config=config.file))
-            xml_upload_cmd.run()
+            role.host.upload(config.file, config_file_path)
             os.remove(config.file)
 
             if no_backup:

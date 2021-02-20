@@ -35,6 +35,7 @@ class MainCommandHandler:
     def __init__(self, ctx: HadesContext):
         self.ctx = ctx
         self.executor = None
+        self._cluster = None
 
         if not self.ctx:
             raise HadesException("No context is received")
@@ -56,6 +57,8 @@ class MainCommandHandler:
         else:
             logger.warning("Unknown cluster type")
             self.executor = None
+
+
 
     def discover(self):
         if not self.executor:
@@ -122,7 +125,7 @@ class MainCommandHandler:
         if not self.executor:
             raise ConfigSetupException("Can not create cluster without executor. Check config settings!")
 
-        return HadoopCluster.from_config(self.ctx.config.cluster, self.executor)
+        return HadoopCluster.from_config(self.ctx.cluster_config, self.executor)
 
     def run_app(self, app: str, cmd: str = None, queue: str = None):
         cluster = self._create_cluster()
@@ -149,8 +152,8 @@ class MainCommandHandler:
         if action == RoleAction.RESTART:
             cluster.restart_roles(selector)
 
-    def distribute(self, selector: str, files: Tuple[str]):
-        pass
+    def distribute(self, selector: str, source: str, dest: str):
+        self._create_cluster().distribute(selector, source, dest)
 
     def run_script(self, name: str):
         mod = __import__('script.{}'.format(name))

@@ -10,6 +10,7 @@ from dataclasses_json import dataclass_json, LetterCase
 class ClusterRoleConfig:
     type: str = ''
     host: str = ''
+    user: str = 'root'
 
 
 @dataclass_json(letter_case=LetterCase.CAMEL)

@@ -25,7 +25,7 @@ class HadoopCluster:
         self._cluster_type = cluster_type
         self._name = name
         self._rm_api: RmApi or None = None
-        rm_role = self._select_roles("Yarn/ResourceManager")
+        rm_role = self.select_roles("Yarn/ResourceManager")
         if rm_role:
             self._rm_api = RmApi(rm_role[0])
 
@@ -36,7 +36,7 @@ class HadoopCluster:
         for service_type, service in config.context.items():
             roles = {}
             for role_name, role in service.roles.items():
-                host = executor.role_host_type()
+                host = executor.role_host_type(role.host, role.user)
 
                 role = HadoopRoleInstance(service.name, host, role_name, HadoopRoleType(role.type))
                 roles[role_name] = role
@@ -56,7 +56,7 @@ class HadoopCluster:
         return self._services
 
     def read_logs(self, selector: str, follow: bool = False, tail: int or None = 10, grep: str = None):
-        roles = self._select_roles(selector)
+        roles = self.select_roles(selector)
         if not roles:
             logger.warning("No roles found by selector '{}'".format(selector))
 
@@ -73,12 +73,12 @@ class HadoopCluster:
         return self._executor.get_cluster_status()
 
     def run_app(self, application: ApplicationCommand):
-        selected = self._select_roles("")
+        selected = self.select_roles("")
         random_selected = selected[random.randint(0, len(selected) - 1)]
 
         self._executor.run_app(random_selected, application)
 
-    def _select_roles(self, selector: str) -> List[HadoopRoleInstance]:
+    def select_roles(self, selector: str) -> List[HadoopRoleInstance]:
         selector_expr = hadoop.selector.HadoopRoleSelector(self.get_services())
         return selector_expr.select(selector)
 
@@ -88,11 +88,11 @@ class HadoopCluster:
             if not grep or grep in line else ""
 
     def update_config(self, selector: str, config: HadoopConfig, no_backup: bool = False):
-        selected = self._select_roles(selector)
+        selected = self.select_roles(selector)
         self._executor.update_config(*selected, config=config, no_backup=no_backup)
 
     def restart_roles(self, selector: str):
-        selected = self._select_roles(selector)
+        selected = self.select_roles(selector)
         logger.info("Restarting roles {}".format(" ".join([s.get_colorized_output() for s in selected])))
 
         self._executor.restart_roles(*selected)
@@ -105,3 +105,9 @@ class HadoopCluster:
 
     def get_rm_api(self) -> RmApi:
         return self._rm_api
+
+    def distribute(self, selector: str, source: str, dest: str):
+        selected = self.select_roles(selector)
+        for role in selected:
+            logger.info("Distributing local file {} to remote host '{}' path {}".format(source, role.name, dest))
+            role.host.upload(source, dest)

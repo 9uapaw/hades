@@ -20,12 +20,12 @@ class DistributedShellApp(ApplicationCommand):
 
     def __init__(self, path: str = None, cmd: str = None, queue: str = None):
         super().__init__(path, queue)
-        self.cmd = cmd or 'sleep 100'
+        self.cmd = cmd or '-shell command \"sleep 100\"'
 
     def build(self) -> str:
         cmd = self.YARN_CMD.format(klass=self.KLASS,
                                     jar=self.JAR.format(path=self.path),
-                                    cmd="-shell_command \"{}\"".format(self.cmd))
+                                    cmd=self.cmd)
         if self.queue:
             cmd += " -queue {}".format(self.queue)
 

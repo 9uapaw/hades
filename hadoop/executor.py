@@ -25,15 +25,19 @@ class HadoopOperationExecutor(ABC):
     def read_log(self, *args: HadoopRoleInstance, follow: bool = False, tail: int or None = 10) -> List[RunnableCommand]:
         raise NotImplementedError()
 
+    @abstractmethod
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
         raise NotImplementedError()
 
+    @abstractmethod
     def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand):
         raise NotImplementedError()
 
+    @abstractmethod
     def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool):
         raise NotImplementedError()
 
+    @abstractmethod
     def restart_roles(self, *args: HadoopRoleInstance):
         raise NotImplementedError()
 
