@@ -4,6 +4,7 @@ from typing import List, Callable, Dict
 
 import hadoop.selector
 from core.config import ClusterConfig
+from core.context import HadesContext
 from hadoop.app.example import ApplicationCommand
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
@@ -19,38 +20,41 @@ logger = logging.getLogger(__name__)
 
 class HadoopCluster:
 
-    def __init__(self, executor: HadoopOperationExecutor, cluster_type: ClusterType, services: List[HadoopService], name: str = ''):
+    def __init__(self, executor: HadoopOperationExecutor, cluster_type: ClusterType, services: List[HadoopService], context: HadesContext, name: str = ''):
         self._services: List[HadoopService] = services
         self._executor: HadoopOperationExecutor = executor
         self._cluster_type = cluster_type
         self._name = name
-        self._rm_api: RmApi or None = None
-        rm_role = self.select_roles("Yarn/ResourceManager")
-        if rm_role:
-            self._rm_api = RmApi(rm_role[0])
+        self._rm_api: RmApi = None
+        self.ctx = context
 
     @classmethod
-    def from_config(cls, config: ClusterConfig, executor: HadoopOperationExecutor) -> 'HadoopCluster':
-        services = []
+    def from_config(cls, config: ClusterConfig, executor: HadoopOperationExecutor, context: HadesContext) -> 'HadoopCluster':
+        cluster = HadoopCluster(executor, ClusterType(config.cluster_type), [], context, config.cluster_name)
 
         for service_type, service in config.context.items():
-            roles = {}
-            for role_name, role in service.roles.items():
-                host = executor.role_host_type(role.host, role.user)
-
-                role = HadoopRoleInstance(service.name, host, role_name, HadoopRoleType(role.type))
-                roles[role_name] = role
-
             if service_type.lower() == "yarn":
-                service_obj = YarnService(executor, service.name, roles, config.cluster_name)
+                service_obj = YarnService(executor, service.name, {}, None)
             elif service_type.lower() == 'hdfs':
-                service_obj = HdfsService(executor, service.name, roles, config.cluster_name)
+                service_obj = HdfsService(executor, service.name, {}, None)
             else:
                 continue
 
-            services.append(service_obj)
+            for role_name, role in service.roles.items():
+                host = executor.role_host_type(None, role.host, role.user)
 
-        return HadoopCluster(executor, ClusterType(config.cluster_type), services, config.cluster_name)
+                role = HadoopRoleInstance(host, role_name, HadoopRoleType(role.type), None)
+                host.role = role
+                service_obj.add_role(role)
+
+            cluster.add_service(service_obj)
+
+        cluster._create_rm_api()
+        return cluster
+
+    def add_service(self, service: HadoopService):
+        service.cluster = self
+        self._services.append(service)
 
     def get_services(self) -> List[HadoopService]:
         return self._services
@@ -70,11 +74,11 @@ class HadoopCluster:
         [p.wait() for p in handlers]
 
     def get_status(self) -> List[HadoopClusterStatusEntry]:
-        return self._executor.get_cluster_status()
+        return self._executor.get_cluster_status(self._name)
 
     def run_app(self, application: ApplicationCommand):
-        selected = self.select_roles("")
-        random_selected = selected[random.randint(0, len(selected) - 1)]
+        logger.info("Running app {}".format(application.__class__.__name__))
+        random_selected = self._select_random_role()
 
         self._executor.run_app(random_selected, application)
 
@@ -101,7 +105,7 @@ class HadoopCluster:
         return self._rm_api.get_metrics()
 
     def get_queues(self) -> CapacitySchedulerQueue:
-        return CapacitySchedulerQueue.from_rm_api_data(self._rm_api.get_queues())
+        return CapacitySchedulerQueue.from_rm_api_data(self._rm_api.get_scheduler_info())
 
     def get_rm_api(self) -> RmApi:
         return self._rm_api
@@ -111,3 +115,11 @@ class HadoopCluster:
         for role in selected:
             logger.info("Distributing local file {} to remote host '{}' path {}".format(source, role.name, dest))
             role.host.upload(source, dest)
+
+    def _create_rm_api(self):
+        rm_role = self.select_roles("Yarn/ResourceManager")
+        self._rm_api = RmApi(rm_role[0])
+
+    def _select_random_role(self) -> HadoopRoleInstance:
+        selected = self.select_roles("")
+        return selected[random.randint(0, len(selected) - 1)]

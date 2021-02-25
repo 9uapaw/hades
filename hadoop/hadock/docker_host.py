@@ -23,3 +23,6 @@ class DockerContainerInstance(HadoopHostInstance):
 
     def get_address(self) -> str:
         return "localhost"
+
+    def run_cmd(self, cmd: str) -> RunnableCommand:
+        return RunnableCommand("docker exec bash -c '{}'".format(cmd), target=self.role)

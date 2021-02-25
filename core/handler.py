@@ -47,7 +47,7 @@ class MainCommandHandler:
             cm_api = CmApi(ctx.cluster_config.specific_context[self.CM_HOST],
                            ctx.cluster_config.specific_context[self.CM_USERNAME],
                            ctx.cluster_config.specific_context[self.CM_PASSWORD])
-            self.executor = CmExecutor(cm_api)
+            self.executor = CmExecutor(self.ctx, cm_api)
         elif ctx.cluster_config.cluster_type.lower() == ClusterType.HADOCK.value.lower():
             if self.HADOCK_REPOSITORY not in ctx.cluster_config.specific_context:
                 raise ConfigSetupException("Hadock repository is not set")
@@ -58,8 +58,6 @@ class MainCommandHandler:
             logger.warning("Unknown cluster type")
             self.executor = None
 
-
-
     def discover(self):
         if not self.executor:
             raise HadesException("No executor is set. Set cluster config.")
@@ -68,9 +66,10 @@ class MainCommandHandler:
             logger.info("Cluster manifest already exists.")
             return
 
+        cluster_config = self.executor.discover()
+        cluster_config.specific_context = self.ctx.cluster_config.specific_context
+
         with open(self.ctx.cluster_config_path, 'w') as f:
-            cluster_config = self.executor.discover()
-            cluster_config.specific_context = self.ctx.cluster_config.specific_context
             f.write(cluster_config.to_json())
 
         logger.info("Created cluster file {}".format(self.ctx.cluster_config_path))
@@ -125,7 +124,7 @@ class MainCommandHandler:
         if not self.executor:
             raise ConfigSetupException("Can not create cluster without executor. Check config settings!")
 
-        return HadoopCluster.from_config(self.ctx.cluster_config, self.executor)
+        return HadoopCluster.from_config(self.ctx.cluster_config, self.executor, self.ctx)
 
     def run_app(self, app: str, cmd: str = None, queue: str = None):
         cluster = self._create_cluster()
@@ -173,3 +172,9 @@ class MainCommandHandler:
         logger.info("Running script {} in file {}".format(found_cls.__name__, name))
         script = found_cls(self._create_cluster())
         script.run()
+
+    def print_scheduler_info(self):
+        cluster = self._create_cluster()
+        info = cluster.get_rm_api().get_scheduler_info()
+        logger.info("Scheduler info")
+        logger.info(BlobFormat(info).format())

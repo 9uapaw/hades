@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from typing import Dict
 
 from hadoop.executor import HadoopOperationExecutor
-from hadoop.role import HadoopRoleInstance
 
 
 class HadoopServiceType(enum.Enum):
@@ -13,20 +12,24 @@ class HadoopServiceType(enum.Enum):
 
 class HadoopService(ABC):
 
-    def __init__(self, executor: HadoopOperationExecutor, name: str, roles: Dict[str, HadoopRoleInstance],
-                 cluster_name: str = ''):
+    def __init__(self, executor: HadoopOperationExecutor, name: str, roles: Dict[str, 'HadoopRoleInstance'],
+                 cluster: 'HadoopCluster'):
         self._executor = executor
         self._name = name
         self._roles = roles
-        self._cluster_name = cluster_name
+        self.cluster = cluster
 
     @property
     @abstractmethod
     def service_type(self) -> HadoopServiceType:
         raise NotImplementedError()
 
-    def get_roles(self) -> Dict[str, HadoopRoleInstance]:
+    def get_roles(self) -> Dict[str, 'HadoopRoleInstance']:
         return self._roles
+
+    def add_role(self, role: 'HadoopRoleInstance'):
+        role.service = self
+        self._roles[role.name] = role
 
 
 class YarnService(HadoopService):

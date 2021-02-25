@@ -4,14 +4,13 @@ from typing import List, Tuple, Callable, Optional
 import sh
 
 from core.error import CommandExecutionException
-from hadoop.role import HadoopRoleInstance
 
 logger = logging.getLogger(__name__)
 
 
 class RunnableCommand:
 
-    def __init__(self, cmd: str, work_dir='.', target: Optional[HadoopRoleInstance] = None):
+    def __init__(self, cmd: str, work_dir='.', target: Optional['HadoopRoleInstance'] = None):
         self.cmd = cmd
         self.stdout: List[str] = []
         self.stderr: List[str] = []
@@ -21,7 +20,7 @@ class RunnableCommand:
     def run(self) -> Tuple[List[str], List[str]]:
         logger.debug("Running command {}".format(self.cmd))
         try:
-            output = sh.bash(_cwd=self.work_dir, c=self.cmd)
+            output = self.get_sync_cmd(self.cmd, self.work_dir)
             self.stdout = list(filter(bool, output.stdout.decode().split("\n")))
             self.stderr = list(filter(bool, output.stderr.decode().split("\n")))
             return self.stdout, self.stderr
@@ -38,13 +37,19 @@ class RunnableCommand:
             if stderr:
                 stderr_callback = stderr
 
-            process = sh.bash(_cwd=self.work_dir, c=self.cmd, _bg=True, _out=stdout_callback, _err=stderr_callback)
+            process = self.get_async_cmd(self.cmd, self.work_dir, stdout_callback, stderr_callback)
             if block:
                 process.wait()
 
             return process
         except sh.ErrorReturnCode as e:
             raise CommandExecutionException("Error while executing {}".format(self.cmd), cmd=e.stderr.decode())
+
+    def get_sync_cmd(self, c: str, cwd: str) -> any:
+        return sh.bash(_cwd=cwd, c=c)
+
+    def get_async_cmd(self, c: str, cwd: str, out: Callable[[str], None], err: Callable[[str], None]) -> any:
+        sh.bash(_cwd=cwd, c=c, _bg=True, _out=out, _err=err)
 
     def _stdout_callback(self, res: str):
         self.stdout.append(res.replace('\n', ''))
@@ -54,3 +59,18 @@ class RunnableCommand:
         self.stderr.append(res.replace('\n', ''))
         logger.info(res.replace("\n", ""))
 
+
+class RemoteRunnableCommand(RunnableCommand):
+
+    def __init__(self, cmd: str, user: str, host: str, target: Optional['HadoopRoleInstance'] = None):
+        super().__init__(cmd, "", target)
+        self.user = user
+        self.host = host
+
+    def get_sync_cmd(self, c: str, cwd: str) -> any:
+        ssh = sh.ssh.bake("{user}@{host}".format(user=self.user, host=self.host))
+        return ssh("bash -c \'{}\'".format(self.cmd))
+
+    def get_async_cmd(self, c: str, cwd: str, out: Callable[[str], None], err: Callable[[str], None]) -> any:
+        ssh = sh.ssh.bake("{user}@{host}".format(user=self.user, host=self.host))
+        return ssh("bash -c \'{}\'".format(self.cmd), _bg=True, _out=out, _err=err)

@@ -34,6 +34,8 @@ class ClusterConfig:
 class Config:
     hadoop_path: str = ''
     hadoop_jar_path: str = ''
+    cmd_prefix: str = ''
+    cmd_hook: str = ''
     default_modules: List[str] = dataclasses.field(default_factory=lambda: ["hadoop-common", "hadoop-yarn-server-common", "hadoop-yarn-api"])
 
     @classmethod

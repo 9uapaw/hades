@@ -4,6 +4,8 @@ import random
 from hadoop.host import HadoopHostInstance
 from colr import color
 
+import hadoop.service
+
 
 class HadoopRoleType(enum.Enum):
     RM = 'resourcemanager'
@@ -17,16 +19,14 @@ class HadoopRoleType(enum.Enum):
 class HadoopRoleInstance:
 
     def __init__(self,
-                 service_name: str,
                  host: HadoopHostInstance,
                  name: str,
                  role_type: HadoopRoleType,
-                 cluster_name: str = ''):
+                 service: hadoop.service.HadoopService):
         self.host = host
         self.name = name
         self.role_type = role_type
-        self._service_name = service_name
-        self._cluster_name = cluster_name
+        self.service = service
         self._color = random.randint(0, 255)
 
     def get_colorized_output(self) -> str:

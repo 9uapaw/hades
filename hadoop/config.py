@@ -1,5 +1,6 @@
 import logging
-from typing import Dict
+from collections import Iterable
+from typing import Dict, Iterator,Tuple
 
 from core.error import HadesException
 from hadoop.xml_config import HadoopConfigFile
@@ -10,7 +11,20 @@ from xml.etree.ElementTree import ElementTree, Element
 logger = logging.getLogger(__name__)
 
 
-class HadoopConfig:
+class ConfigIterator(Iterator):
+
+    def __init__(self, xml: ElementTree) -> None:
+        self._it: Iterator[Element] = xml.getroot().findall('property')
+
+    def __next__(self) -> Tuple[str, str]:
+        prop = next(self._it)
+        prop_name = prop[0].text
+        prop_value = prop.findall('value')[0].text
+
+        return prop_name, prop_value
+
+
+class HadoopConfig(Iterable):
 
     def __init__(self, file: HadoopConfigFile, base: str = None):
         self._file = file
@@ -19,6 +33,9 @@ class HadoopConfig:
             self._base_xml = ET.parse(base)
         else:
             self._base_xml = None
+
+    def __iter__(self) -> Iterator[Tuple[str, str]]:
+        return ConfigIterator(self.xml)
 
     @property
     def file(self) -> str:

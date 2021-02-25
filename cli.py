@@ -228,11 +228,20 @@ def yarn(ctx):
 @click.pass_context
 def queue(ctx):
     """
-    Prints Yarn queues
+    Prints YARN queues
     """
     handler: MainCommandHandler = ctx.obj['handler']
     handler.print_queues()
 
+
+@yarn.command()
+@click.pass_context
+def info(ctx):
+    """
+    Prints YARN scheduler info
+    """
+    handler: MainCommandHandler = ctx.obj['handler']
+    handler.print_scheduler_info()
 
 if __name__ == "__main__":
     logger.info("Started application")

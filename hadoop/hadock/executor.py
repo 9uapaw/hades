@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class HadockExecutor(HadoopOperationExecutor):
-    HDFS_SERVICES = ["namenode", "datanode"]
     DEFAULT_COMPOSE = "docker-compose.yml"
     STATUS_COLUMN = 4
     NAME_COLUMN = -1

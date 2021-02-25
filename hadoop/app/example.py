@@ -16,11 +16,11 @@ class DistributedShellApp(ApplicationCommand):
 
     YARN_CMD = "yarn {klass} -jar {jar} {cmd}"
     KLASS = "org.apache.hadoop.yarn.applications.distributedshell.Client"
-    JAR = "{path}/yarn/hadoop-yarn-applications-distributedshell*.jar"
+    JAR = "{path}/*hadoop-yarn-applications-distributedshell*.jar"
 
     def __init__(self, path: str = None, cmd: str = None, queue: str = None):
         super().__init__(path, queue)
-        self.cmd = cmd or '-shell command \"sleep 100\"'
+        self.cmd = cmd or '-shell_command \"sleep 100\"'
 
     def build(self) -> str:
         cmd = self.YARN_CMD.format(klass=self.KLASS,
@@ -33,7 +33,7 @@ class DistributedShellApp(ApplicationCommand):
 
 
 class MapReduceApp(ApplicationCommand):
-    MAPREDUCE_JAR = "{path}/mapreduce/hadoop-mapreduce-client-jobclient-*-tests.jar"
+    MAPREDUCE_JAR = "{path}/*hadoop-mapreduce-client-jobclient-*-tests.jar"
     YARN_CMD = "yarn jar {jar} {cmd} {prop} -m 1 -r 1 -mt 1 -rt 1"
 
     def __init__(self, path: str = None, cmd: str = None, queue: str = None):

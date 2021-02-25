@@ -18,13 +18,13 @@ class RmApi:
     def get_metrics(self) -> Dict[str, any]:
         return self._get("metrics")['clusterMetrics']
 
-    def get_queues(self) -> Dict[str, any]:
+    def get_scheduler_info(self) -> Dict[str, any]:
         return self._get("scheduler")
 
     def _get(self, endpoint: str) -> Dict[any, any]:
-        rm_host = str(self._rm.host.get_host()).split("://")
+        rm_host = str(self._rm.host.get_address()).split("://")
         if len(rm_host) == 1:
-            rm_host = "http://{}".format(self._rm.host.get_host())
+            rm_host = "http://{}".format(self._rm.host.get_address())
         else:
             rm_host = str(self._rm.host)
         return requests.get("{}:8088/{}/{}".format(rm_host, self.PREFIX, endpoint)).json()
@@ -32,7 +32,7 @@ class RmApi:
 
 if __name__ == "__main__":
     rm_api = RmApi(HadoopRoleInstance("YARN-1", DockerContainerInstance("resourcemanager"), "resourcemanager", HadoopRoleType.RM))
-    queues = rm_api.get_queues()
+    queues = rm_api.get_scheduler_info()
     q = CapacitySchedulerQueue.from_rm_api_data(queues)
 
     pptree.print_tree(q.get_root(), nameattr="")
