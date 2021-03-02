@@ -30,6 +30,7 @@ class HadoopDir:
 
     def __init__(self, hadoop_dir: str):
         self._modules: Dict[str, str] = {}
+        self._changed: Dict[str, str] = {}
         self._hadoop_dir = hadoop_dir
 
     def extract_changed_modules(self):
@@ -42,6 +43,7 @@ class HadoopDir:
 
         for module in set(module_cmd.stdout):
             self._modules[module] = self._find_jar(module)
+            self._changed[module] = self._modules[module]
 
     def copy_modules_to_dist(self, dest: str, *args):
         if not args:
@@ -101,6 +103,9 @@ class HadoopDir:
 
     def get_jar_paths(self) -> Dict[str, str]:
         return self._modules
+
+    def get_changed_jar_paths(self) -> Dict[str, str]:
+        return self._changed
 
     def get_modules(self) -> List[str]:
         return list(self._modules.keys())

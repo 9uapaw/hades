@@ -1,22 +1,31 @@
-from typing import List, Type
+import logging
+from pathlib import PurePath
+from typing import List, Type, Dict
 
 from core.cmd import RunnableCommand, RemoteRunnableCommand
 from core.config import ClusterConfig, ClusterContextConfig, ClusterRoleConfig
 from core.context import HadesContext
-from core.error import HadesException
+from core.error import HadesException, CommandExecutionException
 from hadoop.app.example import ApplicationCommand
 from hadoop.cluster_type import ClusterType
 from hadoop.cm.cm_api import CmApi
 from hadoop.config import HadoopConfig
-from hadoop.data.status import HadoopClusterStatusEntry
+from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
 from hadoop.executor import HadoopOperationExecutor
 from hadoop.host import HadoopHostInstance, RemoteHostInstance
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
+from hadoop.xml_config import HadoopConfigFile
+from hadoop_dir.module import HadoopModules, HadoopDir
+
+
+logger = logging.getLogger(__name__)
 
 
 class CmExecutor(HadoopOperationExecutor):
     ROLE_NAME_MAP = {"jobhistory": "job-historyserver"}
     LOG_DIR = "/var/log/"
+    PROCESS_DIR = "/run/cloudera-scm-agent/process/"
+    JAR_DIR = "/opt/cloudera/parcels/CDH/jars/"
 
     def __init__(self, ctx: HadesContext, cm_api: CmApi):
         self._cm_api = cm_api
@@ -73,7 +82,7 @@ class CmExecutor(HadoopOperationExecutor):
                 cmd = "tail -f {file}"
             else:
                 cmd = "cat {file}"
-            cmds.append(role.host.run_cmd(cmd.format(file=file)))
+            cmds.append(role.host.create_cmd(cmd.format(file=file)))
 
         return cmds
 
@@ -92,11 +101,55 @@ class CmExecutor(HadoopOperationExecutor):
         application.path = "/opt/cloudera/parcels/CDH/jars"
         cmd = "{} {}".format(self._ctx.config.cmd_prefix,
                              application.build()) if self._ctx.config.cmd_prefix else application.build()
-        cmd = random_selected.host.run_cmd(cmd)
+        cmd = random_selected.host.create_cmd(cmd)
         cmd.run_async()
 
     def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool):
         pass
+
+    def get_config(self, *args: HadoopRoleInstance, config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+        find_config = "find {} -name \"*{}*\" -print".format(self.PROCESS_DIR, config.value)
+        configs = {}
+        for role in args:
+            try:
+                config_paths = role.host.create_cmd(find_config).run()
+            except CommandExecutionException as e:
+                if e.stdout:
+                    config_paths = e.stdout
+                else:
+                    raise e
+            recent_process = [path for path in config_paths[0] if "process" in path]
+            if recent_process:
+                recent_process = recent_process[0]
+            else:
+                continue
+            xml = role.host.create_cmd("cat {}".format(recent_process)).run()
+            config = HadoopConfig(config)
+            config.set_xml_str("\n".join(xml[0]))
+            configs[role.name] = config
+
+        return configs
+
+    def replace_module_jars(self, *args: HadoopRoleInstance, modules: HadoopDir):
+        unique_args = {role.host.get_address(): role for role in args}
+        cached_found_jar = {}
+        for role in unique_args.values():
+            logger.info("Replacing jars on {}".format(role.host.get_address()))
+            for module, jar in modules.get_changed_jar_paths().items():
+                logger.info("Replacing jar {}".format(jar))
+                local_jar = jar
+                if module not in cached_found_jar:
+                    find_remote_jar = role.host.find_file(self.JAR_DIR, "*{}*".format(module)).run()
+                    remote_jar = ""
+                    if find_remote_jar[0]:
+                        remote_jar = find_remote_jar[0][0]
+                        cached_found_jar[module] = remote_jar
+                else:
+                    remote_jar = cached_found_jar[module]
+
+                if remote_jar:
+                    role.host.make_backup(remote_jar).run()
+                    role.host.upload(local_jar, remote_jar).run()
 
     def restart_roles(self, *args: HadoopRoleInstance):
         pass

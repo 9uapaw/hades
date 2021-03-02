@@ -8,6 +8,7 @@ from tabulate import tabulate
 from core.context import HadesContext
 from core.error import ConfigSetupException, HadesException
 from format.blob import BlobFormat
+from format.table import TableFormat
 from format.tree import TreeFormat
 from hadoop.action import RoleAction
 from hadoop.app.example import DistributedShellApp, Application, MapReduceApp
@@ -78,7 +79,7 @@ class MainCommandHandler:
         if not self.ctx.config.hadoop_jar_path:
             raise ConfigSetupException("hadoopJarPath", "not set")
 
-        mvn = MavenCompiler()
+        mvn = MavenCompiler(self.ctx.config)
         hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
 
         if single:
@@ -98,6 +99,9 @@ class MainCommandHandler:
 
         if not no_copy:
             hadoop_modules.copy_modules_to_dist(self.ctx.config.hadoop_jar_path)
+
+        if deploy:
+            self._create_cluster().replace_module_jars("", hadoop_modules)
 
     def log(self, selector: str, follow: bool, tail: int, grep: str):
         cluster = self._create_cluster()
@@ -119,6 +123,13 @@ class MainCommandHandler:
         queues = TreeFormat(self._create_cluster().get_queues().get_root())
         logger.info("Capacity Scheduler Queues")
         logger.info("\n" + queues.format())
+
+    def print_config(self, selector: str, config: HadoopConfigFile):
+        configs = self._create_cluster().get_config(selector, config)
+        logger.info("Config")
+        for role_name, entries in configs.items():
+            logger.info(role_name)
+            logger.info("\n" + TableFormat.from_dict([{"property": k, "value": v} for k, v in entries]).format())
 
     def _create_cluster(self) -> HadoopCluster:
         if not self.executor:

@@ -1,7 +1,7 @@
 from typing import List, Iterable
 
 import cm_client
-from cm_client import ApiRoleNameList, ApiConfigList, ApiCluster, ApiService, ApiRole
+from cm_client import ApiRoleNameList, ApiConfigList, ApiCluster, ApiService, ApiRole, ApiConfig
 
 from hadoop.config import HadoopConfig
 
@@ -33,11 +33,12 @@ class CmApi:
     def get_roles(self, cluster: str, service: str) -> List[ApiRole]:
         return self._role_api.read_roles(cluster, service).items
 
-    def get_config(self, cluster: str, role: str, service: str):
-        return self._role_api.read_role_config(cluster, role, service)
+    def get_config(self, cluster: str, role: str, service: str) -> List[ApiConfig]:
+        return self._role_api.read_role_config(cluster, role, service).items
 
     def update_config(self, cluster: str, role: str, service: str, config: HadoopConfig):
         self._role_api.update_role_config(cluster, role, service, **{p[0]: p[1] for p in config})
+
 
 
 if __name__ == '__main__':

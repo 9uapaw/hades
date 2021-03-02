@@ -24,8 +24,9 @@ class RunnableCommand:
             self.stdout = list(filter(bool, output.stdout.decode().split("\n")))
             self.stderr = list(filter(bool, output.stderr.decode().split("\n")))
             return self.stdout, self.stderr
-        except Exception as e:
-            raise CommandExecutionException(str(e), self.cmd)
+        except sh.ErrorReturnCode as e:
+            raise CommandExecutionException(str(e), self.cmd, self._convert_output(e.stderr.decode()),
+                                            self._convert_output(e.stdout.decode()))
 
     def run_async(self, stdout: Callable[[str], None] = None, stderr: Callable[[str], None] = None, block=True):
         try:
@@ -49,7 +50,7 @@ class RunnableCommand:
         return sh.bash(_cwd=cwd, c=c)
 
     def get_async_cmd(self, c: str, cwd: str, out: Callable[[str], None], err: Callable[[str], None]) -> any:
-        sh.bash(_cwd=cwd, c=c, _bg=True, _out=out, _err=err)
+        return sh.bash(_cwd=cwd, c=c, _bg=True, _out=out, _err=err)
 
     def _stdout_callback(self, res: str):
         self.stdout.append(res.replace('\n', ''))
@@ -58,6 +59,9 @@ class RunnableCommand:
     def _stderr_callback(self, res: str):
         self.stderr.append(res.replace('\n', ''))
         logger.info(res.replace("\n", ""))
+
+    def _convert_output(self, output: str) -> List[str]:
+        return list(filter(bool, output.split("\n")))
 
 
 class RemoteRunnableCommand(RunnableCommand):

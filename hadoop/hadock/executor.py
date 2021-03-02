@@ -1,7 +1,7 @@
 import logging
 import time
 import os
-from typing import List, Type
+from typing import List, Type, Dict
 
 import yaml
 
@@ -15,6 +15,8 @@ from hadoop.executor import HadoopOperationExecutor
 from hadoop.host import HadoopHostInstance
 from hadoop.hadock.docker_host import DockerContainerInstance
 from hadoop.role import HadoopRoleType, HadoopRoleInstance
+from hadoop.xml_config import HadoopConfigFile
+from hadoop_dir.module import HadoopDir
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +102,7 @@ class HadockExecutor(HadoopOperationExecutor):
             config.merge()
             config.commit()
 
-            role.host.upload(config.file, config_file_path)
+            role.host.upload(config.file, config_file_path).run()
             os.remove(config.file)
 
             if no_backup:
@@ -112,3 +114,9 @@ class HadockExecutor(HadoopOperationExecutor):
             logger.info("Restarting {}".format(role.get_colorized_output()))
             restart_cmd = RunnableCommand("docker restart {}".format(role.host))
             logger.info(restart_cmd.run())
+
+    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+        pass
+
+    def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):
+        logger.info("Hadock has a local mounted volume for jars. No need to replace them manually.")

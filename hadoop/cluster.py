@@ -8,12 +8,14 @@ from core.context import HadesContext
 from hadoop.app.example import ApplicationCommand
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
-from hadoop.data.status import HadoopClusterStatusEntry
+from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
 from hadoop.executor import HadoopOperationExecutor
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
 from hadoop.service import HadoopService, YarnService, HdfsService
+from hadoop.xml_config import HadoopConfigFile
 from hadoop.yarn.cs_queue import CapacitySchedulerQueue
 from hadoop.yarn.rm_api import RmApi
+from hadoop_dir.module import HadoopModules, HadoopDir
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class HadoopCluster:
         self._services: List[HadoopService] = services
         self._executor: HadoopOperationExecutor = executor
         self._cluster_type = cluster_type
-        self._name = name
+        self.name = name
         self._rm_api: RmApi = None
         self.ctx = context
 
@@ -74,7 +76,7 @@ class HadoopCluster:
         [p.wait() for p in handlers]
 
     def get_status(self) -> List[HadoopClusterStatusEntry]:
-        return self._executor.get_cluster_status(self._name)
+        return self._executor.get_cluster_status(self.name)
 
     def run_app(self, application: ApplicationCommand):
         logger.info("Running app {}".format(application.__class__.__name__))
@@ -114,7 +116,13 @@ class HadoopCluster:
         selected = self.select_roles(selector)
         for role in selected:
             logger.info("Distributing local file {} to remote host '{}' path {}".format(source, role.name, dest))
-            role.host.upload(source, dest)
+            role.host.upload(source, dest).run()
+
+    def get_config(self, selector: str, config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+        return self._executor.get_config(*self.select_roles(selector), config=config)
+
+    def replace_module_jars(self, selector: str, modules: HadoopDir):
+        return self._executor.replace_module_jars(*self.select_roles(selector), modules=modules)
 
     def _create_rm_api(self):
         rm_role = self.select_roles("Yarn/ResourceManager")

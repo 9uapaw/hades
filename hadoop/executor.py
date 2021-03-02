@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import List, Type
+from typing import List, Type, Dict
 
 from core.cmd import RunnableCommand
 from core.config import ClusterConfig
 from hadoop.app.example import ApplicationCommand
 from hadoop.config import HadoopConfig
-from hadoop.data.status import HadoopClusterStatusEntry
+from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
 from hadoop.host import HadoopHostInstance
+from hadoop.xml_config import HadoopConfigFile
+from hadoop_dir.module import HadoopModules, HadoopDir
 
 
 class HadoopOperationExecutor(ABC):
@@ -39,5 +41,11 @@ class HadoopOperationExecutor(ABC):
 
     @abstractmethod
     def restart_roles(self, *args: 'HadoopRoleInstance'):
+        raise NotImplementedError()
+
+    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+        raise NotImplementedError()
+
+    def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):
         raise NotImplementedError()
 

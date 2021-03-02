@@ -15,7 +15,7 @@ class HadoopService(ABC):
     def __init__(self, executor: HadoopOperationExecutor, name: str, roles: Dict[str, 'HadoopRoleInstance'],
                  cluster: 'HadoopCluster'):
         self._executor = executor
-        self._name = name
+        self.name = name
         self._roles = roles
         self.cluster = cluster
 

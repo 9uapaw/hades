@@ -11,3 +11,9 @@ class HadoopClusterStatusType(enum.Enum):
 class HadoopClusterStatusEntry:
     name: str
     status: str
+
+
+@dataclass
+class HadoopConfigEntry:
+   property: str
+   value: str

@@ -1,6 +1,12 @@
+import logging
+import time
 from abc import ABC
+from pathlib import PurePath
 
 from core.cmd import RunnableCommand, RemoteRunnableCommand
+
+
+logger = logging.getLogger(__name__)
 
 
 class HadoopHostInstance(ABC):
@@ -19,32 +25,49 @@ class HadoopHostInstance(ABC):
     def get_address(self) -> str:
         return self.address
 
-    def upload(self, source: str, dest: str):
+    def upload(self, source: str, dest: str) -> RunnableCommand:
         raise NotImplementedError()
 
-    def download(self, source: str, dest: str):
+    def download(self, source: str, dest: str) -> RunnableCommand:
         raise NotImplementedError()
 
-    def run_cmd(self, cmd: str) -> RunnableCommand:
+    def find_file(self, dir: str, search: str) -> RunnableCommand:
+        raise NotImplementedError()
+
+    def create_cmd(self, cmd: str) -> RunnableCommand:
+        raise NotImplementedError()
+
+    def make_backup(self, dest: str) -> RunnableCommand:
         raise NotImplementedError()
 
 
 class RemoteHostInstance(HadoopHostInstance):
+    HADES_BACKUP_DIR = "/tmp/hades-bkp"
 
-    def upload(self, source: str, dest: str):
-        cmd = RunnableCommand("scp {source} {user}@{host}:{dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest))
-        cmd.run()
+    def upload(self, source: str, dest: str) -> RunnableCommand:
+        return RunnableCommand("scp {source} {user}@{host}:{dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest))
 
-    def download(self, source: str, dest: str):
-        cmd = RunnableCommand("scp {user}@{host}:{source} {dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest))
-        cmd.run()
+    def download(self, source: str, dest: str) -> RunnableCommand:
+        return RunnableCommand("scp {user}@{host}:{source} {dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest))
 
-    def run_cmd(self, cmd: str) -> RunnableCommand:
+    def make_backup(self, dest: str) -> RunnableCommand:
+        dest = PurePath(dest)
+        backup = "{bkp_dir}/{file}-{time}{suffix}".format(bkp_dir=self.HADES_BACKUP_DIR, file=dest.stem,
+                                                          time=int(time.time()), suffix=dest.suffix)
+
+        logger.info("Backup file {} as {}".format(dest, backup))
+        return RemoteRunnableCommand("mkdir -p {} && cp {} {}".format(self.HADES_BACKUP_DIR, dest, backup), self.user, self.get_address())
+
+    def find_file(self, dir: str, search: str) -> RunnableCommand:
+        return self.create_cmd("find {source} -name {search} -print".format(source=dir, search=search))
+
+    def create_cmd(self, cmd: str) -> RunnableCommand:
         prefix = self.role.service.cluster.ctx.config.cmd_prefix
-        pre_hook = self.role.service.cluster.ctx.config.cmd_hook
+        cmds = [cmd for cmd in self.role.service.cluster.ctx.config.cmd_hook]
         if prefix:
             cmd = "{} {}".format(prefix, cmd)
-        if pre_hook:
-            cmd = "{} && {}".format(pre_hook, cmd)
+
+        cmds.append(cmd)
+        cmd = " && ".join(cmds)
 
         return RemoteRunnableCommand(cmd, self.user, self.get_address(), self.role)

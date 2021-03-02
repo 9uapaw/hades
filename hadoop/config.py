@@ -14,23 +14,23 @@ logger = logging.getLogger(__name__)
 class ConfigIterator(Iterator):
 
     def __init__(self, xml: ElementTree) -> None:
-        self._it: Iterator[Element] = xml.getroot().findall('property')
+        self._it: Iterator[Element] = xml.findall('property').__iter__()
 
     def __next__(self) -> Tuple[str, str]:
         prop = next(self._it)
         prop_name = prop[0].text
-        prop_value = prop.findall('value')[0].text
+        prop_value = prop[1].text
 
         return prop_name, prop_value
 
 
 class HadoopConfig(Iterable):
 
-    def __init__(self, file: HadoopConfigFile, base: str = None):
+    def __init__(self, file: HadoopConfigFile, base_path: str = None):
         self._file = file
         self._extension: Dict[str, str] = {}
-        if base:
-            self._base_xml = ET.parse(base)
+        if base_path:
+            self._base_xml = ET.parse(base_path)
         else:
             self._base_xml = None
 
@@ -48,6 +48,9 @@ class HadoopConfig(Iterable):
     @xml.setter
     def xml(self, path: str):
         self._base_xml = ET.parse(path)
+
+    def set_xml_str(self, xml_str: str):
+        self._base_xml = ET.XML(xml_str)
 
     def extend_with_xml(self, path: str):
         source_xml = ET.parse(path)

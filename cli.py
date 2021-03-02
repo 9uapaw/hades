@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 from os import path
 from typing import List, Tuple
@@ -207,6 +206,15 @@ def update_config(ctx, selector: str, file: str, property: Tuple[str], value: Tu
 @cli.command()
 @click.pass_context
 @click.argument('selector', default="")
+@click.option('-f', '--file', type=click.Choice([n.value for n in HadoopConfigFile]), required=True, help='which config file to read')
+def get_config(ctx, selector: str, file: str):
+    handler: MainCommandHandler = ctx.obj['handler']
+    handler.print_config(selector, HadoopConfigFile(file))
+
+
+@cli.command()
+@click.pass_context
+@click.argument('selector', default="")
 def restart_role(ctx, selector: str):
     """
     Restart a role
@@ -243,6 +251,7 @@ def info(ctx):
     handler: MainCommandHandler = ctx.obj['handler']
     handler.print_scheduler_info()
 
+
 if __name__ == "__main__":
     logger.info("Started application")
     before = time.time()
@@ -252,3 +261,5 @@ if __name__ == "__main__":
         logger.info("Executed successfully after {}s".format(int(after - before)))
     except HadesException as e:
         logger.error(str(e))
+        after = time.time()
+        logger.info("Error during execution after {}s".format(int(after - before)))
