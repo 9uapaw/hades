@@ -15,7 +15,7 @@ from hadoop.executor import HadoopOperationExecutor
 from hadoop.host import HadoopHostInstance, RemoteHostInstance
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
 from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopModules, HadoopDir
+from hadoop_dir.module import HadoopModule, HadoopDir
 
 
 logger = logging.getLogger(__name__)
@@ -99,9 +99,7 @@ class CmExecutor(HadoopOperationExecutor):
 
     def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand):
         application.path = "/opt/cloudera/parcels/CDH/jars"
-        cmd = "{} {}".format(self._ctx.config.cmd_prefix,
-                             application.build()) if self._ctx.config.cmd_prefix else application.build()
-        cmd = random_selected.host.create_cmd(cmd)
+        cmd = random_selected.host.create_cmd(application.build())
         cmd.run_async()
 
     def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool):
@@ -135,7 +133,7 @@ class CmExecutor(HadoopOperationExecutor):
         cached_found_jar = {}
         for role in unique_args.values():
             logger.info("Replacing jars on {}".format(role.host.get_address()))
-            for module, jar in modules.get_changed_jar_paths().items():
+            for module, jar in modules.get_jar_paths().items():
                 logger.info("Replacing jar {}".format(jar))
                 local_jar = jar
                 if module not in cached_found_jar:
@@ -152,4 +150,12 @@ class CmExecutor(HadoopOperationExecutor):
                     role.host.upload(local_jar, remote_jar).run()
 
     def restart_roles(self, *args: HadoopRoleInstance):
-        pass
+        roles_by_services: Dict[str, List[HadoopRoleInstance]] = {}
+        for role in args:
+            if role.service.name in roles_by_services:
+                roles_by_services[role.service.name].append(role)
+            else:
+                roles_by_services[role.service.name] = [role]
+
+        for service_name, roles in roles_by_services.items():
+            self._cm_api.restart_roles(roles[0].service.cluster.name, service_name, *[role.name for role in roles])

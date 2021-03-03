@@ -15,7 +15,7 @@ from hadoop.service import HadoopService, YarnService, HdfsService
 from hadoop.xml_config import HadoopConfigFile
 from hadoop.yarn.cs_queue import CapacitySchedulerQueue
 from hadoop.yarn.rm_api import RmApi
-from hadoop_dir.module import HadoopModules, HadoopDir
+from hadoop_dir.module import HadoopModule, HadoopDir
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +99,6 @@ class HadoopCluster:
 
     def restart_roles(self, selector: str):
         selected = self.select_roles(selector)
-        logger.info("Restarting roles {}".format(" ".join([s.get_colorized_output() for s in selected])))
-
         self._executor.restart_roles(*selected)
 
     def get_metrics(self) -> Dict[str, str]:
@@ -116,6 +114,7 @@ class HadoopCluster:
         selected = self.select_roles(selector)
         for role in selected:
             logger.info("Distributing local file {} to remote host '{}' path {}".format(source, role.name, dest))
+            role.host.make_backup(dest).run()
             role.host.upload(source, dest).run()
 
     def get_config(self, selector: str, config: HadoopConfigFile) -> Dict[str, HadoopConfig]:

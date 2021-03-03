@@ -13,7 +13,8 @@ from core.context import HadesContext
 from core.error import HadesException, ConfigSetupException, CliArgException
 from core.handler import MainCommandHandler
 from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopModules
+from hadoop.yarn.yarn_mutation import YarnMutationConfig
+from hadoop_dir.module import HadoopModule
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +62,14 @@ def cli(ctx, config: str, cluster: str, debug: bool):
 @click.option('-d', '--deploy', is_flag=True, help='deploy the changed modules to cluster')
 @click.option('-n', '--no-copy', default=False, is_flag=True, help='do not copy the compiled modules jar to hadoop jar path')
 @click.option('-m', '--module', multiple=True, help='adds a module to the aggregated compilation')
-@click.option('-s', '--single', type=click.Choice([m.name for m in HadoopModules]), help='only compiles a single module')
+@click.option('-s', '--single', type=click.Choice([m.name for m in HadoopModule]), help='only compiles a single module')
 def compile(ctx, changed: bool, deploy: bool, module: List[str], no_copy: bool, single: str):
     """
     Compiles hadoop modules
     """
     handler: MainCommandHandler = ctx.obj['handler']
     all_modules = []
-    single_module = HadoopModules[single] if single else None
+    single_module = HadoopModule[single] if single else None
     if module:
         all_modules.extend(handler.ctx.config.default_modules)
         all_modules.extend(module)
@@ -136,15 +137,19 @@ def log(ctx, selector: str, follow: bool, tail: int or None, grep: str or None):
 
 @cli.command()
 @click.argument("selector", default="")
-@click.option('-s', '--source', help='path of local file to distribute to role hosts')
-@click.option('-d', '--dest', help='path of remote destination path on role hosts')
+@click.option('-s', '--source', multiple=True, help='path of local file to distribute to role hosts')
+@click.option('-d', '--dest', multiple=True, help='path of remote destination path on role hosts')
+@click.option('-m', '--module', type=click.Choice([m.name for m in HadoopModule]),
+              multiple=True, help='name of hadoop module to replace')
 @click.pass_context
-def distribute(ctx, selector: str, source: str, dest: str):
+def distribute(ctx, selector: str, source: Tuple[str], dest: Tuple[str], module: Tuple[str]):
     """
     Distributes files to selected roles
     """
     handler: MainCommandHandler = ctx.obj['handler']
-    handler.distribute(selector, source, dest)
+    files = {k: v for k, v in zip(source, dest)}
+    module = [HadoopModule[m].value for m in module]
+    handler.distribute(selector, files, module)
 
 
 @cli.command()
@@ -208,6 +213,9 @@ def update_config(ctx, selector: str, file: str, property: Tuple[str], value: Tu
 @click.argument('selector', default="")
 @click.option('-f', '--file', type=click.Choice([n.value for n in HadoopConfigFile]), required=True, help='which config file to read')
 def get_config(ctx, selector: str, file: str):
+    """
+    Prints the selected configuration file for selected roles
+    """
     handler: MainCommandHandler = ctx.obj['handler']
     handler.print_config(selector, HadoopConfigFile(file))
 
@@ -217,7 +225,7 @@ def get_config(ctx, selector: str, file: str):
 @click.argument('selector', default="")
 def restart_role(ctx, selector: str):
     """
-    Restart a role
+    Restarts a role
     """
     handler: MainCommandHandler = ctx.obj['handler']
     handler.role_action(selector, RoleAction.RESTART)
@@ -250,6 +258,21 @@ def info(ctx):
     """
     handler: MainCommandHandler = ctx.obj['handler']
     handler.print_scheduler_info()
+
+
+@yarn.command()
+@click.pass_context
+@click.option('-p', '--property', multiple=True, help='property name')
+@click.option('-q', '--queue', help='queue name')
+@click.option('-v', '--value', multiple=True, help='property value')
+def mutate_config(ctx, property: Tuple[str], value: Tuple[str], queue: str):
+    """
+    Mutates YARN queue configuration at runtime through YARN mutation API
+    """
+    handler: MainCommandHandler = ctx.obj['handler']
+    mutation = YarnMutationConfig()
+    mutation.add_queue(queue, **{k: v for k, v in zip(property, value)})
+    handler.mutate_yarn_config(mutation)
 
 
 if __name__ == "__main__":

@@ -84,7 +84,7 @@ class HadockExecutor(HadoopOperationExecutor):
     def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand):
         logger.info("Running app {}".format(application.__class__.__name__))
 
-        application.path = "/opt/hadoop/share/hadoop"
+        application.path = "/opt/hadoop/share/hadoop/yarn/"
         cmd = RunnableCommand("docker exec {} bash -c '{}'".format(random_selected.host, application.build()))
         cmd.run_async()
 
@@ -96,7 +96,7 @@ class HadockExecutor(HadoopOperationExecutor):
             local_file = "{config}-{container}-{time}.{ext}".format(
                 container=role.host, config=config_name, time=int(time.time()), ext=config_ext)
             config_file_path = "/etc/hadoop/{}".format(config.file)
-            role.host.download(config_file_path, local_file)
+            role.host.download(config_file_path, local_file).run()
 
             config.xml = local_file
             config.merge()

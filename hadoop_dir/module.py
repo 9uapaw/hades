@@ -12,9 +12,10 @@ from core.error import CommandExecutionException
 logger = logging.getLogger(__name__)
 
 
-class HadoopModules(enum.Enum):
+class HadoopModule(enum.Enum):
     YARN_UI2 = "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-ui"
     HADOOP_DIST = "hadoop-dist"
+    RESOURCEMANAGER = "hadoop-yarn-server-resourcemanager"
 
 
 class HadoopDir:
@@ -25,8 +26,8 @@ class HadoopDir:
     HDFS_JAR_DIR = "hadoop/hdfs"
     YARN_JAR_DIR = "hadoop/yarn"
 
-    YARN_UI2_MODULE_PATH = HadoopModules.YARN_UI2.value + "/target/hadoop-yarn-ui-*-SNAPSHOT"
-    YARN_UI2_DIST_PATH = HadoopModules.HADOOP_DIST.value + "/target/hadoop-*-SNAPSHOT/share/hadoop/yarn/webapps/ui2"
+    YARN_UI2_MODULE_PATH = HadoopModule.YARN_UI2.value + "/target/hadoop-yarn-ui-*-SNAPSHOT"
+    YARN_UI2_DIST_PATH = HadoopModule.HADOOP_DIST.value + "/target/hadoop-*-SNAPSHOT/share/hadoop/yarn/webapps/ui2"
 
     def __init__(self, hadoop_dir: str):
         self._modules: Dict[str, str] = {}
@@ -64,12 +65,12 @@ class HadoopDir:
                 logger.info("Copying {} to {}".format(original_jar, full_path))
                 shutil.copy2(original_jar, full_path)
 
-    def get_module_abs_path(self, module: HadoopModules):
+    def get_module_abs_path(self, module: HadoopModule):
         return "{}/{}".format(self._hadoop_dir, module.value)
 
-    def copy_module_to_dist(self, module: HadoopModules):
+    def copy_module_to_dist(self, module: HadoopModule):
         logger.info("Copying module {}".format(module.name))
-        if module == HadoopModules.YARN_UI2:
+        if module == HadoopModule.YARN_UI2:
             for module_path, dist_path in zip(glob.glob("{}/{}".format(self._hadoop_dir, self.YARN_UI2_MODULE_PATH)),
                                     glob.glob("{}/{}".format(self._hadoop_dir, self.YARN_UI2_DIST_PATH))):
                 logger.info("Copying {} to {}".format(module_path, dist_path))

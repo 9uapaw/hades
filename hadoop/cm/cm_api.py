@@ -39,6 +39,9 @@ class CmApi:
     def update_config(self, cluster: str, role: str, service: str, config: HadoopConfig):
         self._role_api.update_role_config(cluster, role, service, **{p[0]: p[1] for p in config})
 
+    def restart_roles(self, cluster: str, service: str, *roles: str):
+        roles = ApiRoleNameList(items=roles)
+        self._role_command_api.restart_command(cluster, service, body=roles)
 
 
 if __name__ == '__main__':

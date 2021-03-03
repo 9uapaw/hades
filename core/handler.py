@@ -19,7 +19,8 @@ from hadoop.cm.executor import CmExecutor
 from hadoop.config import HadoopConfig
 from hadoop.hadock.executor import HadockExecutor
 from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopDir, HadoopModules
+from hadoop.yarn.yarn_mutation import YarnMutationConfig
+from hadoop_dir.module import HadoopDir, HadoopModule
 from hadoop_dir.mvn import MavenCompiler
 from script.base import HadesScriptBase
 
@@ -101,6 +102,8 @@ class MainCommandHandler:
             hadoop_modules.copy_modules_to_dist(self.ctx.config.hadoop_jar_path)
 
         if deploy:
+            hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
+            hadoop_modules.extract_changed_modules()
             self._create_cluster().replace_module_jars("", hadoop_modules)
 
     def log(self, selector: str, follow: bool, tail: int, grep: str):
@@ -157,13 +160,22 @@ class MainCommandHandler:
 
         cluster.update_config(selector, config, no_backup)
 
+    def mutate_yarn_config(self, mutation: YarnMutationConfig):
+        self._create_cluster().get_rm_api().modify_config(mutation)
+
     def role_action(self, selector: str, action: RoleAction):
         cluster = self._create_cluster()
         if action == RoleAction.RESTART:
             cluster.restart_roles(selector)
 
-    def distribute(self, selector: str, source: str, dest: str):
-        self._create_cluster().distribute(selector, source, dest)
+    def distribute(self, selector: str, files: Dict[str, str], modules: List[str]):
+        cluster = self._create_cluster()
+        for source, dest in files.items():
+            cluster.distribute(selector, source, dest)
+
+        hadoop_dir = HadoopDir(self.ctx.config.hadoop_path)
+        hadoop_dir.add_modules(*modules, with_jar=True)
+        cluster.replace_module_jars(selector, hadoop_dir)
 
     def run_script(self, name: str):
         mod = __import__('script.{}'.format(name))

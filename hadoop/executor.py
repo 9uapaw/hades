@@ -8,7 +8,7 @@ from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
 from hadoop.host import HadoopHostInstance
 from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopModules, HadoopDir
+from hadoop_dir.module import HadoopModule, HadoopDir
 
 
 class HadoopOperationExecutor(ABC):

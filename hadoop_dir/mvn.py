@@ -3,7 +3,7 @@ import logging
 from core.cmd import RunnableCommand
 from core.config import Config
 from core.error import CommandExecutionException
-from hadoop_dir.module import HadoopDir, HadoopModules
+from hadoop_dir.module import HadoopDir, HadoopModule
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,6 @@ class MavenCompiler:
             if err:
                 raise CommandExecutionException("Error while running compilation command\n{}".format(err), cmd)
 
-    def compile_single_module(self, hadoop_dir: HadoopDir, module: HadoopModules):
+    def compile_single_module(self, hadoop_dir: HadoopDir, module: HadoopModule):
         compile_cmd = RunnableCommand(self._config.compile_cmd, work_dir=hadoop_dir.get_module_abs_path(module))
         compile_cmd.run_async()
