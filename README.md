@@ -1,38 +1,38 @@
 
 # Table of Contents
 
-1.  [Hades](#org25e1fb4)
-    1.  [Overview](#orgaf19a24)
-    2.  [Cluster types](#orgfa9ccca)
-    3.  [Nomenclature](#org1a516b9)
-    4.  [Getting started](#orgb86ca52)
-    5.  [Init command](#org2fb1dab)
-    6.  [Commands](#org57a8ed1)
-    7.  [Selector](#org2b6e692)
-        1.  [Type selector format](#org4ad6591)
-        2.  [Complex selector format](#orgfdb587d)
+1.  [Hades](#orgc35bcff)
+    1.  [Overview](#orgb9e896e)
+    2.  [Cluster types](#orgffbd3cd)
+    3.  [Nomenclature](#orgc2050f5)
+    4.  [Getting started](#org4d8f516)
+    5.  [Init command](#org053827f)
+    6.  [Commands](#org48fdc78)
+    7.  [Selector](#org387289b)
+        1.  [Type selector format](#org9d3db8e)
+        2.  [Complex selector format](#orgc507556)
 
 
-<a id="org25e1fb4"></a>
+<a id="orgc35bcff"></a>
 
 # Hades
 
 
-<a id="orgaf19a24"></a>
+<a id="orgb9e896e"></a>
 
 ## Overview
 
 Hades is a CLI tool, that shares a common interface between various Hadoop distributions. It is a collection of commands most frequently used by developers of Hadoop components.
 
 
-<a id="orgfa9ccca"></a>
+<a id="orgffbd3cd"></a>
 
 ## Cluster types
 
 Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev) and [CDP](https://www.cloudera.com/products/cloudera-data-platform.html) clusters out of the box, but custom distributions might be supported in the future.
 
 
-<a id="org1a516b9"></a>
+<a id="orgc2050f5"></a>
 
 ## Nomenclature
 
@@ -40,7 +40,7 @@ Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev) and [CDP](h
 -   Role: A role type of a service instance (Resource Manager, Name Node, Data Node etc..)
 
 
-<a id="orgb86ca52"></a>
+<a id="org4d8f516"></a>
 
 ## Getting started
 
@@ -54,103 +54,117 @@ Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev) and [CDP](h
         ./cli.py init
 
 
-<a id="org2fb1dab"></a>
+<a id="org053827f"></a>
 
 ## Init command
 
 The init command generates the boilerplate of a Hades config file. It is possible to generate the cluster config depending on the cluster type (see &#x2013;help for more information on this)
 
 
-<a id="org57a8ed1"></a>
+<a id="org48fdc78"></a>
 
 ## Commands
-+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Command                                                    | Description                                                             | Options                                                                       |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli usage [OPTIONS]                                 |   Prints the aggregated usage of Hades                                  |   -n, --no-wrap  Turns off the wrapping                                       |
-|                                                            |                                                                         |   --help         Show this message and exit.                                  |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli compile [OPTIONS]                               |   Compiles hadoop modules                                               |   -c, --changed                   compiles only the changed modules           |
-|                                                            |                                                                         |   -d, --deploy                    deploy the changed modules to cluster       |
-|                                                            |                                                                         |   -n, --no-copy                   do not copy the compiled modules jar to     |
-|                                                            |                                                                         |                                   hadoop jar path                             |
-|                                                            |                                                                         |   -m, --module TEXT               adds a module to the aggregated compilation |
-|                                                            |                                                                         |   -s, --single [YARN_UI2|HADOOP_DIST|RESOURCEMANAGER]                         |
-|                                                            |                                                                         |                                   only compiles a single module               |
-|                                                            |                                                                         |   --help                          Show this message and exit.                 |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli init [OPTIONS]                                  |   Initializes an empty config                                           |   --help  Show this message and exit.                                         |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli discover [OPTIONS]                              |   Discovers a cluster manifest file                                     |   -c, --cluster-type [ClouderaManager|Hadock|Standard|]                       |
-|                                                            |                                                                         |                                   Sets the type of the cluster                |
-|                                                            |                                                                         |   -h, --host TEXT                 set the Cloudera Manager host               |
-|                                                            |                                                                         |   -u, --username TEXT             sets the username credential when           |
-|                                                            |                                                                         |                                   communicating with Cloudera Manager         |
-|                                                            |                                                                         |   -p, --password TEXT             sets the password credential when           |
-|                                                            |                                                                         |                                   communicating with Cloudera Manager         |
-|                                                            |                                                                         |   -d, --hadock-path TEXT          sets the Hadock repository path             |
-|                                                            |                                                                         |   --help                          Show this message and exit.                 |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli log [OPTIONS] SELECTOR                          |   Read the logs of Hadoop roles                                         |   -f, --follow     whether to follow the logs file instead of just reading it |
-|                                                            |                                                                         |   -t, --tail TEXT  only read the last N lines                                 |
-|                                                            |                                                                         |   -g, --grep TEXT  only read the lines that have this substring               |
-|                                                            |                                                                         |   --help           Show this message and exit.                                |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli distribute [OPTIONS] [SELECTOR]                 |   Distributes files to selected roles                                   |   -s, --source TEXT               path of local file to distribute to role    |
-|                                                            |                                                                         |                                   hosts                                       |
-|                                                            |                                                                         |   -d, --dest TEXT                 path of remote destination path on role     |
-|                                                            |                                                                         |                                   hosts                                       |
-|                                                            |                                                                         |   -m, --module [YARN_UI2|HADOOP_DIST|RESOURCEMANAGER]                         |
-|                                                            |                                                                         |                                   name of hadoop module to replace            |
-|                                                            |                                                                         |   --help                          Show this message and exit.                 |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli status [OPTIONS]                                |   Prints the status of cluster                                          |   --help  Show this message and exit.                                         |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli run-app [OPTIONS] [DISTRIBUTED_SHELL|MAPREDUCE] |   Runs an application on the defined cluster                            |   -c, --cmd TEXT    defines the command to run                                |
-|                                                            |                                                                         |   -q, --queue TEXT  defines the queue to which the application will be        |
-|                                                            |                                                                         |                     submitted                                                 |
-|                                                            |                                                                         |   --help            Show this message and exit.                               |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli run-script [OPTIONS] SCRIPT                     |   Runs the selected Hades script file in script/ directory              |   --help  Show this message and exit.                                         |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli update-config [OPTIONS] [SELECTOR]              |   Update properties on a config file for selected roles                 |   -f, --file                                                                  |
-|                                                            |                                                                         |                                   which config file to update                 |
-|                                                            |                                                                         |   -p, --property TEXT             property name                               |
-|                                                            |                                                                         |   -v, --value TEXT                property value                              |
-|                                                            |                                                                         |   -s, --source TEXT               update the config from a local file         |
-|                                                            |                                                                         |   -n, --no-backup                 do not create a backup file before making   |
-|                                                            |                                                                         |                                   any change to the config file               |
-|                                                            |                                                                         |   --help                          Show this message and exit.                 |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli get-config [OPTIONS] [SELECTOR]                 |   Prints the selected configuration file for selected roles             |   -f, --file                                                                  |
-|                                                            |                                                                         |                                   which config file to read                   |
-|                                                            |                                                                         |   --help                          Show this message and exit.                 |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli restart-role [OPTIONS] [SELECTOR]               |   Restarts a role                                                       |   --help  Show this message and exit.                                         |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli yarn [OPTIONS] COMMAND [ARGS]...                |   Yarn specific commands                                                |   --help  Show this message and exit.                                         |
-|                                                            |                                                                         | Commands:                                                                     |
-|                                                            |                                                                         |   info           Prints YARN scheduler info                                   |
-|                                                            |                                                                         |   mutate-config  Mutates YARN queue configuration at runtime through YARN...  |
-|                                                            |                                                                         |   queue          Prints YARN queues                                           |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli yarn queue [OPTIONS]                            |   Prints YARN queues                                                    |   --help  Show this message and exit.                                         |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli yarn info [OPTIONS]                             |   Prints YARN scheduler info                                            |   --help  Show this message and exit.                                         |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-| Usage: cli yarn mutate-config [OPTIONS]                    |   Mutates YARN queue configuration at runtime through YARN mutation API |   -p, --property TEXT  property name                                          |
-|                                                            |                                                                         |   -q, --queue TEXT     queue name                                             |
-|                                                            |                                                                         |   -v, --value TEXT     property value                                         |
-|                                                            |                                                                         |   --help               Show this message and exit.                            |
-|------------------------------------------------------------+-------------------------------------------------------------------------+-------------------------------------------------------------------------------|
-<a id="org2b6e692"></a>
+
+<!-- This HTML table template is generated by emacs 27.1 -->
+<table border="1">
+  <tr>
+    <td align="left" valign="top">
+      &nbsp;Command&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;Description&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+    <td align="left" valign="top">
+      &nbsp;Options&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-n,&nbsp;--no-wrap&nbsp;&nbsp;Turns&nbsp;off&nbsp;the&nbsp;wrapping&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-c,&nbsp;--changed&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;compiles&nbsp;only&nbsp;the&nbsp;changed&nbsp;modules&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-d,&nbsp;--deploy&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;deploy&nbsp;the&nbsp;changed&nbsp;modules&nbsp;to&nbsp;cluster&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-n,&nbsp;--no-copy&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;do&nbsp;not&nbsp;copy&nbsp;the&nbsp;compiled&nbsp;modules&nbsp;jar&nbsp;to&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;hadoop&nbsp;jar&nbsp;path&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-m,&nbsp;--module&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;adds&nbsp;a&nbsp;module&nbsp;to&nbsp;the&nbsp;aggregated&nbsp;compilation&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-s,&nbsp;--single&nbsp;[YARN_UI2|HADOOP_DIST|RESOURCEMANAGER]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;only&nbsp;compiles&nbsp;a&nbsp;single&nbsp;module&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-c,&nbsp;--cluster-type&nbsp;[ClouderaManager|Hadock|Standard|]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Sets&nbsp;the&nbsp;type&nbsp;of&nbsp;the&nbsp;cluster&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-h,&nbsp;--host&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;set&nbsp;the&nbsp;Cloudera&nbsp;Manager&nbsp;host&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-u,&nbsp;--username&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sets&nbsp;the&nbsp;username&nbsp;credential&nbsp;when&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;communicating&nbsp;with&nbsp;Cloudera&nbsp;Manager&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-p,&nbsp;--password&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sets&nbsp;the&nbsp;password&nbsp;credential&nbsp;when&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;communicating&nbsp;with&nbsp;Cloudera&nbsp;Manager&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-d,&nbsp;--hadock-path&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sets&nbsp;the&nbsp;Hadock&nbsp;repository&nbsp;path&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-f,&nbsp;--follow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;whether&nbsp;to&nbsp;follow&nbsp;the&nbsp;logs&nbsp;file&nbsp;instead&nbsp;of&nbsp;just&nbsp;reading&nbsp;it&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-t,&nbsp;--tail&nbsp;TEXT&nbsp;&nbsp;only&nbsp;read&nbsp;the&nbsp;last&nbsp;N&nbsp;lines&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-g,&nbsp;--grep&nbsp;TEXT&nbsp;&nbsp;only&nbsp;read&nbsp;the&nbsp;lines&nbsp;that&nbsp;have&nbsp;this&nbsp;substring&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-s,&nbsp;--source&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;path&nbsp;of&nbsp;local&nbsp;file&nbsp;to&nbsp;distribute&nbsp;to&nbsp;role&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;hosts&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-d,&nbsp;--dest&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;path&nbsp;of&nbsp;remote&nbsp;destination&nbsp;path&nbsp;on&nbsp;role&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;hosts&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-m,&nbsp;--module&nbsp;[YARN_UI2|HADOOP_DIST|RESOURCEMANAGER]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name&nbsp;of&nbsp;hadoop&nbsp;module&nbsp;to&nbsp;replace&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-c,&nbsp;--cmd&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;defines&nbsp;the&nbsp;command&nbsp;to&nbsp;run&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-q,&nbsp;--queue&nbsp;TEXT&nbsp;&nbsp;defines&nbsp;the&nbsp;queue&nbsp;to&nbsp;which&nbsp;the&nbsp;application&nbsp;will&nbsp;be&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;submitted&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-f,&nbsp;--file&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;which&nbsp;config&nbsp;file&nbsp;to&nbsp;update&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-p,&nbsp;--property&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;property&nbsp;name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-v,&nbsp;--value&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;property&nbsp;value&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-s,&nbsp;--source&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;update&nbsp;the&nbsp;config&nbsp;from&nbsp;a&nbsp;local&nbsp;file&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-n,&nbsp;--no-backup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;do&nbsp;not&nbsp;create&nbsp;a&nbsp;backup&nbsp;file&nbsp;before&nbsp;making&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;any&nbsp;change&nbsp;to&nbsp;the&nbsp;config&nbsp;file&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-f,&nbsp;--file&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;which&nbsp;config&nbsp;file&nbsp;to&nbsp;read&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;Commands:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;info&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Prints&nbsp;YARN&nbsp;scheduler&nbsp;info&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;mutate-config&nbsp;&nbsp;Mutates&nbsp;YARN&nbsp;queue&nbsp;configuration&nbsp;at&nbsp;runtime&nbsp;through&nbsp;YARN...&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;queue&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Prints&nbsp;YARN&nbsp;queues&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      -------------------------------------------------------------------------------<br />
+      &nbsp;&nbsp;&nbsp;-p,&nbsp;--property&nbsp;TEXT&nbsp;&nbsp;property&nbsp;name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-q,&nbsp;--queue&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;queue&nbsp;name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;-v,&nbsp;--value&nbsp;TEXT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;property&nbsp;value&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+      &nbsp;&nbsp;&nbsp;--help&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show&nbsp;this&nbsp;message&nbsp;and&nbsp;exit.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    </td>
+  </tr>
+</table>
+
+
+<a id="org387289b"></a>
 
 ## Selector
 
 Many commands could be limited to ran on specified roles. The **selector** argument is &ldquo;&rdquo; by default, which means that all roles will be considered inside every services. The format of the selector expression:
 
 
-<a id="org4ad6591"></a>
+<a id="org9d3db8e"></a>
 
 ### Type selector format
 
@@ -161,7 +175,7 @@ Examples:
 -   Yarn/NodeManager
 
 
-<a id="orgfdb587d"></a>
+<a id="orgc507556"></a>
 
 ### Complex selector format
 
