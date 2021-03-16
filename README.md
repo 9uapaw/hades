@@ -1,46 +1,50 @@
 
 # Table of Contents
 
-1.  [Hades](#orgd603673)
-    1.  [Overview](#org1e47af7)
-    2.  [Cluster types](#org9681af9)
-    3.  [Nomenclature](#org5c3e236)
-    4.  [Getting started](#org538f660)
-    5.  [Init command](#orgfb57af6)
-    6.  [Commands](#orgbf69766)
-    7.  [Selector](#org083ad1c)
-        1.  [Type selector format](#org5e51b08)
-        2.  [Complex selector format](#org3e20e78)
+1.  [Hades](#org79117e7)
+    1.  [Overview](#orgb0824c6)
+    2.  [Cluster types](#orgeca7cf0)
+    3.  [Terminology](#orgf65e2c4)
+    4.  [Getting started](#org0bad826)
+    5.  [Usage](#orgad49738)
+    6.  [Init](#org6fd23bf)
+    7.  [Discover cluster definition](#orgf5324b9)
+    8.  [Commands](#org153fac1)
+    9.  [Selector](#org381bf6d)
+        1.  [Type selector format](#orgd19f1fe)
+        2.  [Complex selector format](#orgb4185ef)
+    10. [Cheat sheet](#org805c13c)
+    11. [Hades Script](#orged5ff95)
 
 
-<a id="orgd603673"></a>
+<a id="org79117e7"></a>
 
 # Hades
 
 
-<a id="org1e47af7"></a>
+<a id="orgb0824c6"></a>
 
 ## Overview
 
 Hades is a CLI tool, that shares a common interface between various Hadoop distributions. It is a collection of commands most frequently used by developers of Hadoop components.
 
 
-<a id="org9681af9"></a>
+<a id="orgeca7cf0"></a>
 
 ## Cluster types
 
 Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev) and [CDP](https://www.cloudera.com/products/cloudera-data-platform.html) clusters out of the box, but custom distributions might be supported in the future.
 
 
-<a id="org5c3e236"></a>
+<a id="orgf65e2c4"></a>
 
-## Nomenclature
+## Terminology
 
 -   Service: Hadoop component inside a cluster (HDFS, Yarn etc..)
 -   Role: A role type of a service instance (Resource Manager, Name Node, Data Node etc..)
 
 
-<a id="org538f660"></a>
+<a id="org0bad826"></a>
 
 ## Getting started
 
@@ -54,14 +58,96 @@ Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev) and [CDP](h
         ./cli.py init
 
 
-<a id="orgfb57af6"></a>
+<a id="orgad49738"></a>
 
-## Init command
+## Usage
 
-The init command generates the boilerplate of a Hades config file. It is possible to generate the cluster config depending on the cluster type (see &#x2013;help for more information on this)
+> Usage: cli.py [OPTIONS] COMMAND [ARGS]&#x2026;
+> 
+> Options:
+>   -c, &#x2013;config TEXT  path to config file
+>   &#x2013;cluster TEXT     path to cluster manifest file
+>   -d, &#x2013;debug        turn on DEBUG level logging
+>   &#x2013;help             Show this message and exit.
+> 
+> Commands:
+>   compile        Compiles hadoop modules
+>   discover       Discovers a cluster manifest file
+>   distribute     Distributes files to selected roles
+>   get-config     Prints the selected configuration file for selected roles
+>   init           Initializes an empty config
+>   log            Read the logs of Hadoop roles
+>   restart-role   Restarts a role
+>   run-app        Runs an application on the defined cluster
+>   run-script     Runs the selected Hades script file in script/ directory
+>   status         Prints the status of cluster
+>   update-config  Update properties on a config file for selected roles
+>   usage          Prints the aggregated usage of Hades
+>   yarn           Yarn specific commands
 
 
-<a id="orgbf69766"></a>
+<a id="org6fd23bf"></a>
+
+## Init
+
+The init command generates a default configuration file for Hades. The config consists of:
+
+    {
+        "defaultModules": [
+            "hadoop-common",
+            "hadoop-yarn-server-common",
+            "hadoop-yarn-api"
+        ],
+        "hadoopJarPath": "",
+        "compileCmd": "mvn package -Pdist -Dtar -Dmaven.javadoc.skip=true -DskipTests -fail-at-end",
+        "cmdPrefix": "",
+        "hadoopPath": ""
+    }
+
+-   defaultModules: when compiling specific module, always add these modules as well (this is necessary in order to successfully compile single modules)
+-   hadoopJarPath: points to the location of built hadoop jars (usually in $HADOOP\_SOURCE\_ROOT/hadoop-dist/target/hadoop-$HADOOP\_VERSION/share)
+-   compileCmd: the mvn command used for building hadoop from source
+-   cmdPrefix: prefix of every command issued on the cluster (eg. sudo -u hdfs)
+-   hadoopPath: Hadoop source path
+
+
+<a id="orgf5324b9"></a>
+
+## Discover cluster definition
+
+Discover is used to generate the cluster definition file. An example Hadock cluster definition is:
+
+    {
+        "clusterType": "Hadock",
+        "clusterName": "",
+        "context":{
+            "Hdfs": {
+                "name": "HDFS-1",
+                "roles": {
+                    "HDFS-DATANODE-1": {
+                        "type": "DataNode",
+                        "host": "datanode"
+                    }
+                }
+            },
+            "Yarn": {
+                "name": "YARN-1",
+                "roles": {
+                    "RESOURCEMANAGER-1": {
+                        "type": "ResourceManager",
+                        "host": "resourcemanager"
+                    }
+                }
+            }
+        }
+    }
+
+-   clusterType: Hadock or ClouderaManager
+-   context: grouped by service type (currently supported Hdfs and Yarn)
+-   roles: grouped by role name
+
+
+<a id="org153fac1"></a>
 
 ## Commands
 
@@ -389,14 +475,14 @@ The init command generates the boilerplate of a Hades config file. It is possibl
 </table>
 
 
-<a id="org083ad1c"></a>
+<a id="org381bf6d"></a>
 
 ## Selector
 
 Many commands could be limited to ran on specified roles. The **selector** argument is &ldquo;&rdquo; by default, which means that all roles will be considered inside every services. The format of the selector expression:
 
 
-<a id="org5e51b08"></a>
+<a id="orgd19f1fe"></a>
 
 ### Type selector format
 
@@ -407,7 +493,7 @@ Examples:
 -   Yarn/NodeManager
 
 
-<a id="org3e20e78"></a>
+<a id="orgb4185ef"></a>
 
 ### Complex selector format
 
@@ -415,4 +501,49 @@ Examples:
 Examples:
 
 -   type=Yarn/name=ResourceManager-ACTIVE
+
+
+<a id="org805c13c"></a>
+
+## Cheat sheet
+
+    hades init # init Hades config file
+    hades --debug discover -c ClouderaManager -h http://CM_HOST:7180 -u USER -p PASSWORD # create a ClouderaManager cluster definition file 
+    hades --debug discover -c Hadock --hadock-path ~/Programming/docker/docker-hadoop-dev # create a Hadock cluster definition file based on local Github repository path
+    
+    hades compile -c -d # build only the changed modules and replace the jars on every hosts in the cluster
+    hades -s RESOURCEMANAGER -d # build the hadoop-yarn-server-resourcemanager module and replace the jar on every hosts in the cluster
+    
+    hades distribute Yarn -s ./example_file -d /etc/example_file # copy the local example_file to every hosts that have a Yarn role running on
+    hades distribute Yarn/ResourceManager -m RESOURCEMANAGER # copy the hadoop-yarn-server-resourcemanager jar file to every hosts that have a ResourceManager role running on
+    
+    hades log Yarn/NodeManager -f # tail follows every NodeManager logs
+    hades restart-role Yarn # restart all Yarn roles 
+    
+    hades run-app DISTRIBUTED_SHELL -c "-shell_command \"sleep 100\"" # runs a DistributedShell command
+    hades update-config Yarn -f capacity-scheduler.xml -s capacity-scheduler-resourcemanager-1612514771.xml # update the capacity-scheduler.xml of all Yarn roles from a local file
+    
+    hades yarn queue # prints Yarn queues
+    hades yarn info # prints the formatted scheduler information
+
+
+<a id="orged5ff95"></a>
+
+## Hades Script
+
+All the functionalities could be accessed from a custom Python script. A Hades script needs to be adhere to the following:
+
+-   Located inside script/ directory
+-   Inherits HadesScriptBase
+
+An example script script/test.py, that prints the cluster status:
+
+    class TestScript(HadesScriptBase):
+    
+        def run(self):
+            print(self.cluster.get_status())
+
+which could be run as:
+
+    hades run-script test
 
