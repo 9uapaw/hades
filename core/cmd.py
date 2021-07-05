@@ -16,6 +16,7 @@ class RunnableCommand:
         self.stderr: List[str] = []
         self.work_dir = work_dir
         self.target = target
+        self._cmd_prefix = ""
 
     def run(self) -> Tuple[List[str], List[str]]:
         logger.debug("Running command {}".format(self.cmd))
@@ -63,6 +64,9 @@ class RunnableCommand:
     def _convert_output(self, output: str) -> List[str]:
         return list(filter(bool, output.split("\n")))
 
+    def set_cmd_prefix(self, prefix: str):
+        self._cmd_prefix = prefix
+
 
 class RemoteRunnableCommand(RunnableCommand):
 
@@ -73,8 +77,8 @@ class RemoteRunnableCommand(RunnableCommand):
 
     def get_sync_cmd(self, c: str, cwd: str) -> any:
         ssh = sh.ssh.bake("{user}@{host}".format(user=self.user, host=self.host))
-        return ssh("bash -c \'{}\'".format(self.cmd))
+        return ssh("bash -c \'{} {}\'".format(self._cmd_prefix, self.cmd))
 
     def get_async_cmd(self, c: str, cwd: str, out: Callable[[str], None], err: Callable[[str], None]) -> any:
         ssh = sh.ssh.bake("{user}@{host}".format(user=self.user, host=self.host))
-        return ssh("bash -c \'{}\'".format(self.cmd), _bg=True, _out=out, _err=err)
+        return ssh("bash -c \'{} {}\'".format(self._cmd_prefix, self.cmd), _bg=True, _out=out, _err=err)

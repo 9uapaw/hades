@@ -3,6 +3,7 @@ import random
 from typing import List, Callable, Dict
 
 import hadoop.selector
+from core.cmd import RunnableCommand
 from core.config import ClusterConfig
 from core.context import HadesContext
 from hadoop.app.example import ApplicationCommand
@@ -61,37 +62,27 @@ class HadoopCluster:
     def get_services(self) -> List[HadoopService]:
         return self._services
 
-    def read_logs(self, selector: str, follow: bool = False, tail: int or None = 10, grep: str = None):
+    def read_logs(self, selector: str, follow: bool = False, tail: int or None = 10, download: bool = None) -> List[RunnableCommand]:
         roles = self.select_roles(selector)
         if not roles:
             logger.warning("No roles found by selector '{}'".format(selector))
 
-        cmds = self._executor.read_log(*roles, follow=follow, tail=tail)
+        cmds = self._executor.read_log(*roles, follow=follow, tail=tail, download=download)
 
-        handlers = []
-        for cmd in cmds:
-            handlers = cmd.run_async(stdout=self._generate_role_output(logger, cmd.target, grep),
-                                     stderr=self._generate_role_output(logger, cmd.target, grep), block=False)
-
-        [p.wait() for p in handlers]
+        return cmds
 
     def get_status(self) -> List[HadoopClusterStatusEntry]:
         return self._executor.get_cluster_status(self.name)
 
-    def run_app(self, application: ApplicationCommand):
+    def run_app(self, application: ApplicationCommand) -> RunnableCommand:
         logger.info("Running app {}".format(application.__class__.__name__))
         random_selected = self._select_random_role()
 
-        self._executor.run_app(random_selected, application)
+        return self._executor.run_app(random_selected, application)
 
     def select_roles(self, selector: str) -> List[HadoopRoleInstance]:
         selector_expr = hadoop.selector.HadoopRoleSelector(self.get_services())
         return selector_expr.select(selector)
-
-    @staticmethod
-    def _generate_role_output(logger: logging.Logger, target: HadoopRoleInstance, grep: str or None) -> Callable[[str], None]:
-        return lambda line: logger.info("{} {}".format(target.get_colorized_output(), line.replace("\n", ""))) \
-            if not grep or grep in line else ""
 
     def update_config(self, selector: str, config: HadoopConfig, no_backup: bool = False):
         selected = self.select_roles(selector)
@@ -100,6 +91,9 @@ class HadoopCluster:
     def restart_roles(self, selector: str):
         selected = self.select_roles(selector)
         self._executor.restart_roles(*selected)
+
+    def restart(self):
+        self._executor.restart_cluster(self.name)
 
     def get_metrics(self) -> Dict[str, str]:
         return self._rm_api.get_metrics()

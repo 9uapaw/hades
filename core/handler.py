@@ -1,12 +1,13 @@
 import inspect
 import logging
 from os import path
-from typing import Dict, List, Tuple, Type
+from typing import Dict, List, Tuple, Type, Callable
 
 from tabulate import tabulate
 
 from core.context import HadesContext
 from core.error import ConfigSetupException, HadesException
+from core.util import generate_role_output
 from format.blob import BlobFormat
 from format.table import TableFormat
 from format.tree import TreeFormat
@@ -31,6 +32,7 @@ class MainCommandHandler:
     CM_HOST = 'host'
     CM_PASSWORD = 'password'
     CM_USERNAME = 'username'
+    CM_API_VERSION = "version"
     HADOCK_REPOSITORY = 'hadock_path'
     HADOCK_COMPOSE = 'hadock_compose'
 
@@ -48,7 +50,8 @@ class MainCommandHandler:
         if ctx.cluster_config.cluster_type.lower() == ClusterType.CM.value.lower():
             cm_api = CmApi(ctx.cluster_config.specific_context[self.CM_HOST],
                            ctx.cluster_config.specific_context[self.CM_USERNAME],
-                           ctx.cluster_config.specific_context[self.CM_PASSWORD])
+                           ctx.cluster_config.specific_context[self.CM_PASSWORD],
+                           ctx.cluster_config.specific_context.get(self.CM_API_VERSION))
             self.executor = CmExecutor(self.ctx, cm_api)
         elif ctx.cluster_config.cluster_type.lower() == ClusterType.HADOCK.value.lower():
             if self.HADOCK_REPOSITORY not in ctx.cluster_config.specific_context:
@@ -106,9 +109,16 @@ class MainCommandHandler:
             hadoop_modules.extract_changed_modules()
             self._create_cluster().replace_module_jars("", hadoop_modules)
 
-    def log(self, selector: str, follow: bool, tail: int, grep: str):
+    def log(self, selector: str, follow: bool, tail: int, grep: str, download: bool):
         cluster = self._create_cluster()
-        cluster.read_logs(selector, follow, tail, grep)
+        cmds = cluster.read_logs(selector, follow, tail, download)
+
+        handlers = []
+        for cmd in cmds:
+            handlers = cmd.run_async(stdout=generate_role_output(logger, cmd.target, lambda line: grep in line if grep else True),
+                                     stderr=generate_role_output(logger, cmd.target, lambda line: grep in line if grep else True), block=False)
+
+        [p.wait() for p in handlers]
 
     def print_status(self):
         cluster = self._create_cluster()
@@ -148,7 +158,9 @@ class MainCommandHandler:
         elif app.lower() == Application.MAPREDUCE.name.lower():
             application = MapReduceApp(cmd=cmd, queue=queue)
 
-        cluster.run_app(application)
+        cmd = cluster.run_app(application)
+        handler = cmd.run_async()
+        handler.wait()
 
     def update_config(self, selector: str, file: HadoopConfigFile, properties: List[str], values: List[str],
                       no_backup: bool = False, source: str = None):

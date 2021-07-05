@@ -28,7 +28,7 @@ class HadoopHostInstance(ABC):
     def upload(self, source: str, dest: str) -> RunnableCommand:
         raise NotImplementedError()
 
-    def download(self, source: str, dest: str) -> RunnableCommand:
+    def download(self, source: str, dest: str = None) -> RunnableCommand:
         raise NotImplementedError()
 
     def find_file(self, dir: str, search: str) -> RunnableCommand:
@@ -45,10 +45,12 @@ class RemoteHostInstance(HadoopHostInstance):
     HADES_BACKUP_DIR = "/tmp/hades-bkp"
 
     def upload(self, source: str, dest: str) -> RunnableCommand:
-        return RunnableCommand("scp {source} {user}@{host}:{dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest))
+        return RunnableCommand("scp {source} {user}@{host}:{dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest), target=self.role)
 
-    def download(self, source: str, dest: str) -> RunnableCommand:
-        return RunnableCommand("scp {user}@{host}:{source} {dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest))
+    def download(self, source: str, dest: str = None) -> RunnableCommand:
+        if not dest:
+            dest = "."
+        return RunnableCommand("scp {user}@{host}:{source} {dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest), target=self.role)
 
     def make_backup(self, dest: str) -> RunnableCommand:
         dest = PurePath(dest)
@@ -56,7 +58,7 @@ class RemoteHostInstance(HadoopHostInstance):
                                                           time=int(time.time()), suffix=dest.suffix)
 
         logger.info("Backup file {} as {}".format(dest, backup))
-        return RemoteRunnableCommand("mkdir -p {} && cp {} {}".format(self.HADES_BACKUP_DIR, dest, backup), self.user, self.get_address())
+        return RemoteRunnableCommand("mkdir -p {} && cp {} {}".format(self.HADES_BACKUP_DIR, dest, backup), self.user, self.get_address(), target=self.role)
 
     def find_file(self, dir: str, search: str) -> RunnableCommand:
         return self.create_cmd("find {source} -name {search} -print".format(source=dir, search=search))

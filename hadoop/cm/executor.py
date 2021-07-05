@@ -69,7 +69,7 @@ class CmExecutor(HadoopOperationExecutor):
 
         return cluster
 
-    def read_log(self, *args: HadoopRoleInstance, follow: bool = False, tail: int or None = 10) -> List[RunnableCommand]:
+    def read_log(self, *args: HadoopRoleInstance, follow: bool = False, tail: int or None = 10, download: bool = True) -> List[RunnableCommand]:
         cmds = []
         for role in args:
             role_type = role.role_type.value
@@ -78,7 +78,10 @@ class CmExecutor(HadoopOperationExecutor):
                     role_type = k
 
             file = "{log_dir}*/*{role_type}*".format(log_dir=self.LOG_DIR, role_type=role_type.upper())
-            if tail or follow:
+            if download:
+                cmds.append(role.host.download(file))
+                continue
+            elif tail or follow:
                 cmd = "tail -f {file}"
             else:
                 cmd = "cat {file}"
@@ -97,13 +100,26 @@ class CmExecutor(HadoopOperationExecutor):
 
         return statuses
 
-    def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand):
+    def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand) -> RunnableCommand:
         application.path = "/opt/cloudera/parcels/CDH/jars"
         cmd = random_selected.host.create_cmd(application.build())
-        cmd.run_async()
+
+        return cmd
 
     def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool):
-        pass
+        for role in args:
+            existing_conf = self._cm_api.get_config(role.service.cluster.name, role.name, role.service.name)
+            safety_valve = ""
+            for ex in existing_conf:
+                if ex.name == "resourcemanager_capacity_scheduler_configuration":
+                    safety_valve = ex.value
+            c = {}
+            if role.role_type == HadoopRoleType.RM:
+                config.set_xml_str(safety_valve)
+                config.merge()
+                c["resourcemanager_capacity_scheduler_configuration"] = config.to_str()
+
+            self._cm_api.update_config(role.service.cluster.name, role.name, role.service.name, c)
 
     def get_config(self, *args: HadoopRoleInstance, config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
         find_config = "find {} -name \"*{}*\" -print".format(self.PROCESS_DIR, config.value)
@@ -159,3 +175,6 @@ class CmExecutor(HadoopOperationExecutor):
 
         for service_name, roles in roles_by_services.items():
             self._cm_api.restart_roles(roles[0].service.cluster.name, service_name, *[role.name for role in roles])
+
+    def restart_cluster(self, cluster: str):
+        self._cm_api.restart_cluster(cluster)

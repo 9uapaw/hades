@@ -86,7 +86,8 @@ class HadockExecutor(HadoopOperationExecutor):
 
         application.path = "/opt/hadoop/share/hadoop/yarn/"
         cmd = RunnableCommand("docker exec {} bash -c '{}'".format(random_selected.host, application.build()))
-        cmd.run_async()
+
+        return cmd
 
     def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False):
         config_name, config_ext = config.file.split(".")
@@ -114,6 +115,9 @@ class HadockExecutor(HadoopOperationExecutor):
             logger.info("Restarting {}".format(role.get_colorized_output()))
             restart_cmd = RunnableCommand("docker restart {}".format(role.host))
             logger.info(restart_cmd.run())
+
+    def restart_cluster(self, cluster: str):
+        pass
 
     def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
         pass

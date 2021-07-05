@@ -26,8 +26,9 @@ logger = logging.getLogger(__name__)
 @click.option('-c', '--config', default='config.json', help='path to config file')
 @click.option('--cluster', default='cluster.json', help='path to cluster manifest file')
 @click.option('-d', '--debug', is_flag=True, help='turn on DEBUG level logging')
+@click.option('-p', '--prefix', help='overwrite command prefix')
 @click.pass_context
-def cli(ctx, config: str, cluster: str, debug: bool):
+def cli(ctx, config: str, cluster: str, debug: bool, prefix: str):
     if ctx.invoked_subcommand == "usage":
         return
 
@@ -57,6 +58,9 @@ def cli(ctx, config: str, cluster: str, debug: bool):
             cluster_file = ClusterConfig.from_json(json_str)
     else:
         cluster_file = None
+
+    if prefix:
+        config_file.cmd_prefix = prefix
 
     context = HadesContext(config=config_file, cluster_config=cluster_file, config_path=config, cluster_config_path=cluster)
     ctx.obj['handler'] = MainCommandHandler(context)
@@ -139,8 +143,9 @@ def init(ctx):
 @click.option('-h', '--host', help='set the Cloudera Manager host')
 @click.option('-u', '--username', default="admin", help='sets the username credential when communicating with Cloudera Manager')
 @click.option('-p', '--password', default="admin", help='sets the password credential when communicating with Cloudera Manager')
+@click.option('-v', '--version', default="v40", help='sets the CM API version')
 @click.option('-d', '--hadock-path', help='sets the Hadock repository path')
-def discover(ctx, cluster_type: str or None, host: str or None, username: str or None, password: str or None, hadock_path: str or None):
+def discover(ctx, cluster_type: str or None, host: str or None, username: str or None, password: str or None, hadock_path: str or None, version: str):
     """
     Discovers a cluster manifest file
     """
@@ -150,6 +155,7 @@ def discover(ctx, cluster_type: str or None, host: str or None, username: str or
         ctx.cluster_config.specific_context['username'] = username
         ctx.cluster_config.specific_context['host'] = host
         ctx.cluster_config.specific_context['password'] = password
+        ctx.cluster_config.specific_context['version'] = version
     elif cluster_type == ClusterType.HADOCK.value:
         ctx.cluster_config.specific_context['hadock_path'] = hadock_path
 
@@ -164,12 +170,13 @@ def discover(ctx, cluster_type: str or None, host: str or None, username: str or
 @click.option('-f', '--follow', is_flag=True, help='whether to follow the logs file instead of just reading it')
 @click.option('-t', '--tail', default=None, help='only read the last N lines')
 @click.option('-g', '--grep', default=None, help='only read the lines that have this substring')
-def log(ctx, selector: str, follow: bool, tail: int or None, grep: str or None):
+@click.option('-d', '--download', is_flag=True, default=None, help='download log to current directory')
+def log(ctx, selector: str, follow: bool, tail: int or None, grep: str or None, download: bool):
     """
     Read the logs of Hadoop roles
     """
     handler: MainCommandHandler = ctx.obj['handler']
-    handler.log(selector, follow, tail, grep)
+    handler.log(selector, follow, tail, grep, download)
 
 
 @cli.command()

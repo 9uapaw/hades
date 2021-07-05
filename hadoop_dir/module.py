@@ -16,6 +16,7 @@ class HadoopModule(enum.Enum):
     YARN_UI2 = "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-ui"
     HADOOP_DIST = "hadoop-dist"
     RESOURCEMANAGER = "hadoop-yarn-server-resourcemanager"
+    YARN_COMMON = "hadoop-yarn-common"
 
 
 class HadoopDir:
@@ -43,8 +44,16 @@ class HadoopDir:
             raise CommandExecutionException("\n".join(module_cmd.stdout), self.CHANGED_MODULES_CMD)
 
         for module in set(module_cmd.stdout):
-            self._modules[module] = self._find_jar(module)
-            self._changed[module] = self._modules[module]
+            try:
+                jar = self._find_jar(module)
+                self._modules[module] = jar
+                self._changed[module] = self._modules[module]
+            except CommandExecutionException as e:
+                logger.warning(e)
+                if not e.stderr:
+                    continue
+                else:
+                    raise e
 
     def copy_modules_to_dist(self, dest: str, *args):
         if not args:
@@ -78,11 +87,7 @@ class HadoopDir:
 
     def _find_jar(self, module: str) -> str:
         jar_cmd = RunnableCommand(self.FIND_JAR_OF_MODULE_TEMPLATE.format(module=module), work_dir=self._hadoop_dir)
-        try:
-            jar_cmd.run()
-        except Exception as e:
-            raise CommandExecutionException("Error while searching jar files",
-                                            self.FIND_JAR_OF_MODULE_TEMPLATE.format(module=module))
+        jar_cmd.run()
         if not jar_cmd.stdout:
             logger.warning("No jar found for module {}".format(module))
             logger.warning(jar_cmd.stderr)

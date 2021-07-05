@@ -35,7 +35,10 @@ class HadoopConfig(Iterable):
             self._base_xml = None
 
     def __iter__(self) -> Iterator[Tuple[str, str]]:
-        return ConfigIterator(self.xml)
+        if self._base_xml:
+            return ConfigIterator(self.xml)
+        else:
+            return self._extension.items().__iter__()
 
     @property
     def file(self) -> str:
@@ -70,7 +73,11 @@ class HadoopConfig(Iterable):
             raise HadesException("Can not merge without base xml. Set base xml before calling merge.")
 
         properties_to_set = set(self._extension.keys())
-        for prop in self._base_xml.getroot().findall('property'):  # type: Element
+        if hasattr(self._base_xml, "tag"):
+            root = self._base_xml
+        else:
+            root = self._base_xml.getroot()
+        for prop in root.findall('property'):  # type: Element
             prop_name = prop[0].text
             prop_value = prop.findall('value')[0].text
 
@@ -92,7 +99,14 @@ class HadoopConfig(Iterable):
 
             new_config_prop.append(new_config_prop_name)
             new_config_prop.append(new_config_value)
-            self._base_xml.getroot().append(new_config_prop)
+
+            root.append(new_config_prop)
 
     def commit(self):
         self._base_xml.write(self._file.value)
+
+    def to_str(self) -> str:
+        return str(ET.tostring(self._base_xml, encoding='unicode', method='xml'))
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__iter__()}

@@ -1,5 +1,8 @@
 import logging
 import textwrap
+from collections import Callable
+
+from hadoop.role import HadoopRoleInstance
 
 
 class Formatter(logging.Formatter):
@@ -13,3 +16,8 @@ class Formatter(logging.Formatter):
         msg = textwrap.indent(message, ' ' * len(header)).strip()
         record.msg = message
         return header + msg
+
+
+def generate_role_output(logger: logging.Logger, target: HadoopRoleInstance, grep: Callable) -> Callable[[str], None]:
+    return lambda line: logger.info("{} {}".format(target.get_colorized_output(), line.replace("\n", ""))) \
+        if not grep or grep(line) else ""
