@@ -120,7 +120,24 @@ class HadockExecutor(HadoopOperationExecutor):
         pass
 
     def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
-        pass
+        configs = {}
+        config_name, config_ext = config.value.split(".")
+
+        for role in args:
+            config_data = HadoopConfig(config)
+            local_file = "{config}-{container}-{time}.{ext}".format(
+                container=role.host, config=config_name, time=int(time.time()), ext=config_ext)
+            config_file_path = "/etc/hadoop/{}".format(config.value)
+            role.host.download(config_file_path, local_file).run()
+
+            config_data.xml = local_file
+            config_data.merge()
+            config_data.commit()
+
+            os.remove(local_file)
+            configs[role.name] = config_data
+
+        return configs
 
     def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):
         logger.info("Hadock has a local mounted volume for jars. No need to replace them manually.")
