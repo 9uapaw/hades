@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class DockerContainerInstance(HadoopHostInstance):
 
-    def download(self, source: str, dest: str) -> RunnableCommand:
+    def download(self, source: str, dest: str = None) -> RunnableCommand:
         logger.info("Copying file from {}:{} to local:{}".format(self, source, dest))
         return RunnableCommand("docker cp {container}:{source} {dest}".format(dest=dest, container=self.address, source=source))
 

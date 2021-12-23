@@ -34,17 +34,17 @@ class DistributedShellApp(ApplicationCommand):
 
 class MapReduceApp(ApplicationCommand):
     MAPREDUCE_JAR = "{path}/*hadoop-mapreduce-client-jobclient-*-tests.jar"
-    YARN_CMD = "yarn jar {jar} {cmd} {prop} -m 1 -r 1 -mt 1 -rt 1"
+    YARN_CMD = "yarn jar {jar} {cmd}"
 
     def __init__(self, path: str = None, cmd: str = None, queue: str = None):
         super().__init__(path, queue)
-        self.cmd = cmd or 'sleep'
+        self.cmd = cmd or 'sleep -m 1 -r 1 -mt 1 -rt 1'
 
     def build(self):
         prop = ""
         if self.queue:
             prop += " -Dmapreduce.job.queuename={}".format(self.queue)
-        cmd = self.YARN_CMD.format(jar=self.MAPREDUCE_JAR.format(path=self.path), cmd=self.cmd, prop=prop)
+        cmd = self.YARN_CMD.format(jar=self.MAPREDUCE_JAR.format(path=self.path), cmd=self.cmd)
 
         return cmd
 

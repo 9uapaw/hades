@@ -7,7 +7,7 @@ import yaml
 
 from core.cmd import RunnableCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
-from hadoop.app.example import ApplicationCommand
+from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry
@@ -84,7 +84,12 @@ class HadockExecutor(HadoopOperationExecutor):
     def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand):
         logger.info("Running app {}".format(application.__class__.__name__))
 
-        application.path = "/opt/hadoop/share/hadoop/yarn/"
+        application.path = "/opt/hadoop/share/hadoop/"
+        if isinstance(application, MapReduceApp):
+            application.path += "mapreduce"
+        elif isinstance(application, DistributedShellApp):
+            application.path += "yarn"
+
         cmd = RunnableCommand("docker exec {} bash -c '{}'".format(random_selected.host, application.build()))
 
         return cmd
