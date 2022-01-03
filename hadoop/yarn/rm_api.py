@@ -8,7 +8,6 @@ from hadoop.role import HadoopRoleInstance, HadoopRoleType
 import requests
 
 from hadoop.yarn.cs_queue import CapacitySchedulerQueue
-from hadoop.yarn.yarn_mutation import YarnMutationConfig
 
 
 class RmApi:
@@ -23,8 +22,8 @@ class RmApi:
     def get_scheduler_info(self) -> Dict[str, any]:
         return self._get("scheduler")
 
-    def modify_config(self, data: YarnMutationConfig):
-        return self._put("scheduler-conf", data.dump())
+    def modify_config(self, config: str):
+        return self._put("scheduler-conf", config)
 
     def _get(self, endpoint: str) -> Dict[any, any]:
         rm_host = self._get_rm_address()

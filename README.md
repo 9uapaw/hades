@@ -528,6 +528,40 @@ Examples:
     hades yarn queue # prints Yarn queues
     hades yarn info # prints the formatted scheduler information
 
+    hades yarn update-queue -q "root.parent2.queue1" -p "state" -v "RUNNING"
+    hades yarn remove-queue -q "root.parent2.queue1"
+    hades yarn add-queue -q "root.parent2.queue1" -p "capacity" -v "100"
+    hades yarn global-updates -k "yarn.scheduler.capacity.queue-mappings" -v "u:%user:parent1.%user"
+
+
+The *--dry* can be used to generate xml(s) then the *raw-mutate* command can be used with the combined xml, example:
+```
+ hades yarn add-queue -q "root.a" -p "capacity" -v "10" -d
+ hades yarn update-queue -q "root.default" -p "capacity" -v "90" -d
+ hades yarn raw-mutate -x "$(cat <<-END
+<sched-conf>
+  <add-queue>
+    <queue-name>root.a</queue-name>
+    <params>
+      <entry>
+        <key>capacity</key>
+        <value>10</value>
+      </entry>
+    </params>
+  </add-queue>
+  <update-queue>
+    <queue-name>root.default</queue-name>
+    <params>
+      <entry>
+        <key>capacity</key>
+        <value>90</value>
+      </entry>
+    </params>
+  </update-queue>
+</sched-conf>
+END
+)"
+```
 
 <a id="org5b0f6c5"></a>
 

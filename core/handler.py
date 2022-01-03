@@ -20,7 +20,6 @@ from hadoop.cm.executor import CmExecutor
 from hadoop.config import HadoopConfig
 from hadoop.hadock.executor import HadockExecutor
 from hadoop.xml_config import HadoopConfigFile
-from hadoop.yarn.yarn_mutation import YarnMutationConfig
 from hadoop_dir.module import HadoopDir, HadoopModule
 from hadoop_dir.mvn import MavenCompiler
 from script.base import HadesScriptBase
@@ -172,8 +171,8 @@ class MainCommandHandler:
 
         cluster.update_config(selector, config, no_backup)
 
-    def mutate_yarn_config(self, mutation: YarnMutationConfig):
-        self._create_cluster().get_rm_api().modify_config(mutation)
+    def mutate_yarn_config(self, config: str):
+        self._create_cluster().get_rm_api().modify_config(config)
 
     def role_action(self, selector: str, action: RoleAction):
         cluster = self._create_cluster()
