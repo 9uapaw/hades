@@ -1,15 +1,15 @@
 from unittest import TestCase
 
-from hadoop.yarn.yarn_mutation import YarnUpdateQueue, YarnAddQueue, YarnRemoveQueue, YarnGlobalUpdates, dumpXml
+from hadoop.yarn.yarn_mutation import MutationRequest
 
 
 class TestMutationApis(TestCase):
 
     def test_update_queue(self):
-        mutation = YarnUpdateQueue()
-        mutation.add_queue("root.test-queue1", test="hello1", test2="hello2")
-        mutation.add_queue("root.test-queue2", test="hello3", test2="hello4")
-        self.assertEqual(dumpXml(mutation.xml, pretty=True),
+        mutation = MutationRequest()
+        mutation.update_queue("root.test-queue1", test="hello1", test2="hello2")
+        mutation.update_queue("root.test-queue2", test="hello3", test2="hello4")
+        self.assertEqual(mutation.dump_xml(pretty=True),
             """\
 <sched-conf>
   <update-queue>
@@ -41,10 +41,10 @@ class TestMutationApis(TestCase):
 </sched-conf>""")
 
     def test_add_queue(self):
-        mutation = YarnAddQueue()
+        mutation = MutationRequest()
         mutation.add_queue("root.test-queue1", test="hello1", test2="hello2")
         mutation.add_queue("root.test-queue2", test="hello3", test2="hello4")
-        self.assertEqual(dumpXml(mutation.xml, pretty=True),
+        self.assertEqual(mutation.dump_xml(pretty=True),
             """\
 <sched-conf>
   <add-queue>
@@ -76,10 +76,10 @@ class TestMutationApis(TestCase):
 </sched-conf>""")
 
     def test_remove_queue(self):
-        mutation = YarnRemoveQueue()
-        mutation.add_queue("root.test-queue1")
-        mutation.add_queue("root.test-queue2")
-        self.assertEqual(dumpXml(mutation.xml, pretty=True),
+        mutation = MutationRequest()
+        mutation.remove_queue("root.test-queue1")
+        mutation.remove_queue("root.test-queue2")
+        self.assertEqual(mutation.dump_xml(pretty=True),
             """\
 <sched-conf>
   <remove-queue>root.test-queue1</remove-queue>
@@ -87,10 +87,10 @@ class TestMutationApis(TestCase):
 </sched-conf>""")
 
     def test_global_updates(self):
-        mutation = YarnGlobalUpdates()
-        mutation.add_entry("key1", "value1")
-        mutation.add_entry("key2", "value2")
-        self.assertEqual(dumpXml(mutation.xml, pretty=True),
+        mutation = MutationRequest()
+        mutation.global_update("key1", "value1")
+        mutation.global_update("key2", "value2")
+        self.assertEqual(mutation.dump_xml(pretty=True),
             """\
 <sched-conf>
   <global-updates>
@@ -106,12 +106,10 @@ class TestMutationApis(TestCase):
 </sched-conf>""")
 
     def test_combined_add_and_update(self):
-        add = YarnAddQueue()
-        add.add_queue("root.a", capacity="10")
-        update = YarnUpdateQueue()
-        update.xml = add.xml
-        update.add_queue("root.default", capacity="90")
-        self.assertEqual(dumpXml(update.xml, pretty=True),
+        mutation = MutationRequest()
+        mutation.add_queue("root.a", capacity="10")
+        mutation.update_queue("root.default", capacity="90")
+        self.assertEqual(mutation.dump_xml(pretty=True),
             """\
 <sched-conf>
   <add-queue>

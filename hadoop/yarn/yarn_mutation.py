@@ -2,7 +2,7 @@ from xml.etree.ElementTree import ElementTree, Element
 from xml.etree import ElementTree as ET
 
 
-class MutationBase(object):
+class MutationRequest(object):
 
     def __init__(self):
         self._xml = ElementTree(element=Element("sched-conf"))
@@ -15,21 +15,7 @@ class MutationBase(object):
     def xml(self, value: ElementTree):
         self._xml = value
 
-    def _get_or_create(self, name: str):
-        element = self._xml.getroot().find(name)
-        if element is None:
-            element = self._create(name)
-        return element
-
-    def _create(self, name: str):
-        element = Element(name)
-        self.xml.getroot().append(element)
-        return element
-
-
-class YarnUpdateQueue(MutationBase):
-
-    def add_queue(self, queue: str, **kwargs):
+    def update_queue(self, queue: str, **kwargs):
         update_queue = self._create("update-queue")
         queue_name = Element("queue-name")
         queue_name.text = queue
@@ -45,9 +31,6 @@ class YarnUpdateQueue(MutationBase):
             entry.append(value)
             params.append(entry)
         update_queue.append(params)
-
-
-class YarnAddQueue(MutationBase):
 
     def add_queue(self, queue: str, **kwargs):
         add_queue = self._create("add-queue")
@@ -66,30 +49,34 @@ class YarnAddQueue(MutationBase):
             params.append(entry)
         add_queue.append(params)
 
-
-class YarnRemoveQueue(MutationBase):
-
-    def add_queue(self, queue: str):
+    def remove_queue(self, queue: str):
         remove_queue = Element("remove-queue")
         remove_queue.text = queue
         self.xml.getroot().append(remove_queue)
 
-
-class YarnGlobalUpdates(MutationBase):
-
-    def add_entry(self, k: str, v: str):
+    def global_update(self, key: str, value: str):
         global_updates = self._get_or_create("global-updates")
         entry = Element("entry")
-        key = Element("key")
-        key.text = k
-        value = Element("value")
-        value.text = v
-        entry.append(key)
-        entry.append(value)
+        k = Element("key")
+        k.text = key
+        v = Element("value")
+        v.text = value
+        entry.append(k)
+        entry.append(v)
         global_updates.append(entry)
 
+    def dump_xml(self, pretty: bool=False):
+        if pretty:
+            ET.indent(self.xml)
+        return ET.tostring(self.xml.getroot()).decode()
 
-def dumpXml(xml: ElementTree, pretty: bool=False):
-    if pretty:
-        ET.indent(xml)
-    return ET.tostring(xml.getroot()).decode()
+    def _get_or_create(self, name: str):
+        element = self._xml.getroot().find(name)
+        if element is None:
+            element = self._create(name)
+        return element
+
+    def _create(self, name: str):
+        element = Element(name)
+        self.xml.getroot().append(element)
+        return element

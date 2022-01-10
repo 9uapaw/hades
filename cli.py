@@ -18,7 +18,7 @@ from core.context import HadesContext
 from core.error import HadesException, ConfigSetupException, CliArgException
 from core.handler import MainCommandHandler
 from hadoop.xml_config import HadoopConfigFile
-from hadoop.yarn.yarn_mutation import MutationBase, YarnUpdateQueue, YarnAddQueue, YarnRemoveQueue, YarnGlobalUpdates, dumpXml
+from hadoop.yarn.yarn_mutation import MutationRequest
 from hadoop_dir.module import HadoopModule
 
 logger = logging.getLogger(__name__)
@@ -306,12 +306,12 @@ def info(ctx):
     handler.print_scheduler_info()
 
 
-def run_mutation(ctx, mutation: MutationBase, dry: bool):
+def run_mutation(ctx, mutation: MutationRequest, dry: bool):
     handler: MainCommandHandler = ctx.obj['handler']
     if dry:
-        print(dumpXml(mutation.xml, pretty=True))
+        print(mutation.dump_xml(pretty=True))
     else:
-        handler.mutate_yarn_config(dumpXml(mutation.xml))
+        handler.mutate_yarn_config(mutation.dump_xml())
 
 
 @yarn.command()
@@ -324,8 +324,8 @@ def update_queue(ctx, property: Tuple[str], value: Tuple[str], queue: str, dry: 
     """
     Mutates YARN queue configuration at runtime through YARN mutation API
     """
-    mutation = YarnUpdateQueue()
-    mutation.add_queue(queue, **{k: v for k, v in zip(property, value)})
+    mutation = MutationRequest()
+    mutation.update_queue(queue, **{k: v for k, v in zip(property, value)})
     run_mutation(ctx, mutation, dry)
 
 
@@ -339,7 +339,7 @@ def add_queue(ctx, property: Tuple[str], value: Tuple[str], queue: str, dry: boo
     """
     Adds a YARN queue configuration at runtime through YARN mutation API
     """
-    mutation = YarnAddQueue()
+    mutation = MutationRequest()
     mutation.add_queue(queue, **{k: v for k, v in zip(property, value)})
     run_mutation(ctx, mutation, dry)
 
@@ -351,8 +351,8 @@ def remove_queue(ctx, queue: str, dry: bool):
     """
     Remove YARN queue at runtime through YARN mutation API
     """
-    mutation = YarnRemoveQueue()
-    mutation.add_queue(queue)
+    mutation = MutationRequest()
+    mutation.remove_queue(queue)
     run_mutation(ctx, mutation, dry)
 
 
@@ -365,8 +365,8 @@ def global_updates(ctx, key: str, value: str, dry: bool):
     """
     Mutates YARN global configuration at runtime through YARN mutation API
     """
-    mutation = YarnGlobalUpdates()
-    mutation.add_entry(key, value)
+    mutation = MutationRequest()
+    mutation.global_update(key, value)
     run_mutation(ctx, mutation, dry)
 
 
