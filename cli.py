@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import logging
 import time
 from os import path
@@ -16,7 +18,7 @@ from core.context import HadesContext
 from core.error import HadesException, ConfigSetupException, CliArgException
 from core.handler import MainCommandHandler
 from hadoop.xml_config import HadoopConfigFile
-from hadoop.yarn.yarn_mutation import YarnMutationConfig
+from hadoop.yarn.yarn_mutation import MutationRequest
 from hadoop_dir.module import HadoopModule
 
 logger = logging.getLogger(__name__)
@@ -304,20 +306,79 @@ def info(ctx):
     handler.print_scheduler_info()
 
 
+def run_mutation(ctx, mutation: MutationRequest, dry: bool):
+    handler: MainCommandHandler = ctx.obj['handler']
+    if dry:
+        print(mutation.dump_xml(pretty=True))
+    else:
+        handler.mutate_yarn_config(mutation.dump_xml())
+
+
 @yarn.command()
 @click.pass_context
 @click.option('-p', '--property', multiple=True, help='property name')
 @click.option('-q', '--queue', help='queue name')
 @click.option('-v', '--value', multiple=True, help='property value')
-def mutate_config(ctx, property: Tuple[str], value: Tuple[str], queue: str):
+@click.option('-d', '--dry', is_flag=True, default=False, help='dry run')
+def update_queue(ctx, property: Tuple[str], value: Tuple[str], queue: str, dry: bool):
     """
     Mutates YARN queue configuration at runtime through YARN mutation API
     """
-    handler: MainCommandHandler = ctx.obj['handler']
-    mutation = YarnMutationConfig()
-    mutation.add_queue(queue, **{k: v for k, v in zip(property, value)})
-    handler.mutate_yarn_config(mutation)
+    mutation = MutationRequest()
+    mutation.update_queue(queue, **{k: v for k, v in zip(property, value)})
+    run_mutation(ctx, mutation, dry)
 
+
+@yarn.command()
+@click.pass_context
+@click.option('-p', '--property', multiple=True, help='property name')
+@click.option('-q', '--queue', help='queue name')
+@click.option('-v', '--value', multiple=True, help='property value')
+@click.option('-d', '--dry', is_flag=True, default=False, help='dry run')
+def add_queue(ctx, property: Tuple[str], value: Tuple[str], queue: str, dry: bool):
+    """
+    Adds a YARN queue configuration at runtime through YARN mutation API
+    """
+    mutation = MutationRequest()
+    mutation.add_queue(queue, **{k: v for k, v in zip(property, value)})
+    run_mutation(ctx, mutation, dry)
+
+@yarn.command()
+@click.pass_context
+@click.option('-q', '--queue', help='queue name')
+@click.option('-d', '--dry', is_flag=True, default=False, help='dry run')
+def remove_queue(ctx, queue: str, dry: bool):
+    """
+    Remove YARN queue at runtime through YARN mutation API
+    """
+    mutation = MutationRequest()
+    mutation.remove_queue(queue)
+    run_mutation(ctx, mutation, dry)
+
+
+@yarn.command()
+@click.pass_context
+@click.option('-k', '--key', help='key')
+@click.option('-v', '--value', help='value')
+@click.option('-d', '--dry', is_flag=True, default=False, help='dry run')
+def global_updates(ctx, key: str, value: str, dry: bool):
+    """
+    Mutates YARN global configuration at runtime through YARN mutation API
+    """
+    mutation = MutationRequest()
+    mutation.global_update(key, value)
+    run_mutation(ctx, mutation, dry)
+
+
+@yarn.command()
+@click.pass_context
+@click.option('-x', '--xml', help='xml')
+def raw_mutate(ctx, xml: str):
+    """
+    Mutates YARN configuration at runtime through YARN mutation API
+    """
+    handler: MainCommandHandler = ctx.obj['handler']
+    handler.mutate_yarn_config(xml)
 
 if __name__ == "__main__":
     logger.info("Started application")
