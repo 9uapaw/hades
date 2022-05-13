@@ -1,4 +1,5 @@
 import enum
+from collections import deque
 from dataclasses import dataclass, field
 from typing import List
 from colr import color
@@ -13,6 +14,7 @@ class QueueState(enum.Enum):
 @dataclass
 class QueueNode:
     name: str
+    path: str
     capacity: int
     used_capacity: int
     weight: float
@@ -50,7 +52,7 @@ class CapacitySchedulerQueue:
     @staticmethod
     def _traverse(queue_data) -> QueueNode:
         creation_method = queue_data.get('creationMethod', '')
-        q = QueueNode(name=queue_data['queueName'], capacity=queue_data['capacity'], weight=queue_data.get('weight', -1),
+        q = QueueNode(name=queue_data['queueName'], path=queue_data['queuePath'], capacity=queue_data['capacity'], weight=queue_data.get('weight', -1),
                       is_dynamic=creation_method == CapacitySchedulerQueue.DYNAMIC_FLEXIBLE
                                  or creation_method == CapacitySchedulerQueue.DYNAMIC_LEGACY,
                       state=QueueState(queue_data.get('state', 'RUNNING')),
@@ -60,6 +62,16 @@ class CapacitySchedulerQueue:
             q.children.extend([CapacitySchedulerQueue._traverse(iq) for iq in queue_data['queues'].get('queue', [])])
 
         return q
+
+    def __iter__(self):
+        q = deque()
+        q.append(self._root)
+
+        while q:
+            c = q.popleft()
+            for child in c.children:
+                q.append(child)
+            yield c
 
     def get_root(self) -> QueueNode:
         return self._root

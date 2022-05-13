@@ -1,3 +1,4 @@
+import enum
 from typing import Dict
 
 import pptree as pptree
@@ -10,11 +11,17 @@ import requests
 from hadoop.yarn.cs_queue import CapacitySchedulerQueue
 
 
+class HadoopAuthentication(enum.Enum):
+    SIMPLE = "SIMPLE"
+    SECURE = "KERBEROS"
+
+
 class RmApi:
     PREFIX = "ws/v1/cluster"
 
-    def __init__(self, rm: HadoopRoleInstance):
+    def __init__(self, rm: HadoopRoleInstance, authentication=HadoopAuthentication.SIMPLE):
         self._rm = rm
+        self._authentication = authentication
 
     def get_metrics(self) -> Dict[str, any]:
         return self._get("metrics")['clusterMetrics']
@@ -26,10 +33,14 @@ class RmApi:
         return self._put("scheduler-conf", config)
 
     def _get(self, endpoint: str) -> Dict[any, any]:
+        if self._authentication == HadoopAuthentication.SIMPLE:
+            endpoint = endpoint + "?user.name=yarn"
         rm_host = self._get_rm_address()
         return requests.get("{}/{}/{}".format(rm_host, self.PREFIX, endpoint)).json()
 
     def _put(self, endpoint: str, data: str):
+        if self._authentication == HadoopAuthentication.SIMPLE:
+            endpoint = endpoint + "?user.name=yarn"
         headers = {'Content-Type': 'application/xml'}
         res = requests.put("{}/{}/{}".format(self._get_rm_address(), self.PREFIX, endpoint), data, headers=headers)
         if res.status_code < 200 or res.status_code >= 300:

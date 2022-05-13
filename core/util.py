@@ -1,6 +1,6 @@
 import logging
 import textwrap
-from collections import Callable
+from typing import Callable
 
 from hadoop.role import HadoopRoleInstance
 

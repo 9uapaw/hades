@@ -109,7 +109,6 @@ class HadockExecutor(HadoopOperationExecutor):
             config.commit()
 
             role.host.upload(config.file, config_file_path).run()
-            os.remove(config.file)
 
             if no_backup:
                 logger.info("Backup is turned off. Deleting file {}".format(local_file))
