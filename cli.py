@@ -18,6 +18,7 @@ from core.context import HadesContext
 from core.error import HadesException, ConfigSetupException, CliArgException
 from core.handler import MainCommandHandler
 from hadoop.xml_config import HadoopConfigFile
+from hadoop.yarn.rm_api import RmApi
 from hadoop.yarn.yarn_mutation import MutationRequest
 from hadoop_dir.module import HadoopModule
 
@@ -142,9 +143,9 @@ def init(ctx):
 @cli.command()
 @click.pass_context
 @click.option('-c', '--cluster-type', type=click.Choice([n.value for n in ClusterType], case_sensitive=False), help='Sets the type of the cluster', required=True)
-@click.option('-h', '--host', help='set the Cloudera Manager host')
-@click.option('-u', '--username', default="admin", help='sets the username credential when communicating with Cloudera Manager')
-@click.option('-p', '--password', default="admin", help='sets the password credential when communicating with Cloudera Manager')
+@click.option('-h', '--host', help='set the Cloudera Manager/ResourceManager API host')
+@click.option('-u', '--username', default="admin", help='sets the username credential')
+@click.option('-p', '--password', default="admin", help='sets the password credential')
 @click.option('-v', '--version', default="v40", help='sets the CM API version')
 @click.option('-d', '--hadock-path', help='sets the Hadock repository path')
 def discover(ctx, cluster_type: str or None, host: str or None, username: str or None, password: str or None, hadock_path: str or None, version: str):
@@ -160,6 +161,8 @@ def discover(ctx, cluster_type: str or None, host: str or None, username: str or
         ctx.cluster_config.specific_context['version'] = version
     elif cluster_type == ClusterType.HADOCK.value:
         ctx.cluster_config.specific_context['hadock_path'] = hadock_path
+    elif cluster_type == ClusterType.STANDARD.value:
+        ctx.cluster_config.specific_context['host'] = host
 
     ctx.cluster_config.cluster_type = cluster_type
     handler: MainCommandHandler = MainCommandHandler(ctx)

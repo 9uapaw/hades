@@ -74,9 +74,9 @@ class HadoopCluster:
     def get_status(self) -> List[HadoopClusterStatusEntry]:
         return self._executor.get_cluster_status(self.name)
 
-    def run_app(self, application: ApplicationCommand) -> RunnableCommand:
+    def run_app(self, application: ApplicationCommand, selector: str = "") -> RunnableCommand:
         logger.info("Running app {}".format(application.__class__.__name__))
-        random_selected = self._select_random_role()
+        random_selected = self._select_random_role(selector)
 
         return self._executor.run_app(random_selected, application)
 
@@ -121,6 +121,6 @@ class HadoopCluster:
         rm_role = self.select_roles("Yarn/ResourceManager")
         self._rm_api = RmApi(rm_role[0])
 
-    def _select_random_role(self) -> HadoopRoleInstance:
-        selected = self.select_roles("")
+    def _select_random_role(self, selector: str = "") -> HadoopRoleInstance:
+        selected = self.select_roles(selector)
         return selected[random.randint(0, len(selected) - 1)]

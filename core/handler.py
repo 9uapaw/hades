@@ -19,6 +19,7 @@ from hadoop.cm.cm_api import CmApi
 from hadoop.cm.executor import CmExecutor
 from hadoop.config import HadoopConfig
 from hadoop.hadock.executor import HadockExecutor
+from hadoop.standard.executor import StandardUpstreamExecutor
 from hadoop.xml_config import HadoopConfigFile
 from hadoop_dir.module import HadoopDir, HadoopModule
 from hadoop_dir.mvn import MavenCompiler
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class MainCommandHandler:
-    CM_HOST = 'host'
+    HOST = 'host'
     CM_PASSWORD = 'password'
     CM_USERNAME = 'username'
     CM_API_VERSION = "version"
@@ -47,7 +48,7 @@ class MainCommandHandler:
             return
 
         if ctx.cluster_config.cluster_type.lower() == ClusterType.CM.value.lower():
-            cm_api = CmApi(ctx.cluster_config.specific_context[self.CM_HOST],
+            cm_api = CmApi(ctx.cluster_config.specific_context[self.HOST],
                            ctx.cluster_config.specific_context[self.CM_USERNAME],
                            ctx.cluster_config.specific_context[self.CM_PASSWORD],
                            ctx.cluster_config.specific_context.get(self.CM_API_VERSION))
@@ -58,6 +59,8 @@ class MainCommandHandler:
 
             self.executor = HadockExecutor(ctx.cluster_config.specific_context[self.HADOCK_REPOSITORY],
                                            ctx.cluster_config.specific_context.get(self.HADOCK_COMPOSE))
+        elif ctx.cluster_config.cluster_type.lower() == ClusterType.STANDARD.value.lower():
+            self.executor = StandardUpstreamExecutor(ctx.cluster_config.specific_context[self.HOST])
         else:
             logger.warning("Unknown cluster type")
             self.executor = None

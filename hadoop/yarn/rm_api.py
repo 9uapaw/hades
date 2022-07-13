@@ -1,10 +1,11 @@
 import enum
-from typing import Dict
+from typing import Dict, List
 
 import pptree as pptree
 
 from core.error import HadesException
 from hadoop.hadock.docker_host import DockerContainerInstance
+from hadoop.host import RemoteHostInstance
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
 import requests
 
@@ -22,6 +23,9 @@ class RmApi:
     def __init__(self, rm: HadoopRoleInstance, authentication=HadoopAuthentication.SIMPLE):
         self._rm = rm
         self._authentication = authentication
+
+    def get_nodes(self) -> List[Dict[str, any]]:
+        return self._get("nodes")['nodes']['node']
 
     def get_metrics(self) -> Dict[str, any]:
         return self._get("metrics")['clusterMetrics']
@@ -56,8 +60,5 @@ class RmApi:
 
 
 if __name__ == "__main__":
-    rm_api = RmApi(HadoopRoleInstance("YARN-1", DockerContainerInstance("resourcemanager"), "resourcemanager", HadoopRoleType.RM))
-    queues = rm_api.get_scheduler_info()
-    q = CapacitySchedulerQueue.from_rm_api_data(queues)
-
-    pptree.print_tree(q.get_root(), nameattr="")
+    rm_api = RmApi(HadoopRoleInstance(RemoteHostInstance(None, "ccycloud-1.snemeth-netty.root.hwx.site", "yarn"), "", None, None))
+    print(rm_api.get_nodes())

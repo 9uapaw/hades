@@ -29,7 +29,7 @@ class RunnableCommand:
             raise CommandExecutionException(str(e), self.cmd, self._convert_output(e.stderr.decode()),
                                             self._convert_output(e.stdout.decode()))
 
-    def run_async(self, stdout: Callable[[str], None] = None, stderr: Callable[[str], None] = None, block=True):
+    def run_async(self, stdout: Callable[[str], None] = None, stderr: Callable[[str], None] = None, block=False):
         try:
             logger.debug("Running command asynchronously {} as blocking {}".format(self.cmd, block))
             stdout_callback = self._stdout_callback
