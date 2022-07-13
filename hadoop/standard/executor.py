@@ -89,7 +89,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         elif isinstance(application, DistributedShellApp):
             application.path += "yarn"
 
-        cmd = random_selected.host.create_cmd(application.build())
+        application_command = application.build()
+        full_command = "/opt/hadoop/bin/{}".format(application_command)
+        cmd = random_selected.host.create_cmd(full_command)
 
         return cmd
 
