@@ -1,6 +1,7 @@
 import logging
 import time
 from abc import ABC
+from contextlib import contextmanager
 from typing import Callable, Any
 
 from hadoop.cluster import HadoopCluster
@@ -14,6 +15,21 @@ class HadesScriptBase:
 
     def run(self):
         raise NotImplementedError()
+
+    @contextmanager
+    def overwrite_config(self, **kwargs):
+        original = {}
+        for k in kwargs:
+            original[k] = getattr(self.cluster.ctx.config, k)
+
+        try:
+            for k, v in kwargs.items():
+                setattr(self.cluster.ctx.config, k, v)
+
+            yield self.cluster.ctx.config
+        finally:
+            for k in kwargs:
+                setattr(self.cluster.ctx.config, k, original[k])
 
     def wait_until(self, poll_fn: Callable, comp_fn: Callable, poll_time: int = 1):
         while True:
