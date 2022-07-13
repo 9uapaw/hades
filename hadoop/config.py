@@ -73,10 +73,7 @@ class HadoopConfig(Iterable):
             raise HadesException("Can not merge without base xml. Set base xml before calling merge.")
 
         properties_to_set = set(self._extension.keys())
-        if hasattr(self._base_xml, "tag"):
-            root = self._base_xml
-        else:
-            root = self._base_xml.getroot()
+        root = self._get_root()
         for prop in root.findall('property'):  # type: Element
             prop_name = prop[0].text
             prop_value = prop.findall('value')[0].text
@@ -106,7 +103,16 @@ class HadoopConfig(Iterable):
         self._base_xml.write(self._file.value)
 
     def to_str(self) -> str:
-        return str(ET.tostring(self._base_xml, encoding='unicode', method='xml'))
+        root = self._get_root()
+        ET.indent(root, space="\t", level=0)
+        return str(ET.tostring(root, encoding='unicode', method='xml'))
+
+    def _get_root(self):
+        if hasattr(self._base_xml, "tag"):
+            root = self._base_xml
+        else:
+            root = self._base_xml.getroot()
+        return root
 
     def to_dict(self) -> dict:
         return {k: v for k, v in self.__iter__()}
