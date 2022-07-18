@@ -12,13 +12,12 @@ from script.base import HadesScriptBase
 import logging
 LOG = logging.getLogger(__name__)
 
+NODEMANAGER_SELECTOR = "Yarn/NodeManager"
 NODE_TO_RUN_ON = "type=Yarn/name=nodemanager2"
 MAPREDUCE_PREFIX = "mapreduce"
 YARN_APP_MAPREDUCE_PREFIX = "yarn.app.mapreduce"
 YARN_APP_MAPREDUCE_SHUFFLE_PREFIX = "yarn.app.mapreduce.shuffle"
 MAPREDUCE_SHUFFLE_PREFIX = MAPREDUCE_PREFIX + ".shuffle"
-
-
 
 ## START DEFAULT CONFIGS
 SHUFFLE_MANAGE_OS_CACHE = MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache"
@@ -131,41 +130,40 @@ class Netty4RegressionTest(HadesScriptBase):
         default_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
         for k, v in self.DEFAULT_CONFIGS.items():
             default_config.extend_with_args({k: v})
-        self.cluster.update_config("Yarn/NodeManager", default_config, no_backup=True)
+        self.cluster.update_config(NODEMANAGER_SELECTOR, default_config, no_backup=True)
         # TODO Verify if cluster restarts / NM restarts?
 
         config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
-        for k, v in self.CONFIGS.items():
-            for config_val in v:
-                files_to_compress = []
-                config.extend_with_args({k: config_val})
-                self.cluster.update_config("Yarn/NodeManager", config, no_backup=True)
-                with self.overwrite_config(cmd_prefix="sudo -u systest"):
-                    c = self.cluster.run_app(self.APP, selector="Yarn/NodeManager")
-                key_name = k.replace(".", "_")
-                app_log = []
-                yarn_log = []
-                log_commands = self.cluster.read_logs(follow=True, selector="Yarn")
-                for command in log_commands:
-                    command.run_async(stdout=_callback(command.target.host, yarn_log),
-                                      stderr=_callback(command.target.host, yarn_log))
-                c.run_async(block=True, stderr=lambda l: app_log.append(l))
-                app_log_file = LOG_FILE_NAME_FORMAT.format(key=key_name, value=config_val, app="MRPI")
-                with open(app_log_file, 'w') as f:
-                    f.writelines(app_log)
-                files_to_compress.append(app_log_file)
-                yarn_log_file = LOG_FILE_NAME_FORMAT.format(key=key_name, value=config_val, app="YARN")
-                with open(yarn_log_file, 'w') as f:
-                    f.writelines(yarn_log)
-                files_to_compress.append(yarn_log_file)
-                configs = self.cluster.get_config("Yarn/NodeManager", HadoopConfigFile.MAPRED_SITE)
-                for host, conf in configs.items():
-                    config_file = CONF_FORMAT.format(host=host, conf=HadoopConfigFile.MAPRED_SITE.name, key=key_name,
-                                                     value=config_val)
-                    with open(config_file, 'w') as f:
-                        f.write(conf.to_str())
-                    files_to_compress.append(config_file)
-                self._compress_files("{}_{}".format(key_name, config_val), files_to_compress)
+        for config_key, config_val in self.CONFIGS.items():
+            files_to_compress = []
+            config.extend_with_args({config_key: config_val})
+            self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
+            with self.overwrite_config(cmd_prefix="sudo -u systest"):
+                c = self.cluster.run_app(self.APP, selector=NODEMANAGER_SELECTOR)
+            key_name = config_key.replace(".", "_")
+            app_log = []
+            yarn_log = []
+            log_commands = self.cluster.read_logs(follow=True, selector="Yarn")
+            for command in log_commands:
+                command.run_async(stdout=_callback(command.target.host, yarn_log),
+                                  stderr=_callback(command.target.host, yarn_log))
+            c.run_async(block=True, stderr=lambda l: app_log.append(l))
+            app_log_file = LOG_FILE_NAME_FORMAT.format(key=key_name, value=config_val, app="MRPI")
+            with open(app_log_file, 'w') as f:
+                f.writelines(app_log)
+            files_to_compress.append(app_log_file)
+            yarn_log_file = LOG_FILE_NAME_FORMAT.format(key=key_name, value=config_val, app="YARN")
+            with open(yarn_log_file, 'w') as f:
+                f.writelines(yarn_log)
+            files_to_compress.append(yarn_log_file)
+            configs = self.cluster.get_config(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE)
+            for host, conf in configs.items():
+                config_file = CONF_FORMAT.format(host=host, conf=HadoopConfigFile.MAPRED_SITE.name, key=key_name,
+                                                 value=config_val)
+                with open(config_file, 'w') as f:
+                    f.write(conf.to_str())
+                files_to_compress.append(config_file)
+            self._compress_files("{}_{}".format(key_name, config_val), files_to_compress)
 
     def _compress_files(self, id: str, files: List[str]):
         cmd = RunnableCommand("tar -cvf {id}.tar {files}".format(id=id, files=" ".join(files)))
