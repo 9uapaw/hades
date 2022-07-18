@@ -82,9 +82,9 @@ SHUFFLE_LOG_BACKUPS_DEFAULT = 0
 # END OF DEFAULT CONFIGS
 
 
-LOG_FILE_NAME_FORMAT = "{key}_{value}_{app}.log"
+LOG_FILE_NAME_FORMAT = "testcase_{tc}_{app}.log"
 YARN_LOG_FORMAT = "{name} - {log}"
-CONF_FORMAT = "{host}_{conf}_{key}_{value}.xml"
+CONF_FORMAT = "{host}_{conf}_testcase_{tc}.xml"
 
 
 def _callback(host: str, logs: List[str]) -> Callable:
@@ -186,7 +186,6 @@ class Netty4RegressionTest(HadesScriptBase):
     APP = MapReduceApp()
 
     def run(self):
-        # TODO Create function that prints the full yarn-site.xml / mapred-site.xml config (or saves it to the tar.gz file)?
         for tc in Netty4RegressionTest.TESTCASES:
             self._load_default_config()
             config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
@@ -195,58 +194,59 @@ class Netty4RegressionTest(HadesScriptBase):
             for config_key, config_val in tc.config_changes.items():
                 config.extend_with_args({config_key: config_val})
                 self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
-                key_name = config_key.replace(".", "_")
+                # key_name = config_key.replace(".", "_")
 
-                yarn_log_file = self._read_logs_and_write_to_files("Yarn", key_name, config_val)
-                app_log_file = self.run_app_and_collect_logs_to_file(self.APP, key_name, config_val)
-                config_files = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, key_name, config_val)
+                yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
+                app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
+                config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc)
                 files_to_compress = [app_log_file, yarn_log_file] + config_files
-                self._compress_files("{}_{}".format(key_name, config_val), files_to_compress)
+                self._compress_files(tc, files_to_compress)
 
-    def _read_logs_and_write_to_files(self, selector, key_name, config_val):
+    def _read_logs_and_write_to_files(self, selector, tc: Netty4Testcase):
         yarn_log = []
         log_commands = self.cluster.read_logs(follow=True, selector=selector)
         for read_logs_command in log_commands:
             read_logs_command.run_async(stdout=_callback(read_logs_command.target.host, yarn_log),
                                         stderr=_callback(read_logs_command.target.host, yarn_log))
-        yarn_log_file = self.write_yarn_logs(yarn_log, key_name, config_val)
-        return yarn_log_file
+        return self.write_yarn_logs(yarn_log, tc)
 
-    def write_config_files(self, selector: str, conf_type: HadoopConfigFile, key_name: str, config_val: str) -> List[str]:
+    def write_config_files(self, selector: str, conf_type: HadoopConfigFile, tc: Netty4Testcase) -> List[str]:
         configs = self.cluster.get_config(selector, conf_type)
 
         generated_config_files = []
         for host, conf in configs.items():
-            config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name, key=key_name, value=config_val)
+            config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name)
             with open(config_file_name, 'w') as f:
                 f.write(conf.to_str())
             generated_config_files.append(config_file_name)
         return generated_config_files
 
-    def run_app_and_collect_logs_to_file(self, app: ApplicationCommand, conf_key: str, conf_val: str) -> str:
+    def run_app_and_collect_logs_to_file(self, app: ApplicationCommand, tc: Netty4Testcase) -> str:
         app_log = []
         with self.overwrite_config(cmd_prefix="sudo -u systest"):
             app_command = self.cluster.run_app(app, selector=NODEMANAGER_SELECTOR)
 
         app_command.run_async(block=True, stderr=lambda line: app_log.append(line))
 
-        app_log_file = LOG_FILE_NAME_FORMAT.format(key=conf_key, value=conf_val, app="MRPI")
+        app_log_file = LOG_FILE_NAME_FORMAT.format(tc=tc.name, app="MRPI")
         with open(app_log_file, 'w') as f:
             f.writelines(app_log)
         return app_log_file
 
     @staticmethod
-    def write_yarn_logs(log_lines_list: List[str], conf_key: str, conf_val: str):
-        yarn_log_file = LOG_FILE_NAME_FORMAT.format(key=conf_key, value=conf_val, app="YARN")
+    def write_yarn_logs(log_lines_list: List[str], tc: Netty4Testcase):
+        yarn_log_file = LOG_FILE_NAME_FORMAT.format(tc=tc.name, app="YARN")
         with open(yarn_log_file, 'w') as f:
             f.writelines(log_lines_list)
         return yarn_log_file
 
     @staticmethod
-    def _compress_files(id: str, files: List[str]):
-        cmd = RunnableCommand("tar -cvf {id}.tar {files}".format(id=id, files=" ".join(files)))
+    def _compress_files(tc: Netty4Testcase, files: List[str]):
+        filename = f"testcase_{tc.name}"
+        cmd = RunnableCommand("tar -cvf {fname}.tar {files}".format(fname=filename, files=" ".join(files)))
         cmd.run()
         for file in files:
+            LOG.debug("Removing file: %s", file)
             os.remove(file)
 
     def _load_default_config(self):
