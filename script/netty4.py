@@ -113,20 +113,23 @@ class Netty4TestcasesBuilder:
         return self
 
     def generate_testcases(self):
-        tcs = []
-        l = []
+        testcases = []
+        conf_key_prefixed_list = []
         for conf_key, values in self.configs.items():
-            l.append([conf_key + "_" + v for v in values])
-        prod = itertools.product(*l)
-        i = 0
-        for tup in prod:
-            d = {}
+            conf_key_prefixed_list.append([conf_key + "_" + v for v in values])
+        product = itertools.product(*conf_key_prefixed_list)
+        tc_counter = 0
+        for tup in product:
+            conf_changes = {}
             for s in tup:
-                k, v = s.split("_")
-                d[k] = v
-                i += 1
-            tcs.append(Netty4Testcase(self.name + '_' + str(i), d))
-        return tcs
+                conf_name, conf_value = s.split("_")
+                conf_changes[conf_name] = conf_value
+                tc_counter += 1
+            testcases.append(Netty4Testcase(self._generate_tc_name(tc_counter), conf_changes))
+        return testcases
+
+    def _generate_tc_name(self, tc_counter):
+        return self.name + '_' + str(tc_counter)
 
 
 @dataclass
