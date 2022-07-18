@@ -85,6 +85,7 @@ SHUFFLE_LOG_BACKUPS_DEFAULT = 0
 LOG_FILE_NAME_FORMAT = "testcase_{tc}_{app}.log"
 YARN_LOG_FORMAT = "{name} - {log}"
 CONF_FORMAT = "{host}_{conf}_testcase_{tc}.xml"
+CONF_WITH_POSTFIX_FORMAT = "{host}_{conf}_testcase_{tc}_{postfix}.xml"
 
 
 def _callback(host: str, logs: List[str]) -> Callable:
@@ -194,12 +195,13 @@ class Netty4RegressionTest(HadesScriptBase):
             for config_key, config_val in tc.config_changes.items():
                 config.extend_with_args({config_key: config_val})
                 self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
-                # key_name = config_key.replace(".", "_")
+                initial_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE,
+                                                                  tc, postfix="initial")
 
                 yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
                 app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
-                config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc)
-                files_to_compress = [app_log_file, yarn_log_file] + config_files
+                tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
+                files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files
                 self._compress_files(tc, files_to_compress)
 
     def _read_logs_and_write_to_files(self, selector, tc: Netty4Testcase):
@@ -210,12 +212,15 @@ class Netty4RegressionTest(HadesScriptBase):
                                         stderr=_callback(read_logs_command.target.host, yarn_log))
         return self.write_yarn_logs(yarn_log, tc)
 
-    def write_config_files(self, selector: str, conf_type: HadoopConfigFile, tc: Netty4Testcase) -> List[str]:
+    def write_config_files(self, selector: str, conf_type: HadoopConfigFile, tc: Netty4Testcase, postfix=None) -> List[str]:
         configs = self.cluster.get_config(selector, conf_type)
 
         generated_config_files = []
         for host, conf in configs.items():
-            config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name)
+            if postfix:
+                config_file_name = CONF_WITH_POSTFIX_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name, postfix=postfix)
+            else:
+                config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name)
             with open(config_file_name, 'w') as f:
                 f.write(conf.to_str())
             generated_config_files.append(config_file_name)
