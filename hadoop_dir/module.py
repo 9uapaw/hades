@@ -16,6 +16,7 @@ class HadoopModule(enum.Enum):
     YARN_UI2 = "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-ui"
     HADOOP_DIST = "hadoop-dist"
     RESOURCEMANAGER = "hadoop-yarn-server-resourcemanager"
+    MR_CLIENT_SHUFFLE = "hadoop-mapreduce-client-shuffle"
     YARN_COMMON = "hadoop-yarn-common"
 
 
