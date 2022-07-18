@@ -1,5 +1,7 @@
+import itertools
 import os
-from typing import Callable, List
+from dataclasses import dataclass
+from typing import Callable, List, Dict
 from core.cmd import RunnableCommand
 from hadoop.app.example import MapReduceApp, ApplicationCommand
 from hadoop.config import HadoopConfig
@@ -92,6 +94,47 @@ def _callback(host: str, logs: List[str]) -> Callable:
     return _cb
 
 
+class Netty4TestcasesBuilder:
+    def __init__(self, name):
+        self.configs: Dict[str, List[str]] = {}
+        self.name = name
+
+    def with_config(self, conf_key: str, value: str):
+        if conf_key not in self.configs:
+            self.configs[conf_key] = [value]
+        else:
+            self.configs[conf_key].append(value)
+        return self
+
+    def with_configs(self, conf_key: str, values: List[str]):
+        if conf_key in self.configs:
+            LOG.warning("Overwriting config key '%s'", conf_key)
+        self.configs[conf_key] = values
+        return self
+
+    def generate_testcases(self):
+        tcs = []
+        l = []
+        for conf_key, values in self.configs.items():
+            l.append([conf_key + "_" + v for v in values])
+        prod = itertools.product(*l)
+        i = 0
+        for tup in prod:
+            d = {}
+            for s in tup:
+                k, v = s.split("_")
+                d[k] = v
+                i += 1
+            tcs.append(Netty4Testcase(self.name + '_' + str(i), d))
+        return tcs
+
+
+@dataclass
+class Netty4Testcase:
+    name: str
+    config_changes: Dict[str, str]
+
+
 class Netty4RegressionTest(HadesScriptBase):
     DEFAULT_CONFIGS = {
         SHUFFLE_MANAGE_OS_CACHE: SHUFFLE_MANAGE_OS_CACHE_DEFAULT,
@@ -116,10 +159,27 @@ class Netty4RegressionTest(HadesScriptBase):
         SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT
     }
 
-    CONFIGS = {
-        SHUFFLE_MAX_CONNECTIONS: ["10", "20"],
-        SHUFFLE_MAX_THREADS: ["50", "100"]
-    }
+    TESTCASES = [
+        *Netty4TestcasesBuilder("shuffle_max_connections")
+            .with_configs(SHUFFLE_MAX_CONNECTIONS, ["2", "5"])
+            .generate_testcases(),
+        *Netty4TestcasesBuilder("shuffle_max_threads")
+            .with_configs(SHUFFLE_MAX_THREADS, ["3", "6"])
+            .generate_testcases(),
+        *Netty4TestcasesBuilder("shuffle_max_open_files")
+            .with_configs(SHUFFLE_MAX_SESSION_OPEN_FILES, ["2", "5"])
+            .generate_testcases(),
+        *Netty4TestcasesBuilder("shuffle_listen_queue_size")
+            .with_configs(SHUFFLE_LISTEN_QUEUE_SIZE, ["10", "50"])
+            .generate_testcases(),
+        *Netty4TestcasesBuilder("shuffle_ssl_enabled")
+            .with_configs(SHUFFLE_SSL_ENABLED, ["true"])
+            .generate_testcases(),
+        *Netty4TestcasesBuilder("keepalive")
+            .with_config(SHUFFLE_CONNECTION_KEEPALIVE_ENABLE, "true")
+            .with_configs(SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT, ["15", "25"])
+            .generate_testcases()
+    ]
     APP = MapReduceApp()
 
     def run(self):
@@ -132,16 +192,18 @@ class Netty4RegressionTest(HadesScriptBase):
         # TODO Verify if cluster restarts / NM restarts?
 
         config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
-        for config_key, config_val in self.CONFIGS.items():
-            config.extend_with_args({config_key: config_val})
-            self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
-            key_name = config_key.replace(".", "_")
+        for tc in Netty4RegressionTest.TESTCASES:
+            LOG.info("Running testcase: %s", tc)
+            for config_key, config_val in tc.config_changes.items():
+                config.extend_with_args({config_key: config_val})
+                self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
+                key_name = config_key.replace(".", "_")
 
-            yarn_log_file = self._read_logs_and_write_to_files("Yarn", config_val, key_name)
-            app_log_file = self.run_app_and_collect_logs_to_file(self.APP, key_name, config_val)
-            config_files = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, key_name, config_val)
-            files_to_compress = [app_log_file, yarn_log_file] + config_files
-            self._compress_files("{}_{}".format(key_name, config_val), files_to_compress)
+                yarn_log_file = self._read_logs_and_write_to_files("Yarn", config_val, key_name)
+                app_log_file = self.run_app_and_collect_logs_to_file(self.APP, key_name, config_val)
+                config_files = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, key_name, config_val)
+                files_to_compress = [app_log_file, yarn_log_file] + config_files
+                self._compress_files("{}_{}".format(key_name, config_val), files_to_compress)
 
     def _read_logs_and_write_to_files(self, selector, config_val, key_name):
         yarn_log = []
@@ -188,3 +250,5 @@ class Netty4RegressionTest(HadesScriptBase):
         cmd.run()
         for file in files:
             os.remove(file)
+
+
