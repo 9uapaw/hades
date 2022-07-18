@@ -126,6 +126,7 @@ class Netty4RegressionTest(HadesScriptBase):
     APP = MapReduceApp()
 
     def run(self):
+        # TODO Create function that prints the full yarn-site.xml / mapred-site.xml config (or saves it to the tar.gz file)?
         LOG.info("Loading default ShuffleHandler config...")
         default_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
         for k, v in self.DEFAULT_CONFIGS.items():
@@ -135,24 +136,27 @@ class Netty4RegressionTest(HadesScriptBase):
 
         config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
         for config_key, config_val in self.CONFIGS.items():
-            files_to_compress = []
             config.extend_with_args({config_key: config_val})
             self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
             with self.overwrite_config(cmd_prefix="sudo -u systest"):
-                c = self.cluster.run_app(self.APP, selector=NODEMANAGER_SELECTOR)
+                app_command = self.cluster.run_app(self.APP, selector=NODEMANAGER_SELECTOR)
             key_name = config_key.replace(".", "_")
             app_log = []
             yarn_log = []
             log_commands = self.cluster.read_logs(follow=True, selector="Yarn")
-            for command in log_commands:
-                command.run_async(stdout=_callback(command.target.host, yarn_log),
-                                  stderr=_callback(command.target.host, yarn_log))
-            c.run_async(block=True, stderr=lambda l: app_log.append(l))
+            for read_logs_command in log_commands:
+                read_logs_command.run_async(stdout=_callback(read_logs_command.target.host, yarn_log),
+                                            stderr=_callback(read_logs_command.target.host, yarn_log))
+            app_command.run_async(block=True, stderr=lambda line: app_log.append(line))
             app_log_file = LOG_FILE_NAME_FORMAT.format(key=key_name, value=config_val, app="MRPI")
+            yarn_log_file = LOG_FILE_NAME_FORMAT.format(key=key_name, value=config_val, app="YARN")
+
             with open(app_log_file, 'w') as f:
                 f.writelines(app_log)
+
+            files_to_compress = []
             files_to_compress.append(app_log_file)
-            yarn_log_file = LOG_FILE_NAME_FORMAT.format(key=key_name, value=config_val, app="YARN")
+
             with open(yarn_log_file, 'w') as f:
                 f.writelines(yarn_log)
             files_to_compress.append(yarn_log_file)
@@ -165,7 +169,8 @@ class Netty4RegressionTest(HadesScriptBase):
                 files_to_compress.append(config_file)
             self._compress_files("{}_{}".format(key_name, config_val), files_to_compress)
 
-    def _compress_files(self, id: str, files: List[str]):
+    @staticmethod
+    def _compress_files(id: str, files: List[str]):
         cmd = RunnableCommand("tar -cvf {id}.tar {files}".format(id=id, files=" ".join(files)))
         cmd.run()
         for file in files:
