@@ -184,28 +184,23 @@ class Netty4RegressionTest(HadesScriptBase):
 
     def run(self):
         # TODO Create function that prints the full yarn-site.xml / mapred-site.xml config (or saves it to the tar.gz file)?
-        LOG.info("Loading default ShuffleHandler config...")
-        default_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
-        for k, v in self.DEFAULT_CONFIGS.items():
-            default_config.extend_with_args({k: v})
-        self.cluster.update_config(NODEMANAGER_SELECTOR, default_config, no_backup=True)
-        # TODO Verify if cluster restarts / NM restarts?
-
-        config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
         for tc in Netty4RegressionTest.TESTCASES:
+            self._load_default_config()
+            config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
+
             LOG.info("Running testcase: %s", tc)
             for config_key, config_val in tc.config_changes.items():
                 config.extend_with_args({config_key: config_val})
                 self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
                 key_name = config_key.replace(".", "_")
 
-                yarn_log_file = self._read_logs_and_write_to_files("Yarn", config_val, key_name)
+                yarn_log_file = self._read_logs_and_write_to_files("Yarn", key_name, config_val)
                 app_log_file = self.run_app_and_collect_logs_to_file(self.APP, key_name, config_val)
                 config_files = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, key_name, config_val)
                 files_to_compress = [app_log_file, yarn_log_file] + config_files
                 self._compress_files("{}_{}".format(key_name, config_val), files_to_compress)
 
-    def _read_logs_and_write_to_files(self, selector, config_val, key_name):
+    def _read_logs_and_write_to_files(self, selector, key_name, config_val):
         yarn_log = []
         log_commands = self.cluster.read_logs(follow=True, selector=selector)
         for read_logs_command in log_commands:
@@ -250,5 +245,14 @@ class Netty4RegressionTest(HadesScriptBase):
         cmd.run()
         for file in files:
             os.remove(file)
+
+    def _load_default_config(self):
+        LOG.info("Loading default ShuffleHandler config...")
+        default_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
+        for k, v in self.DEFAULT_CONFIGS.items():
+            default_config.extend_with_args({k: v})
+        self.cluster.update_config(NODEMANAGER_SELECTOR, default_config, no_backup=True)
+        # TODO Verify if cluster restarts / NM restarts?
+
 
 
