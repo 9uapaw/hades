@@ -178,9 +178,15 @@ class MainCommandHandler:
         self._create_cluster().get_rm_api().modify_config(config)
 
     def role_action(self, selector: str, action: RoleAction):
+        handlers = []
+
         cluster = self._create_cluster()
         if action == RoleAction.RESTART:
-            cluster.restart_roles(selector)
+            for cmd in cluster.restart_roles(selector):
+                handlers.append(cmd.run_async())
+
+        for h in handlers:
+            h.wait()
 
     def distribute(self, selector: str, files: Dict[str, str], modules: List[str]):
         cluster = self._create_cluster()

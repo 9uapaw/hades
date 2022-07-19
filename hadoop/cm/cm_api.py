@@ -15,6 +15,7 @@ class CmApi:
 
         cm_client.configuration.username = username
         cm_client.configuration.password = password
+        cm_client.configuration.verify_ssl = False
 
         self.version = version
 

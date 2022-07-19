@@ -115,8 +115,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                 logger.info("Backup is turned off. Deleting file {}".format(local_file))
                 os.remove(local_file)
 
-    def restart_roles(self, *args: HadoopRoleInstance):
-        raise NotImplementedError()
+    def restart_roles(self, *args: HadoopRoleInstance) -> List[RunnableCommand]:
+        return [role.host.create_cmd("yarn --daemon stop {role} && yarn --daemon start {role}".format(
+            role=role.role_type.value)) for role in args]
 
     def restart_cluster(self, cluster: str):
         pass

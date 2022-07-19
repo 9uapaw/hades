@@ -33,7 +33,7 @@ Hades is a CLI tool, that shares a common interface between various Hadoop distr
 
 ## Cluster types
 
-Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev) and [CDP](https://www.cloudera.com/products/cloudera-data-platform.html) clusters out of the box, but custom distributions might be supported in the future.
+Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev), [CDP](https://www.cloudera.com/products/cloudera-data-platform.html) and standard upstream distribution.
 
 
 <a id="orgd09644a"></a>

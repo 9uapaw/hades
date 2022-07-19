@@ -2,6 +2,8 @@ import logging
 from pathlib import PurePath
 from typing import List, Type, Dict
 
+from cm_client.rest import ApiException
+
 from core.cmd import RunnableCommand, RemoteRunnableCommand
 from core.config import ClusterConfig, ClusterContextConfig, ClusterRoleConfig
 from core.context import HadesContext
@@ -64,8 +66,8 @@ class CmExecutor(HadoopOperationExecutor):
                     role_conf.host = role.host_ref.hostname
                     context_config.roles[role_name] = role_conf
 
-        except Exception as e:
-            raise HadesException("Error while reading CM api", e)
+        except ApiException as e:
+            raise HadesException("Error while reading CM api", e.reason)
 
         return cluster
 
@@ -175,6 +177,8 @@ class CmExecutor(HadoopOperationExecutor):
 
         for service_name, roles in roles_by_services.items():
             self._cm_api.restart_roles(roles[0].service.cluster.name, service_name, *[role.name for role in roles])
+
+        return []
 
     def restart_cluster(self, cluster: str):
         self._cm_api.restart_cluster(cluster)

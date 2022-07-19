@@ -115,10 +115,14 @@ class HadockExecutor(HadoopOperationExecutor):
                 os.remove(local_file)
 
     def restart_roles(self, *args: HadoopRoleInstance):
+        cmds = []
+
         for role in args:
             logger.info("Restarting {}".format(role.get_colorized_output()))
             restart_cmd = RunnableCommand("docker restart {}".format(role.host))
-            logger.info(restart_cmd.run())
+            cmds.append(restart_cmd)
+
+        return cmds
 
     def restart_cluster(self, cluster: str):
         pass
