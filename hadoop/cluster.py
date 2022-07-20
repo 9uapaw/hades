@@ -134,7 +134,6 @@ class HadoopCluster:
         return selected[random.randint(0, len(selected) - 1)]
 
     def get_running_apps(self, selector: str = "") -> RunnableCommand:
-        self._executor.get_running_apps()
         random_selected = self._select_random_role(selector)
         return self._executor.get_running_apps(random_selected)
 
