@@ -1,10 +1,11 @@
 import logging
 import time
 import os
-from typing import List, Type, Dict
+from typing import List, Type, Dict, Tuple
 
 from core.cmd import RunnableCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
+from core.error import CommandExecutionException, MultiCommandExecutionException
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 class StandardUpstreamExecutor(HadoopOperationExecutor):
     JAR_DIR = "/opt/hadoop/share/"
     LOG_DIR = "/opt/hadoop/logs"
+    APP_LOG_DIR = "/tmp/hadoop-logs"
     CONFIG_FILE_PATH = "/opt/hadoop/etc/hadoop/{}"
 
     def __init__(self, rm_host: str):
@@ -77,6 +79,57 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                 cmd = "cat {file}"
             cmds.append(role.host.create_cmd(cmd.format(file=file)))
 
+        return cmds
+
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str) -> List[RunnableCommand]:
+        if app_id.startswith("application_"):
+            app_id_no = app_id.split("application_")[1]
+        else:
+            app_id_no = app_id
+        app_id_spec = f"application_{app_id_no}"
+        logger.info("Looking for application with ID: '%s'", app_id_spec)
+
+        find_failed_on_hosts: List[Tuple, CommandExecutionException] = []
+        tar_files_created: Dict[HadoopRoleInstance, str] = {}
+        no_of_hosts = len(args)
+
+        # /tmp/hadoop-logs/application_1657557929851_0006_DEL_1658219238731/container_1657557929851_0006_01_000001
+        # /tmp/hadoop-logs/application_1657557929851_0006_DEL_1658219238731/container_1657557929851_0006_01_000003
+        find_path = "{log_dir}/{app_id_spec}_*".format(app_id_spec=app_id_spec, log_dir=self.APP_LOG_DIR, app_id=app_id)
+        find_cmd = "find {} -print".format(find_path)
+        cmds = []
+        for role in args:
+            try:
+                find_results, stderr = role.host.create_cmd(find_cmd).run()
+            except CommandExecutionException as e:
+                # No need to raise immediately if files not found on a host
+                find_failed_on_hosts.append((role, e))
+                continue
+
+            # only run tar if this was successful
+            logger.debug("Find command: '%s' on host '%s', results: %s", find_cmd, role.host, find_results)
+            tar_gz_filename = f"/tmp/{app_id}_{role.host}.tar.gz"
+            tar_cmd = role.host.create_cmd(
+                "tar -cvf {fname} {files}".format(fname=tar_gz_filename, files=" ".join(find_results)))
+            try:
+                stdout, stderr = tar_cmd.run()
+                logger.debug("stdout: %s", stdout)
+                logger.debug("stderr: %s", stderr)
+            except CommandExecutionException as e:
+                # If any of the tar commands fail, raise the Exception
+                raise e
+            tar_files_created[role] = tar_gz_filename
+
+            download_command = role.host.download(tar_gz_filename)
+            cmds.append(download_command)
+
+        if no_of_hosts == len(find_failed_on_hosts):
+            logger.error("Command '%s' failed on all hosts: %s", find_cmd, [r.host for r in args])
+            for role, tar_file in tar_files_created.items():
+                logger.debug("Removing file: %s from host '%s'", tar_file, role.host)
+                role.host.create_cmd(f"rm {tar_file}").run()
+            excs = [t[1] for t in find_failed_on_hosts]
+            raise MultiCommandExecutionException(excs)
         return cmds
 
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:

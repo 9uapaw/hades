@@ -28,6 +28,10 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str) -> List[RunnableCommand]:
+        raise NotImplementedError()
+
+    @abstractmethod
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
         raise NotImplementedError()
 

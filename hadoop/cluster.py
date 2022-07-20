@@ -71,6 +71,14 @@ class HadoopCluster:
 
         return cmds
 
+    def compress_and_download_app_logs(self, selector: str, app_id: str) -> List[RunnableCommand]:
+        roles = self.select_roles(selector)
+        if not roles:
+            logger.warning("No roles found by selector '{}'".format(selector))
+
+        cmds = self._executor.compress_app_logs(*roles, app_id=app_id)
+        return cmds
+
     def get_status(self) -> List[HadoopClusterStatusEntry]:
         return self._executor.get_cluster_status(self.name)
 

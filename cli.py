@@ -185,6 +185,17 @@ def log(ctx, selector: str, follow: bool, tail: int or None, grep: str or None, 
 
 
 @cli.command()
+@click.pass_context
+@click.argument('app_id')
+def app_logs(ctx, app_id):
+    """
+    Read the logs of apps
+    """
+    handler: MainCommandHandler = ctx.obj['handler']
+    handler.compress_and_download_app_logs(app_id)
+
+
+@cli.command()
 @click.argument("selector", default="")
 @click.option('-s', '--source', multiple=True, help='path of local file to distribute to role hosts')
 @click.option('-d', '--dest', multiple=True, help='path of remote destination path on role hosts')

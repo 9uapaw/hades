@@ -32,5 +32,13 @@ class CommandExecutionException(HadesException):
             self.__class__.__name__, self._msg, self._cmd if self._cmd else "", "\n".join(self.stderr), "\n".join(self.stdout))
 
 
+class MultiCommandExecutionException(HadesException):
+    def __init__(self, exceptions: List[CommandExecutionException]):
+        self._exceptions = exceptions
+
+    def __str__(self):
+        return "{}: {}".format(self.__class__.__name__, self._exceptions)
+
+
 class SelectorException(HadesException):
     pass
