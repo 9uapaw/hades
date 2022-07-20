@@ -18,6 +18,8 @@ YARN_APP_MAPREDUCE_PREFIX = "yarn.app.mapreduce"
 YARN_APP_MAPREDUCE_SHUFFLE_PREFIX = "yarn.app.mapreduce.shuffle"
 MAPREDUCE_SHUFFLE_PREFIX = MAPREDUCE_PREFIX + ".shuffle"
 
+CONF_DEBUG_DELAY = "yarn.nodemanager.delete.debug-delay-sec"
+
 # START DEFAULT CONFIGS
 SHUFFLE_MANAGE_OS_CACHE = MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache"
 SHUFFLE_MANAGE_OS_CACHE_DEFAULT = "true"
@@ -140,6 +142,8 @@ class Netty4Testcase:
 
 
 class Netty4RegressionTest(HadesScriptBase):
+    TC_LIMIT = 2
+
     DEFAULT_CONFIGS = {
         SHUFFLE_MANAGE_OS_CACHE: SHUFFLE_MANAGE_OS_CACHE_DEFAULT,
         SHUFFLE_READAHEAD_BYTES: SHUFFLE_READAHEAD_BYTES_DEFAULT,
@@ -160,7 +164,8 @@ class Netty4RegressionTest(HadesScriptBase):
         SHUFFLE_PATHCACHE_MAX_WEIGHT: SHUFFLE_PATHCACHE_MAX_WEIGHT_DEFAULT,
         SHUFFLE_LOG_SEPARATE: SHUFFLE_LOG_SEPARATE_DEFAULT,
         SHUFFLE_LOG_LIMIT_KB: SHUFFLE_LOG_LIMIT_KB_DEFAULT,
-        SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT
+        SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT,
+        CONF_DEBUG_DELAY: "99999999"
     }
 
     TESTCASES = [
@@ -187,13 +192,22 @@ class Netty4RegressionTest(HadesScriptBase):
     APP = MapReduceApp()
 
     def run(self):
-        for tc in Netty4RegressionTest.TESTCASES:
+        testcases = Netty4RegressionTest.TESTCASES
+        if Netty4RegressionTest.TC_LIMIT > 0:
+            LOG.info("Limiting testcases to %s", Netty4RegressionTest.TC_LIMIT)
+            testcases = testcases[2:]
+        no_of_tcs = len(testcases)
+        LOG.info("Will run %d testcases", no_of_tcs)
+        LOG.info("Testcases: %s", testcases)
+        # TODO
+        return
+        for idx, tc in enumerate(testcases):
             self._load_default_config()
             config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
             initial_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR,
                                                                       HadoopConfigFile.MAPRED_SITE,
                                                                       tc, postfix="initial")
-            LOG.info("Running testcase: %s", tc)
+            LOG.info("[%d \\ %d] Running testcase: %s", idx + 1, no_of_tcs, tc)
             for config_key, config_val in tc.config_changes.items():
                 config.extend_with_args({config_key: config_val})
 
@@ -202,7 +216,8 @@ class Netty4RegressionTest(HadesScriptBase):
 
             yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
             app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
-            # TODO Save shuffle syslog file
+            # TODO Save shuffle syslog file, find all container logs as well
+            # TODO get app id from YARN CLI
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
             files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files
             self._compress_files(tc, files_to_compress)
@@ -268,6 +283,8 @@ class Netty4RegressionTest(HadesScriptBase):
         LOG.info("Loading default ShuffleHandler config...")
         default_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
         for k, v in self.DEFAULT_CONFIGS.items():
+            if isinstance(v, int):
+                v = str(v)
             default_config.extend_with_args({k: v})
         self.cluster.update_config(NODEMANAGER_SELECTOR, default_config, no_backup=True)
         # TODO Verify if cluster restarts / NM restarts?
