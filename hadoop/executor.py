@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Type, Dict
 
-from core.cmd import RunnableCommand
+from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from hadoop.app.example import ApplicationCommand
 from hadoop.config import HadoopConfig
@@ -28,7 +28,7 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str) -> List[RunnableCommand]:
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str) -> List[DownloadCommand]:
         raise NotImplementedError()
 
     @abstractmethod
@@ -55,5 +55,8 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):
+        raise NotImplementedError()
+
+    def get_running_apps(self, *args: 'HadoopRoleInstance') -> RunnableCommand:
         raise NotImplementedError()
 

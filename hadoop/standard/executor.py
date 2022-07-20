@@ -3,7 +3,7 @@ import time
 import os
 from typing import List, Type, Dict, Tuple
 
-from core.cmd import RunnableCommand
+from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from core.error import CommandExecutionException, MultiCommandExecutionException
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
@@ -81,7 +81,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         return cmds
 
-    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str) -> List[RunnableCommand]:
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str) -> List[DownloadCommand]:
         if app_id.startswith("application_"):
             app_id_no = app_id.split("application_")[1]
         else:
@@ -222,3 +222,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                     role.host.make_backup(remote_jar).run()
                     role.host.upload(local_jar, remote_jar).run()
 
+    def get_running_apps(self, random_selected: HadoopRoleInstance):
+        full_command = "yarn application -list 2>/dev/null | grep -oe application_[0-9]*_[0-9]*".format(application_command)
+        cmd = random_selected.host.create_cmd(full_command)
+        return cmd

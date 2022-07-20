@@ -82,3 +82,9 @@ class RemoteRunnableCommand(RunnableCommand):
     def get_async_cmd(self, c: str, cwd: str, out: Callable[[str], None], err: Callable[[str], None]) -> any:
         ssh = sh.ssh.bake("{user}@{host}".format(user=self.user, host=self.host))
         return ssh("bash -c \'{} {}\'".format(self._cmd_prefix, self.cmd), _bg=True, _out=out, _err=err)
+
+
+class DownloadCommand(RunnableCommand):
+    def __init__(self, cmd: str, local_file, work_dir='.', target: Optional['HadoopRoleInstance'] = None):
+        super().__init__(cmd, work_dir=work_dir, target=target)
+        self.local_file = local_file

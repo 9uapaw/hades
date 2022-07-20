@@ -42,3 +42,8 @@ class MultiCommandExecutionException(HadesException):
 
 class SelectorException(HadesException):
     pass
+
+
+class ScriptException(HadesException):
+    def __init__(self, reason):
+        self.reason = reason

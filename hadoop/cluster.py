@@ -3,7 +3,7 @@ import random
 from typing import List, Callable, Dict
 
 import hadoop.selector
-from core.cmd import RunnableCommand
+from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from core.context import HadesContext
 from hadoop.app.example import ApplicationCommand
@@ -71,7 +71,7 @@ class HadoopCluster:
 
         return cmds
 
-    def compress_and_download_app_logs(self, selector: str, app_id: str) -> List[RunnableCommand]:
+    def compress_and_download_app_logs(self, selector: str, app_id: str) -> List[DownloadCommand]:
         roles = self.select_roles(selector)
         if not roles:
             logger.warning("No roles found by selector '{}'".format(selector))
@@ -132,3 +132,8 @@ class HadoopCluster:
     def _select_random_role(self, selector: str = "") -> HadoopRoleInstance:
         selected = self.select_roles(selector)
         return selected[random.randint(0, len(selected) - 1)]
+
+    def get_running_apps(self, selector: str = "") -> RunnableCommand:
+        self._executor.get_running_apps()
+        random_selected = self._select_random_role(selector)
+        return self._executor.get_running_apps(random_selected)

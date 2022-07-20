@@ -3,8 +3,7 @@ import time
 from abc import ABC
 from pathlib import PurePath
 
-from core.cmd import RunnableCommand, RemoteRunnableCommand
-
+from core.cmd import RunnableCommand, RemoteRunnableCommand, DownloadCommand
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,9 @@ class RemoteHostInstance(HadoopHostInstance):
     def download(self, source: str, dest: str = None) -> RunnableCommand:
         if not dest:
             dest = "."
-        return RunnableCommand("scp {user}@{host}:{source} {dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest), target=self.role)
+        cmd = "scp {user}@{host}:{source} {dest}".format(source=source, user=self.user,
+                                                                  host=self.get_address(), dest=dest)
+        return DownloadCommand(cmd, local_file=dest, target=self.role)
 
     def make_backup(self, dest: str) -> RunnableCommand:
         dest = PurePath(dest)

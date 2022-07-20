@@ -3,6 +3,7 @@ import os
 from dataclasses import dataclass
 from typing import Callable, List, Dict
 from core.cmd import RunnableCommand
+from core.error import ScriptException
 from hadoop.app.example import MapReduceApp, ApplicationCommand
 from hadoop.config import HadoopConfig
 from hadoop.xml_config import HadoopConfigFile
@@ -215,10 +216,22 @@ class Netty4RegressionTest(HadesScriptBase):
 
             yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
             app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
-            # TODO get app id from YARN CLI
-            # TODO Save shuffle syslog file, find all container logs as well
+
+            cmd = self.cluster.get_running_apps()
+            running_apps, stderr = cmd.run()
+            if len(running_apps) > 1:
+                raise ScriptException("Expected 1 running application. Got these: {}".format(running_apps))
+            current_app_id = running_apps[0]
+            LOG.info("Found running application: %s", current_app_id)
+
+            app_log_tar_files = []
+            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, current_app_id)
+            for cmd in cmds:
+                cmd.run()
+                app_log_tar_files.append(cmd.local_file)
+
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
-            files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files
+            files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files + app_log_tar_files
             self._compress_files(tc, files_to_compress)
 
     def _restart_nms(self):
@@ -292,7 +305,3 @@ class Netty4RegressionTest(HadesScriptBase):
                 v = str(v)
             default_config.extend_with_args({k: v})
         self.cluster.update_config(NODEMANAGER_SELECTOR, default_config, no_backup=True)
-        # TODO Verify if cluster restarts / NM restarts?
-
-
-
