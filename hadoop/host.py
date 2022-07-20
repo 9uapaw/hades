@@ -27,7 +27,7 @@ class HadoopHostInstance(ABC):
     def upload(self, source: str, dest: str) -> RunnableCommand:
         raise NotImplementedError()
 
-    def download(self, source: str, dest: str = None) -> RunnableCommand:
+    def download(self, source: str, dest: str = None, local_file: str = None) -> DownloadCommand:
         raise NotImplementedError()
 
     def find_file(self, dir: str, search: str) -> RunnableCommand:
@@ -46,11 +46,11 @@ class RemoteHostInstance(HadoopHostInstance):
     def upload(self, source: str, dest: str) -> RunnableCommand:
         return RunnableCommand("scp {source} {user}@{host}:{dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest), target=self.role)
 
-    def download(self, source: str, dest: str = None) -> RunnableCommand:
+    def download(self, source: str, dest: str = None, local_file: str = None) -> RunnableCommand:
         if not dest:
             dest = "."
         cmd = "scp {user}@{host}:{source} {dest}".format(source=source, user=self.user,
-                                                                  host=self.get_address(), dest=dest)
+                                                         host=self.get_address(), dest=dest)
         return DownloadCommand(cmd, local_file=dest, target=self.role)
 
     def make_backup(self, dest: str) -> RunnableCommand:

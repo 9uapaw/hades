@@ -108,9 +108,10 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
             # only run tar if this was successful
             logger.debug("Find command: '%s' on host '%s', results: %s", find_cmd, role.host, find_results)
-            tar_gz_filename = f"/tmp/{app_id}_{role.host}.tar.gz"
+            targz_file_name = f"{app_id}_{role.host}.tar.gz"
+            targz_file_path = f"/tmp/{targz_file_name}"
             tar_cmd = role.host.create_cmd(
-                "tar -cvf {fname} {files}".format(fname=tar_gz_filename, files=" ".join(find_results)))
+                "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(find_results)))
             try:
                 stdout, stderr = tar_cmd.run()
                 logger.debug("stdout: %s", stdout)
@@ -118,9 +119,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             except CommandExecutionException as e:
                 # If any of the tar commands fail, raise the Exception
                 raise e
-            tar_files_created[role] = tar_gz_filename
+            tar_files_created[role] = targz_file_path
 
-            download_command = role.host.download(tar_gz_filename)
+            download_command = role.host.download(targz_file_path, local_file=targz_file_name)
             cmds.append(download_command)
 
         if no_of_hosts == len(find_failed_on_hosts):
@@ -223,8 +224,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                     role.host.upload(local_jar, remote_jar).run()
 
     def get_running_apps(self, random_selected: HadoopRoleInstance):
-        full_command = "yarn application -list 2>/dev/null | grep -oe application_[0-9]*_[0-9]*".format(application_command)
-        cmd = random_selected.host.create_cmd(full_command)
+        # https://stackoverflow.com/a/61321426/1106893
+        # We don't want core.cmd.RunnableCommand.run to fail if grep's exit code is 1 when no result is found
+        cmd = random_selected.host.create_cmd("yarn application -list 2>/dev/null | grep -oe application_[0-9]*_[0-9]* || true")
         return cmd
 
     def get_finished_apps(self, random_selected: HadoopRoleInstance):
