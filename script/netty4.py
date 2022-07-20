@@ -230,12 +230,14 @@ class Netty4RegressionTest(HadesScriptBase):
             h.wait()
 
     def _read_logs_and_write_to_files(self, selector, tc: Netty4Testcase):
-        yarn_log = []
-        log_commands = self.cluster.read_logs(follow=True, selector=selector)
+        yarn_log_lines = []
+        log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=selector)
         for read_logs_command in log_commands:
-            read_logs_command.run_async(stdout=_callback(read_logs_command.target.host, yarn_log),
-                                        stderr=_callback(read_logs_command.target.host, yarn_log))
-        return self.write_yarn_logs(yarn_log, tc)
+            LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd, read_logs_command.target.host)
+            # LOG.debug("Writing YARN logs file '%s' on host '%s'", yarn_log_file, command.target.host)
+            read_logs_command.run_async(stdout=_callback(read_logs_command.target.host, yarn_log_lines),
+                                        stderr=_callback(read_logs_command.target.host, yarn_log_lines))
+        return self.write_yarn_logs(yarn_log_lines, tc)
 
     def write_config_files(self, selector: str, conf_type: HadoopConfigFile, tc: Netty4Testcase, postfix=None) -> List[str]:
         configs = self.cluster.get_config(selector, conf_type)
@@ -246,6 +248,8 @@ class Netty4RegressionTest(HadesScriptBase):
                 config_file_name = CONF_WITH_POSTFIX_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name, postfix=postfix)
             else:
                 config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name)
+
+            LOG.debug("Writing config file '%s' on host '%s'", config_file_name, host)
             with open(config_file_name, 'w') as f:
                 f.write(conf.to_str())
             generated_config_files.append(config_file_name)
@@ -256,9 +260,11 @@ class Netty4RegressionTest(HadesScriptBase):
         with self.overwrite_config(cmd_prefix="sudo -u systest"):
             app_command = self.cluster.run_app(app, selector=NODEMANAGER_SELECTOR)
 
+        LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
         app_command.run_async(block=True, stderr=lambda line: app_log.append(line))
 
         app_log_file = LOG_FILE_NAME_FORMAT.format(tc=tc.name, app="MRPI")
+        LOG.debug("Writing app log file '%s' on host '%s'", app_log_file, app_command.target.host)
         with open(app_log_file, 'w') as f:
             f.writelines(app_log)
         return app_log_file
