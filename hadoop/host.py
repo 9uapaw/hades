@@ -51,7 +51,7 @@ class RemoteHostInstance(HadoopHostInstance):
             dest = "."
         cmd = "scp {user}@{host}:{source} {dest}".format(source=source, user=self.user,
                                                          host=self.get_address(), dest=dest)
-        return DownloadCommand(cmd, local_file=dest, target=self.role)
+        return DownloadCommand(cmd, local_file=local_file, target=self.role)
 
     def make_backup(self, dest: str) -> RunnableCommand:
         dest = PurePath(dest)
