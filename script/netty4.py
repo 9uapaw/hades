@@ -195,12 +195,11 @@ class Netty4RegressionTest(HadesScriptBase):
         testcases = Netty4RegressionTest.TESTCASES
         if Netty4RegressionTest.TC_LIMIT > 0:
             LOG.info("Limiting testcases to %s", Netty4RegressionTest.TC_LIMIT)
-            testcases = testcases[2:]
+            testcases = testcases[:2]
         no_of_tcs = len(testcases)
         LOG.info("Will run %d testcases", no_of_tcs)
         LOG.info("Testcases: %s", testcases)
-        # TODO
-        return
+
         for idx, tc in enumerate(testcases):
             self._load_default_config()
             config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
@@ -216,8 +215,8 @@ class Netty4RegressionTest(HadesScriptBase):
 
             yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
             app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
-            # TODO Save shuffle syslog file, find all container logs as well
             # TODO get app id from YARN CLI
+            # TODO Save shuffle syslog file, find all container logs as well
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
             files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files
             self._compress_files(tc, files_to_compress)
