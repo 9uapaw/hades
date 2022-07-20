@@ -190,20 +190,29 @@ class Netty4RegressionTest(HadesScriptBase):
         for tc in Netty4RegressionTest.TESTCASES:
             self._load_default_config()
             config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
-
+            initial_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR,
+                                                                      HadoopConfigFile.MAPRED_SITE,
+                                                                      tc, postfix="initial")
             LOG.info("Running testcase: %s", tc)
             for config_key, config_val in tc.config_changes.items():
                 config.extend_with_args({config_key: config_val})
-                self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
-                initial_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE,
-                                                                  tc, postfix="initial")
 
-                yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
-                app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
-                # TODO Save shuffle syslog file
-                tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
-                files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files
-                self._compress_files(tc, files_to_compress)
+            self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
+            self._restart_nms()
+
+            yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
+            app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
+            # TODO Save shuffle syslog file
+            tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
+            files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files
+            self._compress_files(tc, files_to_compress)
+
+    def _restart_nms(self):
+        handlers = []
+        for cmd in self.cluster.restart_roles(NODEMANAGER_SELECTOR):
+            handlers.append(cmd.run_async())
+        for h in handlers:
+            h.wait()
 
     def _read_logs_and_write_to_files(self, selector, tc: Netty4Testcase):
         yarn_log = []
