@@ -226,3 +226,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         full_command = "yarn application -list 2>/dev/null | grep -oe application_[0-9]*_[0-9]*".format(application_command)
         cmd = random_selected.host.create_cmd(full_command)
         return cmd
+
+    def get_finished_apps(self, random_selected: HadoopRoleInstance):
+        # https://stackoverflow.com/a/61321426/1106893
+        # We don't want core.cmd.RunnableCommand.run to fail if grep's exit code is 1 when no result is found
+        cmd = random_selected.host.create_cmd("yarn application -list -appStates FINISHED 2>/dev/null | grep -oe application_[0-9]*_[0-9]* || true")
+        return cmd

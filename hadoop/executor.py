@@ -60,3 +60,5 @@ class HadoopOperationExecutor(ABC):
     def get_running_apps(self, *args: 'HadoopRoleInstance') -> RunnableCommand:
         raise NotImplementedError()
 
+    def get_finished_apps(self, random_selected: 'HadoopRoleInstance'):
+        raise NotImplementedError()

@@ -137,3 +137,7 @@ class HadoopCluster:
         self._executor.get_running_apps()
         random_selected = self._select_random_role(selector)
         return self._executor.get_running_apps(random_selected)
+
+    def get_finished_apps(self, selector: str = "") -> RunnableCommand:
+        random_selected = self._select_random_role(selector)
+        return self._executor.get_finished_apps(random_selected)
