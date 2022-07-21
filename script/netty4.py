@@ -85,7 +85,8 @@ SHUFFLE_LOG_BACKUPS_DEFAULT = 0
 # END OF DEFAULT CONFIGS
 
 
-LOG_FILE_NAME_FORMAT = "testcase_{tc}_{app}.log"
+APP_LOG_FILE_NAME_FORMAT = "testcase_{tc}_{app}.log"
+YARN_LOG_FILE_NAME_FORMAT = "testcase_{tc}_{host}_{role}_{app}.log"
 YARN_LOG_FORMAT = "{name} - {log}"
 CONF_FORMAT = "{host}_{conf}_testcase_{tc}.xml"
 CONF_WITH_POSTFIX_FORMAT = "{host}_{conf}_testcase_{tc}_{postfix}.xml"
@@ -219,7 +220,7 @@ class Netty4RegressionTest(HadesScriptBase):
             self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True)
             self._restart_nms()
 
-            yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
+            yarn_log_files: List[str] = self._read_logs_and_write_to_files("Yarn", tc)
             app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
             latest_finished_app_id = self._get_latest_finished_app()
 
@@ -230,8 +231,11 @@ class Netty4RegressionTest(HadesScriptBase):
                 app_log_tar_files.append(cmd.local_file)
 
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
-            files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files + app_log_tar_files
+            files_to_compress = [app_log_file] + yarn_log_files + tc_config_files + initial_config_files + app_log_tar_files
             self._compress_files(tc, files_to_compress)
+
+            # TODO Print report: failed / passed
+            # TODO yarn log file is empty
 
     def _get_single_running_app(self):
         cmd = self.cluster.get_running_apps()
@@ -259,13 +263,14 @@ class Netty4RegressionTest(HadesScriptBase):
             h.wait()
 
     def _read_logs_and_write_to_files(self, selector, tc: Netty4Testcase):
-        yarn_log_lines = []
+        LOG.debug("Reading YARN logs from cluster...")
+        yarn_log_lines = {}
         log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=selector)
         for read_logs_command in log_commands:
+            yarn_log_lines[read_logs_command] = []
             LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd, read_logs_command.target.host)
-            # LOG.debug("Writing YARN logs file '%s' on host '%s'", yarn_log_file, command.target.host)
-            read_logs_command.run_async(stdout=_callback(read_logs_command.target.host, yarn_log_lines),
-                                        stderr=_callback(read_logs_command.target.host, yarn_log_lines))
+            read_logs_command.run_async(stdout=_callback(read_logs_command.target.host, yarn_log_lines[read_logs_command]),
+                                        stderr=_callback(read_logs_command.target.host, yarn_log_lines[read_logs_command]))
         return self.write_yarn_logs(yarn_log_lines, tc)
 
     def write_config_files(self, selector: str, conf_type: HadoopConfigFile, tc: Netty4Testcase, postfix=None) -> List[str]:
@@ -292,18 +297,21 @@ class Netty4RegressionTest(HadesScriptBase):
         LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
         app_command.run_async(block=True, stderr=lambda line: app_log.append(line))
 
-        app_log_file = LOG_FILE_NAME_FORMAT.format(tc=tc.name, app="MRPI")
+        app_log_file = APP_LOG_FILE_NAME_FORMAT.format(tc=tc.name, app="MRPI")
         LOG.debug("Writing app log file '%s' on host '%s'", app_log_file, app_command.target.host)
         with open(app_log_file, 'w') as f:
             f.writelines(app_log)
         return app_log_file
 
     @staticmethod
-    def write_yarn_logs(log_lines_list: List[str], tc: Netty4Testcase):
-        yarn_log_file = LOG_FILE_NAME_FORMAT.format(tc=tc.name, app="YARN")
-        with open(yarn_log_file, 'w') as f:
-            f.writelines(log_lines_list)
-        return yarn_log_file
+    def write_yarn_logs(log_lines_dict: Dict[RunnableCommand, List[str]], tc: Netty4Testcase):
+        files = []
+        for cmd, lines in log_lines_dict.items():
+            yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(tc=tc.name, host=cmd.target.host, role=cmd.target.role_type.name, app="YARN")
+            files.append(yarn_log_file)
+            with open(yarn_log_file, 'w') as f:
+                f.writelines(lines)
+        return files
 
     @staticmethod
     def _compress_files(tc: Netty4Testcase, files: List[str]):
