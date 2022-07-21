@@ -166,6 +166,9 @@ class Netty4RegressionTest(HadesScriptBase):
         SHUFFLE_LOG_SEPARATE: SHUFFLE_LOG_SEPARATE_DEFAULT,
         SHUFFLE_LOG_LIMIT_KB: SHUFFLE_LOG_LIMIT_KB_DEFAULT,
         SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT,
+    }
+
+    YARN_SITE_DEFAULT_CONFIGS = {
         CONF_DEBUG_DELAY: "99999999"
     }
 
@@ -201,13 +204,15 @@ class Netty4RegressionTest(HadesScriptBase):
         LOG.info("Will run %d testcases", no_of_tcs)
         LOG.info("Testcases: %s", testcases)
 
+        self._load_default_yarn_site_configs()
+
         for idx, tc in enumerate(testcases):
-            self._load_default_config()
+            self._load_default_mapred_configs()
             config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
             initial_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR,
                                                                       HadoopConfigFile.MAPRED_SITE,
                                                                       tc, postfix="initial")
-            LOG.info("[%d \\ %d] Running testcase: %s", idx + 1, no_of_tcs, tc)
+            LOG.info("[%d\\%d] Running testcase: %s", idx + 1, no_of_tcs, tc)
             for config_key, config_val in tc.config_changes.items():
                 config.extend_with_args({config_key: config_val})
 
@@ -216,16 +221,10 @@ class Netty4RegressionTest(HadesScriptBase):
 
             yarn_log_file: str = self._read_logs_and_write_to_files("Yarn", tc)
             app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
-
-            cmd = self.cluster.get_running_apps()
-            running_apps, stderr = cmd.run()
-            if len(running_apps) > 1:
-                raise ScriptException("Expected 1 running application. Got these: {}".format(running_apps))
-            current_app_id = running_apps[0]
-            LOG.info("Found running application: %s", current_app_id)
+            latest_finished_app_id = self._get_latest_finished_app()
 
             app_log_tar_files = []
-            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, current_app_id)
+            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, latest_finished_app_id)
             for cmd in cmds:
                 cmd.run()
                 app_log_tar_files.append(cmd.local_file)
@@ -233,6 +232,24 @@ class Netty4RegressionTest(HadesScriptBase):
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
             files_to_compress = [app_log_file, yarn_log_file] + tc_config_files + initial_config_files + app_log_tar_files
             self._compress_files(tc, files_to_compress)
+
+    def _get_single_running_app(self):
+        cmd = self.cluster.get_running_apps()
+        running_apps, stderr = cmd.run()
+        if len(running_apps) > 1:
+            raise ScriptException("Expected 1 running application. Found more: {}".format(running_apps))
+        elif len(running_apps) == 0:
+            raise ScriptException("Expected 1 running application. Found no application")
+        current_app_id = running_apps[0]
+        LOG.info("Found running application: %s", current_app_id)
+        return current_app_id
+
+    def _get_latest_finished_app(self):
+        cmd = self.cluster.get_finished_apps()
+        finished_apps, stderr = cmd.run()
+        LOG.info("Found finished applications: %s", finished_apps)
+        # Topmost row is the latest app
+        return finished_apps[0]
 
     def _restart_nms(self):
         handlers = []
@@ -297,11 +314,18 @@ class Netty4RegressionTest(HadesScriptBase):
             LOG.debug("Removing file: %s", file)
             os.remove(file)
 
-    def _load_default_config(self):
-        LOG.info("Loading default ShuffleHandler config...")
-        default_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
-        for k, v in self.DEFAULT_CONFIGS.items():
+    def _load_default_mapred_configs(self):
+        LOG.info("Loading default MR ShuffleHandler configs...")
+        self._load_configs(HadoopConfigFile.MAPRED_SITE, self.DEFAULT_CONFIGS, NODEMANAGER_SELECTOR)
+
+    def _load_default_yarn_site_configs(self):
+        LOG.info("Loading default yarn-site.xml configs...")
+        self._load_configs(HadoopConfigFile.YARN_SITE, self.YARN_SITE_DEFAULT_CONFIGS, NODEMANAGER_SELECTOR)
+
+    def _load_configs(self, conf_file_type, conf_dict, selector, ):
+        default_config = HadoopConfig(conf_file_type)
+        for k, v in conf_dict.items():
             if isinstance(v, int):
                 v = str(v)
             default_config.extend_with_args({k: v})
-        self.cluster.update_config(NODEMANAGER_SELECTOR, default_config, no_backup=True)
+        self.cluster.update_config(selector, default_config, no_backup=True)
