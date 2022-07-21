@@ -69,7 +69,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         for role in args:
             role_type = role.role_type.value
 
-            file = "{log_dir}*/*{role_type}*".format(log_dir=self.LOG_DIR, role_type=role_type)
+            file = "{log_dir}*/*{role_type}*log".format(log_dir=self.LOG_DIR, role_type=role_type)
             if download:
                 cmds.append(role.host.download(file))
                 continue
