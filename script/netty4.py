@@ -92,9 +92,11 @@ CONF_FORMAT = "{host}_{conf}_testcase_{tc}.xml"
 CONF_WITH_POSTFIX_FORMAT = "{host}_{conf}_testcase_{tc}_{postfix}.xml"
 
 
-def _callback(host: str, logs: List[str]) -> Callable:
+def _callback(cmd: RunnableCommand, logs_dict: Dict[RunnableCommand, List[str]]) -> Callable:
     def _cb(line: str):
-        logs.append(YARN_LOG_FORMAT.format(name=host, log=line))
+        if cmd not in logs_dict or not logs_dict[cmd]:
+            logs_dict[cmd] = []
+        logs_dict[cmd].append(YARN_LOG_FORMAT.format(name=cmd.target.host, log=line))
 
     return _cb
 
@@ -144,7 +146,7 @@ class Netty4Testcase:
 
 
 class Netty4RegressionTest(HadesScriptBase):
-    TC_LIMIT = 2
+    TC_LIMIT = 1
 
     DEFAULT_CONFIGS = {
         SHUFFLE_MANAGE_OS_CACHE: SHUFFLE_MANAGE_OS_CACHE_DEFAULT,
@@ -234,8 +236,8 @@ class Netty4RegressionTest(HadesScriptBase):
             files_to_compress = [app_log_file] + yarn_log_files + tc_config_files + initial_config_files + app_log_tar_files
             self._compress_files(tc, files_to_compress)
 
-            # TODO Print report: failed / passed
-            # TODO yarn log file is empty
+            # TODO Print report: failed / passed tests
+            # TODO implement timeout handling for MR jobs (if they are stuck)
 
     def _get_single_running_app(self):
         cmd = self.cluster.get_running_apps()
@@ -266,11 +268,11 @@ class Netty4RegressionTest(HadesScriptBase):
         LOG.debug("Reading YARN logs from cluster...")
         yarn_log_lines = {}
         log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=selector)
+        LOG.debug("YARN log commands: %s", log_commands)
         for read_logs_command in log_commands:
-            yarn_log_lines[read_logs_command] = []
             LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd, read_logs_command.target.host)
-            read_logs_command.run_async(stdout=_callback(read_logs_command.target.host, yarn_log_lines[read_logs_command]),
-                                        stderr=_callback(read_logs_command.target.host, yarn_log_lines[read_logs_command]))
+            read_logs_command.run_async(stdout=_callback(read_logs_command, yarn_log_lines),
+                                        stderr=_callback(read_logs_command, yarn_log_lines))
         return self.write_yarn_logs(yarn_log_lines, tc)
 
     def write_config_files(self, selector: str, conf_type: HadoopConfigFile, tc: Netty4Testcase, postfix=None) -> List[str]:

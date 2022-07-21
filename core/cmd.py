@@ -1,4 +1,6 @@
+import dataclasses
 import logging
+from dataclasses import dataclass
 from typing import List, Tuple, Callable, Optional
 
 import sh
@@ -8,22 +10,32 @@ from core.error import CommandExecutionException
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class RunnableCommand:
+    cmd: str
+    work_dir: str = '.'
+    target: Optional['HadoopRoleInstance'] = None
+    stdout: List[str] = dataclasses.field(default_factory=list)
+    stderr: List[str] = dataclasses.field(default_factory=list)
+    _cmd_prefix = ""
 
-    def __init__(self, cmd: str, work_dir='.', target: Optional['HadoopRoleInstance'] = None):
-        self.cmd = cmd
-        self.stdout: List[str] = []
-        self.stderr: List[str] = []
-        self.work_dir = work_dir
-        self.target = target
-        self._cmd_prefix = ""
+    def __key(self):
+        return self.cmd, self.work_dir, self._cmd_prefix
+
+    def __hash__(self):
+        return hash(self.__key())
+
+    def __eq__(self, other):
+        if isinstance(other, RunnableCommand):
+            return self.__key() == other.__key()
+        return NotImplemented
 
     def run(self) -> Tuple[List[str], List[str]]:
         logger.debug("Running command {}".format(self.cmd))
         try:
             output = self.get_sync_cmd(self.cmd, self.work_dir)
-            self.stdout = list(filter(bool, output.stdout.decode().split("\n")))
-            self.stderr = list(filter(bool, output.stderr.decode().split("\n")))
+            self.stdout.extend(list(filter(bool, output.stdout.decode().split("\n"))))
+            self.stderr.extend(list(filter(bool, output.stderr.decode().split("\n"))))
             return self.stdout, self.stderr
         except sh.ErrorReturnCode as e:
             raise CommandExecutionException(str(e), self.cmd, self._convert_output(e.stderr.decode()),
