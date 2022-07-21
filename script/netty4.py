@@ -190,7 +190,7 @@ class Netty4RegressionTest(HadesScriptBase):
             .with_configs(SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT, ["15", "25"])
             .generate_testcases()
     ]
-    APP = MapReduceApp()
+    APP = MapReduceApp(cmd='sleep -m 1 -r 1 -mt 10 -rt 10')
 
     def run(self):
         testcases = Netty4RegressionTest.TESTCASES
