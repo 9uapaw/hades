@@ -145,6 +145,11 @@ class Netty4Testcase:
     config_changes: Dict[str, str]
 
 
+@dataclass
+class TestcaseResult:
+    details: str
+
+
 class Netty4RegressionTest(HadesScriptBase):
     TC_LIMIT = 1
 
@@ -209,6 +214,7 @@ class Netty4RegressionTest(HadesScriptBase):
 
         self._load_default_yarn_site_configs()
 
+        testcase_results: Dict[Netty4Testcase, TestcaseResult] = {}
         for idx, tc in enumerate(testcases):
             self._load_default_mapred_configs()
             config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
@@ -235,6 +241,7 @@ class Netty4RegressionTest(HadesScriptBase):
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
             files_to_compress = [app_log_file] + yarn_log_files + tc_config_files + initial_config_files + app_log_tar_files
             self._compress_files(tc, files_to_compress)
+            testcase_results[tc] = TestcaseResult("passed")
 
             # TODO Print report: failed / passed tests
             # TODO implement timeout handling for MR jobs (if they are stuck)
