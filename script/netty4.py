@@ -1,9 +1,9 @@
 import itertools
-import os
 from dataclasses import dataclass
+from enum import Enum
 from typing import Callable, List, Dict
 from core.cmd import RunnableCommand
-from core.error import ScriptException
+from core.error import ScriptException, HadesCommandTimedOutException
 from core.util import FileUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand
 from hadoop.config import HadoopConfig
@@ -12,6 +12,8 @@ from script.base import HadesScriptBase
 from tabulate import tabulate
 
 import logging
+
+APP_ID_NOT_AVAILABLE = "N/A"
 
 LOG = logging.getLogger(__name__)
 
@@ -93,6 +95,8 @@ YARN_LOG_FILE_NAME_FORMAT = "testcase_{tc}_{host}_{role}_{app}.log"
 YARN_LOG_FORMAT = "{name} - {log}"
 CONF_FORMAT = "{host}_{conf}_testcase_{tc}.xml"
 CONF_WITH_POSTFIX_FORMAT = "{host}_{conf}_testcase_{tc}_{postfix}.xml"
+DEFAULT_TIMEOUT = 30
+TIMEOUT_MSG = "Timed out after {} seconds".format(DEFAULT_TIMEOUT)
 
 
 def _callback(cmd: RunnableCommand, logs_dict: Dict[RunnableCommand, List[str]]) -> Callable:
@@ -151,9 +155,17 @@ class Netty4Testcase:
         return hash(self.name)
 
 
+class TestcaseResultType(Enum):
+    TIMEOUT = "timed out"
+    PASSED = "passed"
+
+
 @dataclass
 class TestcaseResult:
-    details: str
+    type: TestcaseResultType
+    app_command: RunnableCommand
+    app_log_file: str
+    details: str = None
 
 
 class Netty4RegressionTest(HadesScriptBase):
@@ -235,24 +247,36 @@ class Netty4RegressionTest(HadesScriptBase):
             self._restart_nms()
 
             yarn_log_files: List[str] = self._read_logs_and_write_to_files("Yarn", tc)
-            app_log_file: str = self.run_app_and_collect_logs_to_file(self.APP, tc)
-            latest_finished_app_id = self._get_latest_finished_app()
+            testcase_results[tc] = self.run_app_and_collect_logs_to_file(self.APP, tc)
 
-            app_log_tar_files = []
-            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, latest_finished_app_id)
-            for cmd in cmds:
-                cmd.run()
-                app_log_tar_files.append(cmd.local_file)
-
+            if testcase_results[tc].type == TestcaseResultType.TIMEOUT:
+                LOG.debug("Getting running app id as testcase timed out")
+                app_id = self._get_latest_running_app()
+            else:
+                LOG.debug("Getting finished app id as testcase passed")
+                app_id = self._get_latest_finished_app()
+            app_log_tar_files = self._get_app_log_tar_files(app_id)
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc,
                                                                  postfix="testcase_conf")
-            files_to_compress = [
-                                    app_log_file] + yarn_log_files + tc_config_files + initial_config_files + app_log_tar_files
+            files_to_compress = [testcase_results[tc].app_log_file] + \
+                                yarn_log_files + \
+                                tc_config_files + \
+                                initial_config_files + \
+                                app_log_tar_files
             FileUtils.compress_files(filename=f"testcase_{tc.name}", files=files_to_compress)
-            testcase_results[tc] = TestcaseResult("passed")
 
         self._print_report(testcase_results)
-        # TODO implement timeout handling for MR jobs (if they are stuck)
+
+    def _get_app_log_tar_files(self, app_id: str):
+        if app_id == APP_ID_NOT_AVAILABLE:
+            return []
+
+        app_log_tar_files = []
+        cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id)
+        for cmd in cmds:
+            cmd.run()
+            app_log_tar_files.append(cmd.local_file)
+        return app_log_tar_files
 
     def _get_single_running_app(self):
         cmd = self.cluster.get_running_apps()
@@ -260,6 +284,15 @@ class Netty4RegressionTest(HadesScriptBase):
         if len(running_apps) > 1:
             raise ScriptException("Expected 1 running application. Found more: {}".format(running_apps))
         elif len(running_apps) == 0:
+            raise ScriptException("Expected 1 running application. Found no application")
+        current_app_id = running_apps[0]
+        LOG.info("Found running application: %s", current_app_id)
+        return current_app_id
+
+    def _get_latest_running_app(self):
+        cmd = self.cluster.get_running_apps()
+        running_apps, stderr = cmd.run()
+        if len(running_apps) == 0:
             raise ScriptException("Expected 1 running application. Found no application")
         current_app_id = running_apps[0]
         LOG.info("Found running application: %s", current_app_id)
@@ -309,19 +342,27 @@ class Netty4RegressionTest(HadesScriptBase):
             generated_config_files.append(config_file_name)
         return generated_config_files
 
-    def run_app_and_collect_logs_to_file(self, app: ApplicationCommand, tc: Netty4Testcase) -> str:
+    def run_app_and_collect_logs_to_file(self, app: ApplicationCommand, tc: Netty4Testcase) -> TestcaseResult:
         app_log = []
+        timeout = False
         with self.overwrite_config(cmd_prefix="sudo -u systest"):
             app_command = self.cluster.run_app(app, selector=NODEMANAGER_SELECTOR)
 
         LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
-        app_command.run_async(block=True, stderr=lambda line: app_log.append(line))
+        try:
+            app_command.run_async(block=True, stderr=lambda line: app_log.append(line), timeout=DEFAULT_TIMEOUT)
+        except HadesCommandTimedOutException as e:
+            timeout = True
+            LOG.error("Command timed out: %s", app_command)
 
         app_log_file = APP_LOG_FILE_NAME_FORMAT.format(tc=tc.name, app="MRPI")
         LOG.debug("Writing app log file '%s' on host '%s'", app_log_file, app_command.target.host)
         with open(app_log_file, 'w') as f:
             f.writelines(app_log)
-        return app_log_file
+
+        if timeout:
+            return TestcaseResult(TestcaseResultType.TIMEOUT, app_command, app_log_file, details=TIMEOUT_MSG)
+        return TestcaseResult(TestcaseResultType.PASSED, app_command, app_log_file, details=TIMEOUT_MSG)
 
     @staticmethod
     def write_yarn_logs(log_lines_dict: Dict[RunnableCommand, List[str]], tc: Netty4Testcase):
@@ -359,6 +400,6 @@ class Netty4RegressionTest(HadesScriptBase):
 
         data = []
         for tc, result in testcase_results.items():
-            data.append([tc.name, result.details])
-        tabulated = tabulate(data, ["TESTCASE", "RESULT"], tablefmt="fancy_grid")
+            data.append([tc.name, result.app_command.cmd, result.type.value, result.details])
+        tabulated = tabulate(data, ["TESTCASE", "COMMAND", "RESULT", "DETAILS"], tablefmt="fancy_grid")
         LOG.info("\n" + tabulated)

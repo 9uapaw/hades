@@ -5,7 +5,7 @@ from typing import List, Tuple, Callable, Optional
 
 import sh
 
-from core.error import CommandExecutionException
+from core.error import CommandExecutionException, HadesCommandTimedOutException
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class RunnableCommand:
             raise CommandExecutionException(str(e), self.cmd, self._convert_output(e.stderr.decode()),
                                             self._convert_output(e.stdout.decode()))
 
-    def run_async(self, stdout: Callable[[str], None] = None, stderr: Callable[[str], None] = None, block=False):
+    def run_async(self, stdout: Callable[[str], None] = None, stderr: Callable[[str], None] = None, block=False, timeout=-1):
         try:
             logger.debug("Running command asynchronously {} as blocking {}".format(self.cmd, block))
             stdout_callback = self._stdout_callback
@@ -51,11 +51,15 @@ class RunnableCommand:
             if stderr:
                 stderr_callback = stderr
 
+            # TODO timeout should be used for async_cmd as well (??) --> https://stackoverflow.com/a/25616495/1106893
             process = self.get_async_cmd(self.cmd, self.work_dir, stdout_callback, stderr_callback)
             if block:
-                process.wait()
+                process.wait(timeout=timeout)
 
             return process
+
+        except sh.TimeoutException as e:
+            raise HadesCommandTimedOutException("Error while executing {}".format(self.cmd), cmd=self.cmd)
         except sh.ErrorReturnCode as e:
             raise CommandExecutionException("Error while executing {}".format(self.cmd), cmd=e.stderr.decode())
 
