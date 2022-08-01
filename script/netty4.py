@@ -8,8 +8,10 @@ from hadoop.app.example import MapReduceApp, ApplicationCommand
 from hadoop.config import HadoopConfig
 from hadoop.xml_config import HadoopConfigFile
 from script.base import HadesScriptBase
+from tabulate import tabulate
 
 import logging
+
 LOG = logging.getLogger(__name__)
 
 NODEMANAGER_SELECTOR = "Yarn/NodeManager"
@@ -241,13 +243,15 @@ class Netty4RegressionTest(HadesScriptBase):
                 cmd.run()
                 app_log_tar_files.append(cmd.local_file)
 
-            tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc, postfix="testcase_conf")
-            files_to_compress = [app_log_file] + yarn_log_files + tc_config_files + initial_config_files + app_log_tar_files
+            tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE, tc,
+                                                                 postfix="testcase_conf")
+            files_to_compress = [
+                                    app_log_file] + yarn_log_files + tc_config_files + initial_config_files + app_log_tar_files
             self._compress_files(tc, files_to_compress)
             testcase_results[tc] = TestcaseResult("passed")
 
-            # TODO Print report: failed / passed tests
-            # TODO implement timeout handling for MR jobs (if they are stuck)
+        self._print_report(testcase_results)
+        # TODO implement timeout handling for MR jobs (if they are stuck)
 
     def _get_single_running_app(self):
         cmd = self.cluster.get_running_apps()
@@ -280,18 +284,21 @@ class Netty4RegressionTest(HadesScriptBase):
         log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=selector)
         LOG.debug("YARN log commands: %s", log_commands)
         for read_logs_command in log_commands:
-            LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd, read_logs_command.target.host)
+            LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd,
+                      read_logs_command.target.host)
             read_logs_command.run_async(stdout=_callback(read_logs_command, yarn_log_lines),
                                         stderr=_callback(read_logs_command, yarn_log_lines))
         return self.write_yarn_logs(yarn_log_lines, tc)
 
-    def write_config_files(self, selector: str, conf_type: HadoopConfigFile, tc: Netty4Testcase, postfix=None) -> List[str]:
+    def write_config_files(self, selector: str, conf_type: HadoopConfigFile, tc: Netty4Testcase, postfix=None) -> List[
+        str]:
         configs = self.cluster.get_config(selector, conf_type)
 
         generated_config_files = []
         for host, conf in configs.items():
             if postfix:
-                config_file_name = CONF_WITH_POSTFIX_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name, postfix=postfix)
+                config_file_name = CONF_WITH_POSTFIX_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name,
+                                                                   postfix=postfix)
             else:
                 config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name, tc=tc.name)
 
@@ -319,7 +326,8 @@ class Netty4RegressionTest(HadesScriptBase):
     def write_yarn_logs(log_lines_dict: Dict[RunnableCommand, List[str]], tc: Netty4Testcase):
         files = []
         for cmd, lines in log_lines_dict.items():
-            yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(tc=tc.name, host=cmd.target.host, role=cmd.target.role_type.name, app="YARN")
+            yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(tc=tc.name, host=cmd.target.host,
+                                                             role=cmd.target.role_type.name, app="YARN")
             files.append(yarn_log_file)
             with open(yarn_log_file, 'w') as f:
                 f.writelines(lines)
@@ -349,3 +357,16 @@ class Netty4RegressionTest(HadesScriptBase):
                 v = str(v)
             default_config.extend_with_args({k: v})
         self.cluster.update_config(selector, default_config, no_backup=True)
+
+    @staticmethod
+    def _print_report(testcase_results: Dict[Netty4Testcase, TestcaseResult]):
+        sep = "=" * 60
+        LOG.info(sep)
+        LOG.info("TESTCASE RESULTS")
+        LOG.info(sep)
+
+        data = []
+        for tc, result in testcase_results.items():
+            data.append([tc.name, result.details])
+        tabulated = tabulate(data, ["TESTCASE", "RESULT"], tablefmt="fancy_grid")
+        LOG.info("\n" + tabulated)
