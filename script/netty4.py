@@ -144,6 +144,9 @@ class Netty4Testcase:
     name: str
     config_changes: Dict[str, str]
 
+    def __hash__(self):
+        return hash(self.name)
+
 
 @dataclass
 class TestcaseResult:
