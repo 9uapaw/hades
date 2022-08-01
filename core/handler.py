@@ -229,3 +229,13 @@ class MainCommandHandler:
         info = cluster.get_rm_api().get_scheduler_info()
         logger.info("Scheduler info")
         logger.info(BlobFormat(info).format())
+
+    def get_latest_running_app(self):
+        cluster = self._create_cluster()
+        cmd = cluster.get_running_apps()
+        running_apps, stderr = cmd.run()
+        if len(running_apps) == 0:
+            raise HadesException("Expected 1 running application. Found no application")
+        current_app_id = running_apps[0]
+        logger.info("Found running application: %s", current_app_id)
+        return current_app_id

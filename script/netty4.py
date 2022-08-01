@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Dict
 from core.cmd import RunnableCommand
 from core.error import ScriptException
+from core.util import FileUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand
 from hadoop.config import HadoopConfig
 from hadoop.xml_config import HadoopConfigFile
@@ -247,7 +248,7 @@ class Netty4RegressionTest(HadesScriptBase):
                                                                  postfix="testcase_conf")
             files_to_compress = [
                                     app_log_file] + yarn_log_files + tc_config_files + initial_config_files + app_log_tar_files
-            self._compress_files(tc, files_to_compress)
+            FileUtils.compress_files(filename=f"testcase_{tc.name}", files=files_to_compress)
             testcase_results[tc] = TestcaseResult("passed")
 
         self._print_report(testcase_results)
@@ -332,15 +333,6 @@ class Netty4RegressionTest(HadesScriptBase):
             with open(yarn_log_file, 'w') as f:
                 f.writelines(lines)
         return files
-
-    @staticmethod
-    def _compress_files(tc: Netty4Testcase, files: List[str]):
-        filename = f"testcase_{tc.name}"
-        cmd = RunnableCommand("tar -cvf {fname}.tar {files}".format(fname=filename, files=" ".join(files)))
-        cmd.run()
-        for file in files:
-            LOG.debug("Removing file: %s", file)
-            os.remove(file)
 
     def _load_default_mapred_configs(self):
         LOG.info("Loading default MR ShuffleHandler configs...")

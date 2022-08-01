@@ -11,6 +11,7 @@ from rich.table import Table
 from rich.tree import Tree
 
 from core.config import Config, ClusterConfig
+from core.util import FileUtils
 from hadoop.action import RoleAction
 from hadoop.app.example import Application
 from hadoop.cluster_type import ClusterType
@@ -245,6 +246,19 @@ def run_script(ctx, script: str):
     """
     handler: MainCommandHandler = ctx.obj['handler']
     handler.run_script(script)
+
+
+@cli.command()
+@click.pass_context
+def get_latest_app_logs(ctx):
+    """
+    Read the logs of the last running app
+    """
+    handler: MainCommandHandler = ctx.obj['handler']
+    app_id = handler.get_latest_running_app()
+    handler.compress_and_download_app_logs(app_id)
+    files = FileUtils.find_files(app_id)
+    FileUtils.compress_files(filename=f"cmd_get_latest_app_logs_{app_id}", files=files)
 
 
 @cli.command()
