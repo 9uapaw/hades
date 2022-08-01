@@ -210,7 +210,7 @@ class Netty4RegressionTest(HadesScriptBase):
         testcases = Netty4RegressionTest.TESTCASES
         if Netty4RegressionTest.TC_LIMIT > 0:
             LOG.info("Limiting testcases to %s", Netty4RegressionTest.TC_LIMIT)
-            testcases = testcases[:2]
+            testcases = testcases[:Netty4RegressionTest.TC_LIMIT]
         no_of_tcs = len(testcases)
         LOG.info("Will run %d testcases", no_of_tcs)
         LOG.info("Testcases: %s", testcases)
