@@ -4,6 +4,7 @@ HADES_REPO_DIR="$HOME/development/other-repos/gandras/hades"
 HADES_WD="$HOME/hades_working_dir"
 
 cd $HADES_REPO_DIR
+pipenv install
 #pipenv shell
 #https://stackoverflow.com/a/57941049/1106893
 source "$(pipenv --venv)/bin/activate"
