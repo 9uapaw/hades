@@ -5,7 +5,7 @@ from typing import List, Type, Dict, Tuple
 
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
-from core.error import CommandExecutionException, MultiCommandExecutionException
+from core.error import CommandExecutionException, MultiCommandExecutionException, HadesException
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
@@ -95,8 +95,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         # /tmp/hadoop-logs/application_1657557929851_0006_DEL_1658219238731/container_1657557929851_0006_01_000001
         # /tmp/hadoop-logs/application_1657557929851_0006_DEL_1658219238731/container_1657557929851_0006_01_000003
-        find_path = "{log_dir}/{app_id_spec}_*".format(app_id_spec=app_id_spec, log_dir=self.APP_LOG_DIR, app_id=app_id)
-        find_cmd = "find {} -print".format(find_path)
+        # OR
+        # /tmp/hadoop-logs/application_1657557929851_0006/container_1657557929851_0006_01_000001/
+        find_cmd = "find {dir} -name {name} -print".format(dir=self.APP_LOG_DIR, name=app_id_spec)
         cmds = []
         for role in args:
             try:
@@ -106,23 +107,20 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                 find_failed_on_hosts.append((role, e))
                 continue
 
-            # only run tar if this was successful
             logger.debug("Find command: '%s' on host '%s', results: %s", find_cmd, role.host, find_results)
-            targz_file_name = f"{app_id}_{role.host}.tar.gz"
-            targz_file_path = f"/tmp/{targz_file_name}"
-            tar_cmd = role.host.create_cmd(
-                "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(find_results)))
-            try:
-                stdout, stderr = tar_cmd.run()
-                logger.debug("stdout: %s", stdout)
-                logger.debug("stderr: %s", stderr)
-            except CommandExecutionException as e:
-                # If any of the tar commands fail, raise the Exception
-                raise e
-            tar_files_created[role] = targz_file_path
+            # only run tar if this was successful and there are files found
+            if not find_results:
+                logger.warning("Find did not return files on host '%s'", role.host)
+                continue
 
+            targz_file_path, targz_file_name = self._create_tar_gz_on_host(app_id, role, find_results)
+            tar_files_created[role] = targz_file_path
             download_command = role.host.download(targz_file_path, local_file=targz_file_name)
             cmds.append(download_command)
+
+        if len(tar_files_created) == 0:
+            hosts = [role.host for role in args]
+            raise HadesException("Failed to compress app logs, no tar file created on any of the hosts: {}".format(hosts))
 
         if no_of_hosts == len(find_failed_on_hosts):
             logger.error("Command '%s' failed on all hosts: %s", find_cmd, [r.host for r in args])
@@ -234,3 +232,19 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         # We don't want core.cmd.RunnableCommand.run to fail if grep's exit code is 1 when no result is found
         cmd = random_selected.host.create_cmd("yarn application -list -appStates FINISHED 2>/dev/null | grep -oe application_[0-9]*_[0-9]* | sort -r || true")
         return cmd
+
+    @staticmethod
+    def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files) -> Tuple[str, str]:
+        targz_file_name = f"{app_id}_{role.host}.tar.gz"
+        targz_file_path = f"/tmp/{targz_file_name}"
+        tar_cmd = role.host.create_cmd(
+            "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(files)))
+        try:
+            stdout, stderr = tar_cmd.run()
+            logger.debug("stdout: %s", stdout)
+            logger.debug("stderr: %s", stderr)
+        except CommandExecutionException as e:
+            # If any of the tar commands fail, raise the Exception
+            raise e
+
+        return targz_file_path, targz_file_name
