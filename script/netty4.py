@@ -294,7 +294,7 @@ class Netty4RegressionTest(HadesScriptBase):
             return []
 
         app_log_tar_files = []
-        cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id, workdir=self.current_tc_dir)
+        cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id, workdir=self.current_tc_dir, compress_dir=True)
         for cmd in cmds:
             cmd.run()
             app_log_tar_files.append(cmd.dest)

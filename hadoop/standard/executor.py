@@ -81,7 +81,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         return cmds
 
-    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.') -> List[DownloadCommand]:
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
         if app_id.startswith("application_"):
             app_id_no = app_id.split("application_")[1]
         else:
@@ -113,7 +113,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                 logger.warning("Find did not return files on host '%s'", role.host)
                 continue
 
-            targz_file_path, targz_file_name = self._create_tar_gz_on_host(app_id, role, find_results)
+            targz_file_path, targz_file_name = self._create_tar_gz_on_host(app_id, role, find_results, compress_dir=compress_dir)
             tar_files_created[role] = targz_file_path
             parent_dir = os.getcwd() if workdir == '.' else workdir
             local_file_path = os.path.join(parent_dir, targz_file_name)
@@ -238,11 +238,22 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return cmd
 
     @staticmethod
-    def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files) -> Tuple[str, str]:
+    def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files, compress_dir: bool = False) -> Tuple[str, str]:
         targz_file_name = f"{app_id}_{role.host}.tar.gz"
         targz_file_path = f"/tmp/{targz_file_name}"
-        tar_cmd = role.host.create_cmd(
-            "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(files)))
+
+        if compress_dir:
+            # Assuming single result directory
+            # Find command: 'find /tmp/hadoop-logs -name application_1658218984267_0087 -print'
+            # results: ['/tmp/hadoop-logs/application_1658218984267_0087']
+            # tar -czvf my_directory.tar.gz -C my_directory .
+            if len(files) > 1:
+                raise HadesException("Tried to compress directory with tar and assumed single result file set. Current files: {}".format(files))
+            tar_cmd = role.host.create_cmd(
+                "tar -cvf {fname} -C {dir} .".format(fname=targz_file_path, dir=files[0]))
+        else:
+            tar_cmd = role.host.create_cmd(
+                "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(files)))
         try:
             stdout, stderr = tar_cmd.run()
             logger.debug("stdout: %s", stdout)
