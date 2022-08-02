@@ -278,7 +278,7 @@ class Netty4RegressionTest(HadesScriptBase):
                                 tc_config_files + \
                                 initial_config_files + \
                                 app_log_tar_files
-            tc_no = f"0_{idx + 1}" if idx < 9 else str(idx + 1)
+            tc_no = f"0_{str(idx + 1)}" if idx < 9 else str(idx + 1)
             tc_targz_filename = os.path.join(self.workdir, f"testcase_{tc_no}_{self.tc.name}.tar.gz")
 
             if self.using_custom_workdir:
