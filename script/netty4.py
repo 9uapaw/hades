@@ -231,7 +231,7 @@ class Netty4RegressionTest(HadesScriptBase):
             .with_configs(SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT, ["15", "25"])
             .generate_testcases()
     ]
-    # TODO replace sleep job with something else
+    # TODO replace sleep job with something else or run multiple apps
     APP = MapReduceApp(cmd='sleep -m 1 -r 1 -mt 10 -rt 10')
 
     def run(self):
@@ -288,6 +288,7 @@ class Netty4RegressionTest(HadesScriptBase):
                 raise HadesException("Expected non-empty app log tar files list!")
             if not yarn_log_files:
                 raise HadesException("Expected non-empty YARN log files list!")
+            # TODO Ensure if all RM / NMs are collected (all roles!)
             files_to_compress = [testcase_results[self.tc].app_log_file] + \
                                 tc_config_files + \
                                 initial_config_files + \
