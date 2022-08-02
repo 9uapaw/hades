@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import logging
+import os
 import time
 from os import path
 from typing import List, Tuple
@@ -8,18 +9,16 @@ from typing import List, Tuple
 import click
 from rich import print as rich_print, box
 from rich.table import Table
-from rich.tree import Tree
 
 from core.config import Config, ClusterConfig
-from core.util import FileUtils
-from hadoop.action import RoleAction
-from hadoop.app.example import Application
-from hadoop.cluster_type import ClusterType
 from core.context import HadesContext
 from core.error import HadesException, ConfigSetupException, CliArgException
 from core.handler import MainCommandHandler
+from core.util import FileUtils, LoggingUtils, DateUtils
+from hadoop.action import RoleAction
+from hadoop.app.example import Application
+from hadoop.cluster_type import ClusterType
 from hadoop.xml_config import HadoopConfigFile
-from hadoop.yarn.rm_api import RmApi
 from hadoop.yarn.yarn_mutation import MutationRequest
 from hadoop_dir.module import HadoopModule
 
@@ -41,6 +40,7 @@ def cli(ctx, config: str, cluster: str, debug: bool, prefix: str):
     sh_log = logging.getLogger("sh")
     sh_log.setLevel(logging.CRITICAL)
     ctx.ensure_object(dict)
+    ctx.obj['loglevel'] = level
 
     logger.info("Invoked command {}".format(ctx.invoked_subcommand))
 
@@ -240,12 +240,30 @@ def run_app(ctx, app: str, cmd: str = None, queue: str = None):
 @cli.command()
 @click.pass_context
 @click.argument('script')
-def run_script(ctx, script: str):
+@click.option('-s', '--session-dir', is_flag=True, help='Whether to use session dir to save output files.')
+def run_script(ctx, script: str, session_dir: bool = False):
     """
     Runs the selected Hades script file in script/ directory
     """
     handler: MainCommandHandler = ctx.obj['handler']
-    handler.run_script(script)
+
+    if session_dir:
+        workdir = os.path.join(os.getcwd(), f"session-{DateUtils.get_current_datetime()}")
+        os.mkdir(workdir)
+        logger.debug("Session dir: %s", workdir)
+
+        level = ctx.obj['loglevel']
+        root_logger = logging.getLogger()
+        handlers = root_logger.handlers
+        file_handler = LoggingUtils.create_file_handler(workdir, level, fname="hades-session")
+        # TODO File logger formatter is still not the same as CLI's
+        file_handler.formatter = None
+        logger.info("Logging to file: %s", file_handler.baseFilename)
+        handlers.append(file_handler)
+        logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=level, handlers=handlers)
+    else:
+        workdir = os.getcwd()
+    handler.run_script(script, workdir=workdir)
 
 
 @cli.command()

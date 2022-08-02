@@ -13,5 +13,4 @@ source "$(pipenv --venv)/bin/activate"
 # pipenv from here
 cd $HADES_WD
 set -x
-echo "Will log hades output to file: $HADES_WD/hades-netty4.log"
-python3 -u $HADES_REPO_DIR/cli.py -d run-script netty4 | tee $HADES_WD/hades-netty4.log
+python3 -u $HADES_REPO_DIR/cli.py -d run-script -s netty4

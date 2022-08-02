@@ -101,6 +101,7 @@ class RemoteRunnableCommand(RunnableCommand):
 
 
 class DownloadCommand(RunnableCommand):
-    def __init__(self, cmd: str, local_file, work_dir='.', target: Optional['HadoopRoleInstance'] = None):
+    def __init__(self, cmd: str, dest: str, local_file: str, work_dir='.', target: Optional['HadoopRoleInstance'] = None):
         super().__init__(cmd, work_dir=work_dir, target=target)
+        self.dest = dest
         self.local_file = local_file

@@ -205,7 +205,7 @@ class MainCommandHandler:
         hadoop_dir.add_modules(*modules, with_jar=True)
         cluster.replace_module_jars(selector, hadoop_dir)
 
-    def run_script(self, name: str):
+    def run_script(self, name: str, workdir: str):
         mod = __import__('script.{}'.format(name))
         script_module = getattr(mod, name, None)
         if not script_module:
@@ -221,7 +221,7 @@ class MainCommandHandler:
             raise HadesException("No subclass of HadesScriptBase found in file {}".format(name))
 
         logger.info("Running script {} in file {}".format(found_cls.__name__, name))
-        script = found_cls(self._create_cluster())
+        script = found_cls(self._create_cluster(), workdir=workdir)
         script.run()
 
     def print_scheduler_info(self):

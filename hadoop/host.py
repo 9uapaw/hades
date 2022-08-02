@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from abc import ABC
 from pathlib import PurePath
@@ -27,7 +28,7 @@ class HadoopHostInstance(ABC):
     def upload(self, source: str, dest: str) -> RunnableCommand:
         raise NotImplementedError()
 
-    def download(self, source: str, dest: str = None, local_file: str = None) -> DownloadCommand:
+    def download(self, source: str, dest: str = None) -> DownloadCommand:
         raise NotImplementedError()
 
     def find_file(self, dir: str, search: str) -> RunnableCommand:
@@ -46,12 +47,16 @@ class RemoteHostInstance(HadoopHostInstance):
     def upload(self, source: str, dest: str) -> RunnableCommand:
         return RunnableCommand("scp {source} {user}@{host}:{dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest), target=self.role)
 
-    def download(self, source: str, dest: str = None, local_file: str = None) -> RunnableCommand:
+    def download(self, source: str, dest: str = None) -> RunnableCommand:
         if not dest:
-            dest = "."
+            dest = os.getcwd()
+        if os.path.isdir(dest):
+            dest_file = os.path.basename(source)
+        else:
+            dest_file = os.path.basename(dest)
         cmd = "scp {user}@{host}:{source} {dest}".format(source=source, user=self.user,
                                                          host=self.get_address(), dest=dest)
-        return DownloadCommand(cmd, local_file=local_file, target=self.role)
+        return DownloadCommand(cmd, target=self.role, dest=dest, local_file=dest_file)
 
     def make_backup(self, dest: str) -> RunnableCommand:
         dest = PurePath(dest)

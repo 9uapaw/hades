@@ -94,25 +94,27 @@ class HadockExecutor(HadoopOperationExecutor):
 
         return cmd
 
-    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False):
+    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
         config_name, config_ext = config.file.split(".")
 
         for role in args:
             logger.info("Setting config {} on {}".format(config.file, role.get_colorized_output()))
             local_file = "{config}-{container}-{time}.{ext}".format(
                 container=role.host, config=config_name, time=int(time.time()), ext=config_ext)
+            parent_dir = os.getcwd() if workdir == "." else workdir
+            local_file_path = os.path.join(parent_dir, local_file)
             config_file_path = "/etc/hadoop/{}".format(config.file)
-            role.host.download(config_file_path, local_file).run()
+            role.host.download(config_file_path, local_file_path).run()
 
-            config.xml = local_file
+            config.xml = local_file_path
             config.merge()
             config.commit()
 
             role.host.upload(config.file, config_file_path).run()
 
             if no_backup:
-                logger.info("Backup is turned off. Deleting file {}".format(local_file))
-                os.remove(local_file)
+                logger.info("Backup is turned off. Deleting file {}".format(local_file_path))
+                os.remove(local_file_path)
 
     def restart_roles(self, *args: HadoopRoleInstance):
         cmds = []

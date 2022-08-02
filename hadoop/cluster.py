@@ -71,12 +71,12 @@ class HadoopCluster:
 
         return cmds
 
-    def compress_and_download_app_logs(self, selector: str, app_id: str) -> List[DownloadCommand]:
+    def compress_and_download_app_logs(self, selector: str, app_id: str, workdir: str = '.') -> List[DownloadCommand]:
         roles = self.select_roles(selector)
         if not roles:
             logger.warning("No roles found by selector '{}'".format(selector))
 
-        cmds = self._executor.compress_app_logs(*roles, app_id=app_id)
+        cmds = self._executor.compress_app_logs(*roles, app_id=app_id, workdir=workdir)
         return cmds
 
     def get_status(self) -> List[HadoopClusterStatusEntry]:
@@ -92,9 +92,9 @@ class HadoopCluster:
         selector_expr = hadoop.selector.HadoopRoleSelector(self.get_services())
         return selector_expr.select(selector)
 
-    def update_config(self, selector: str, config: HadoopConfig, no_backup: bool = False):
+    def update_config(self, selector: str, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
         selected = self.select_roles(selector)
-        self._executor.update_config(*selected, config=config, no_backup=no_backup)
+        self._executor.update_config(*selected, config=config, no_backup=no_backup, workdir=workdir)
 
     def restart_roles(self, selector: str) -> List[RunnableCommand]:
         selected = self.select_roles(selector)

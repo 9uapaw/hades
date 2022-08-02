@@ -81,7 +81,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         return cmds
 
-    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str) -> List[DownloadCommand]:
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.') -> List[DownloadCommand]:
         if app_id.startswith("application_"):
             app_id_no = app_id.split("application_")[1]
         else:
@@ -115,7 +115,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
             targz_file_path, targz_file_name = self._create_tar_gz_on_host(app_id, role, find_results)
             tar_files_created[role] = targz_file_path
-            download_command = role.host.download(targz_file_path, local_file=targz_file_name)
+            parent_dir = os.getcwd() if workdir == '.' else workdir
+            local_file_path = os.path.join(parent_dir, targz_file_name)
+            download_command = role.host.download(source=targz_file_path, dest=local_file_path)
             cmds.append(download_command)
 
         if len(tar_files_created) == 0:
@@ -147,25 +149,27 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         return cmd
 
-    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False):
+    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
         config_name, config_ext = config.file.split(".")
 
         for role in args:
             logger.info("Setting config {} on {}".format(config.file, role.get_colorized_output()))
             local_file = "{config}-{host}-{time}.{ext}".format(
                 host=role.host, config=config_name, time=int(time.time()), ext=config_ext)
+            parent_dir = os.getcwd() if workdir == "." else workdir
+            local_file_path = os.path.join(parent_dir, local_file)
             config_file_path = self.CONFIG_FILE_PATH.format(config.file)
-            role.host.download(config_file_path, local_file).run()
+            role.host.download(config_file_path, local_file_path).run()
 
-            config.xml = local_file
+            config.xml = local_file_path
             config.merge()
             config.commit()
 
             role.host.upload(config.file, config_file_path).run()
 
             if no_backup:
-                logger.info("Backup is turned off. Deleting file {}".format(local_file))
-                os.remove(local_file)
+                logger.info("Backup is turned off. Deleting file {}".format(local_file_path))
+                os.remove(local_file_path)
 
     def restart_roles(self, *args: HadoopRoleInstance) -> List[RunnableCommand]:
         return [role.host.create_cmd("yarn --daemon stop {role} && yarn --daemon start {role}".format(

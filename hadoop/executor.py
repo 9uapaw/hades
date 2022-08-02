@@ -28,7 +28,7 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str) -> List[DownloadCommand]:
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.') -> List[DownloadCommand]:
         raise NotImplementedError()
 
     @abstractmethod
@@ -40,7 +40,7 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def update_config(self, *args: 'HadoopRoleInstance', config: HadoopConfig, no_backup: bool):
+    def update_config(self, *args: 'HadoopRoleInstance', config: HadoopConfig, no_backup: bool, workdir: str = "."):
         raise NotImplementedError()
 
     @abstractmethod

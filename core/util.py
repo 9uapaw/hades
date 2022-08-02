@@ -1,6 +1,8 @@
-import logging
+import datetime
 import os
+import shutil
 import textwrap
+from logging.handlers import TimedRotatingFileHandler
 from typing import Callable, List
 
 from core.cmd import RunnableCommand
@@ -31,11 +33,17 @@ def generate_role_output(logger: logging.Logger, target: HadoopRoleInstance, gre
 class FileUtils:
     @staticmethod
     def compress_files(filename: str, files: List[str]):
-        cmd = RunnableCommand("tar -cvf {fname}.tar {files}".format(fname=filename, files=" ".join(files)))
+        cmd = RunnableCommand("tar -cvf {fname} {files}".format(fname=filename, files=" ".join(files)))
         cmd.run()
         for file in files:
             LOG.debug("Removing file: %s", file)
             os.remove(file)
+
+    @staticmethod
+    def compress_dir(filename: str, dir: str):
+        cmd = RunnableCommand("tar -cvf {fname} -C {dir} .".format(fname=filename, dir=dir))
+        cmd.run()
+        shutil.rmtree(dir, ignore_errors=True)
 
     @staticmethod
     def find_files(pattern: str, dir: str = '.'):
@@ -46,3 +54,28 @@ class FileUtils:
             LOG.warning(find_cmd.stderr)
             return ""
         return find_cmd.stdout
+
+
+class LoggingUtils:
+    @staticmethod
+    def create_file_handler(log_file_dir, level: int, fname: str = "hades"):
+        file_name = f"{fname}.log"
+        log_file_path = os.path.join(log_file_dir, file_name)
+        fh = TimedRotatingFileHandler(log_file_path, when="midnight")
+        fh.suffix = "%Y_%m_%d.log"
+        fh.setLevel(level)
+        return fh
+
+
+class DateUtils:
+    @staticmethod
+    def get_current_datetime(fmt="%Y%m%d_%H%M%S"):
+        return DateUtils.now_formatted(fmt)
+
+    @classmethod
+    def now(cls):
+        return datetime.datetime.now()
+
+    @classmethod
+    def now_formatted(cls, fmt):
+        return DateUtils.now().strftime(fmt)
