@@ -41,6 +41,9 @@ class FileUtils:
 
     @staticmethod
     def compress_dir(filename: str, dir: str):
+        files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(dir) for f in filenames]
+        LOG.debug("Compressing dir: %s", dir)
+        LOG.debug("Files: %s", files)
         cmd = RunnableCommand("tar -cvf {fname} -C {dir} .".format(fname=filename, dir=dir))
         cmd.run()
         shutil.rmtree(dir, ignore_errors=True)
