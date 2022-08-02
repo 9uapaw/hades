@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, List, Dict
 from core.cmd import RunnableCommand
-from core.error import ScriptException, HadesCommandTimedOutException
+from core.error import ScriptException, HadesCommandTimedOutException, HadesException
 from core.util import FileUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand
 from hadoop.cluster import HadoopCluster
@@ -109,7 +109,7 @@ def _callback(cmd: RunnableCommand, logs_dict: Dict[RunnableCommand, List[str]])
         if cmd not in logs_dict or not logs_dict[cmd]:
             logs_dict[cmd] = []
         logs_dict[cmd].append(YARN_LOG_FORMAT.format(name=cmd.target.host, log=line))
-
+        # LOG.debug("****logs_dict: %s", logs_dict)
     return _cb
 
 
@@ -180,6 +180,7 @@ class Netty4RegressionTest(HadesScriptBase):
         self.tc = None
         self.current_tc_dir = None
 
+    # TODO remove limit
     TC_LIMIT = 1
 
     DEFAULT_CONFIGS = {
@@ -230,6 +231,7 @@ class Netty4RegressionTest(HadesScriptBase):
             .with_configs(SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT, ["15", "25"])
             .generate_testcases()
     ]
+    # TODO replace sleep job with something else
     APP = MapReduceApp(cmd='sleep -m 1 -r 1 -mt 10 -rt 10')
 
     def run(self):
@@ -261,7 +263,8 @@ class Netty4RegressionTest(HadesScriptBase):
             self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True, workdir=self.workdir)
             self._restart_nms()
 
-            yarn_log_files: List[str] = self._read_logs_and_write_to_files("Yarn")
+            yarn_log_lines = {}
+            self._read_logs_and_write_to_files("Yarn", yarn_log_lines)
             testcase_results[self.tc] = self.run_app_and_collect_logs_to_file(self.APP)
 
             if testcase_results[self.tc].type == TestcaseResultType.TIMEOUT:
@@ -270,14 +273,26 @@ class Netty4RegressionTest(HadesScriptBase):
             else:
                 LOG.debug("Getting finished app id as testcase passed")
                 app_id = self._get_latest_finished_app()
+
+            # Now it's okay to write the YARN log files as the app is either finished or timed out
+            yarn_log_files: List[str] = self.write_yarn_logs(yarn_log_lines)
             app_log_tar_files = self._get_app_log_tar_files(app_id)
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE,
                                                                  dir=CONF_DIR_TC)
+
+            if not tc_config_files:
+                raise HadesException("Expected non-empty testcase config files list!")
+            if not initial_config_files:
+                raise HadesException("Expected non-empty initial config files list!")
+            if not app_log_tar_files:
+                raise HadesException("Expected non-empty app log tar files list!")
+            if not yarn_log_files:
+                raise HadesException("Expected non-empty YARN log files list!")
             files_to_compress = [testcase_results[self.tc].app_log_file] + \
-                                yarn_log_files + \
                                 tc_config_files + \
                                 initial_config_files + \
-                                app_log_tar_files
+                                app_log_tar_files + \
+                                yarn_log_files
             tc_no = f"0_{str(idx + 1)}" if idx < 9 else str(idx + 1)
             tc_targz_filename = os.path.join(self.workdir, f"testcase_{tc_no}_{self.tc.name}.tar.gz")
 
@@ -334,9 +349,8 @@ class Netty4RegressionTest(HadesScriptBase):
         for h in handlers:
             h.wait()
 
-    def _read_logs_and_write_to_files(self, selector):
+    def _read_logs_and_write_to_files(self, selector, yarn_log_lines):
         LOG.debug("Reading YARN logs from cluster...")
-        yarn_log_lines = {}
         log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=selector)
         LOG.debug("YARN log commands: %s", log_commands)
         for read_logs_command in log_commands:
@@ -344,7 +358,6 @@ class Netty4RegressionTest(HadesScriptBase):
                       read_logs_command.target.host)
             read_logs_command.run_async(stdout=_callback(read_logs_command, yarn_log_lines),
                                         stderr=_callback(read_logs_command, yarn_log_lines))
-        return self.write_yarn_logs(yarn_log_lines)
 
     def write_config_files(self, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[
         str]:
@@ -392,6 +405,8 @@ class Netty4RegressionTest(HadesScriptBase):
 
     def write_yarn_logs(self, log_lines_dict: Dict[RunnableCommand, List[str]]):
         files = []
+        if not log_lines_dict:
+            raise HadesException("YARN log lines dictionary is empty!")
         for cmd, lines in log_lines_dict.items():
             yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(host=cmd.target.host,
                                                              role=cmd.target.role_type.name, app="YARN")
