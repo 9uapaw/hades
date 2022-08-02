@@ -285,9 +285,7 @@ class Netty4RegressionTest(HadesScriptBase):
                 FileUtils.compress_dir(filename=tc_targz_filename, dir=self.current_tc_dir)
             else:
                 FileUtils.compress_files(filename=tc_targz_filename, files=files_to_compress)
-            os.rmdir(os.path.join(self.current_tc_dir, CONF_DIR_INITIAL))
-            os.rmdir(os.path.join(self.current_tc_dir, CONF_DIR_TC))
-            os.rmdir(self.current_tc_dir)
+            FileUtils.rm_dir(self.current_tc_dir)
 
         self._print_report(testcase_results)
 

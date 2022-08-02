@@ -55,6 +55,10 @@ class FileUtils:
             return ""
         return find_cmd.stdout
 
+    @staticmethod
+    def rm_dir(d):
+        shutil.rmtree(d, ignore_errors=True)
+
 
 class LoggingUtils:
     @staticmethod
