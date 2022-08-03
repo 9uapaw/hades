@@ -196,8 +196,7 @@ class Netty4RegressionTest(HadesScriptBase):
         self.tc = None
         self.current_tc_dir = None
 
-    # TODO remove limit
-    TC_LIMIT = 1
+    TC_LIMIT = 999
 
     DEFAULT_CONFIGS = {
         SHUFFLE_MANAGE_OS_CACHE: SHUFFLE_MANAGE_OS_CACHE_DEFAULT,
