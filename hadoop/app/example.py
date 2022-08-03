@@ -32,13 +32,21 @@ class DistributedShellApp(ApplicationCommand):
         return cmd
 
 
+class MapReduceAppType(Enum):
+    SLEEP = "sleep"
+    PI = "pi"
+    LOADGEN = "loadgen"
+    RANDOM_WRITER = "randomwriter"
+    TEST_MAPRED_SORT = "testmapredsort"
+
+
 class MapReduceApp(ApplicationCommand):
     MAPREDUCE_JAR = "{path}/*hadoop-mapreduce-client-jobclient-*-tests.jar"
     YARN_CMD = "yarn jar {jar} {cmd}"
 
-    def __init__(self, name: str, path: str = None, cmd: str = None, queue: str = None):
+    def __init__(self, mr_app_type: MapReduceAppType, path: str = None, cmd: str = None, queue: str = None):
         super().__init__(path, queue)
-        self.name = name
+        self.name = mr_app_type.value
         self.cmd = cmd or 'sleep -m 1 -r 1 -mt 1 -rt 1'
 
     def build(self):
