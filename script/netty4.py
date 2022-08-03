@@ -21,9 +21,12 @@ CONF_DIR_TC = "testcase_config"
 CONF_DIR_INITIAL = "initial_config"
 APP_ID_NOT_AVAILABLE = "N/A"
 
-SLEEP_JOB = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10')
-PI_JOB = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000')
-LOADGEN_JOB = MapReduceApp(MapReduceAppType.LOADGEN, cmd=f"loadgen -m 200 -r 150 -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text")
+DEFAULT_TIMEOUT = 30
+TIMEOUT_MSG_TEMPLATE = "Timed out after {} seconds"
+
+SLEEP_JOB = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=DEFAULT_TIMEOUT)
+PI_JOB = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000', timeout=DEFAULT_TIMEOUT)
+LOADGEN_JOB = MapReduceApp(MapReduceAppType.LOADGEN, cmd=f"loadgen -m 200 -r 150 -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text", timeout=300)
 
 SORT_INPUT_DIR = "/user/systest/sortInputDir"
 SORT_OUTPUT_DIR = "/user/systest/sortOutputDir"
@@ -116,8 +119,7 @@ APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
 YARN_LOG_FORMAT = "{name} - {log}"
 CONF_FORMAT = "{host}_{conf}.xml"
-DEFAULT_TIMEOUT = 30
-TIMEOUT_MSG = "Timed out after {} seconds".format(DEFAULT_TIMEOUT)
+
 
 
 def _callback(cmd: RunnableCommand, logs_dict: Dict[RunnableCommand, List[str]]) -> Callable:
@@ -429,7 +431,7 @@ class Netty4RegressionTest(HadesScriptBase):
 
     def run_app_and_collect_logs_to_file(self, app: ApplicationCommand) -> TestcaseResult:
         app_log = []
-        timeout = False
+        timed_out = False
         with self.overwrite_config(cmd_prefix="sudo -u systest"):
             app_command = self.cluster.run_app(app, selector=NODEMANAGER_SELECTOR)
 
@@ -437,7 +439,7 @@ class Netty4RegressionTest(HadesScriptBase):
         try:
             app_command.run_async(block=True, stderr=lambda line: app_log.append(line), timeout=DEFAULT_TIMEOUT)
         except HadesCommandTimedOutException:
-            timeout = True
+            timed_out = True
             LOG.error("Command timed out: %s", app_command)
 
         app_log_file = APP_LOG_FILE_NAME_FORMAT.format(app="MRPI")
@@ -446,8 +448,8 @@ class Netty4RegressionTest(HadesScriptBase):
         with open(file_path, 'w') as f:
             f.writelines(app_log)
 
-        if timeout:
-            return TestcaseResult(TestcaseResultType.TIMEOUT, app_command, file_path, details=TIMEOUT_MSG)
+        if timed_out:
+            return TestcaseResult(TestcaseResultType.TIMEOUT, app_command, file_path, details=TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds()))
         return TestcaseResult(TestcaseResultType.PASSED, app_command, file_path)
 
     def write_yarn_logs(self, log_lines_dict: Dict[RunnableCommand, List[str]]):
