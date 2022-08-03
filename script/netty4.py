@@ -15,14 +15,20 @@ from script.base import HadesScriptBase
 from tabulate import tabulate
 
 import logging
+LOG = logging.getLogger(__name__)
 
 CONF_DIR_TC = "testcase_config"
-
 CONF_DIR_INITIAL = "initial_config"
-
 APP_ID_NOT_AVAILABLE = "N/A"
 
-LOG = logging.getLogger(__name__)
+SLEEP_JOB = MapReduceApp("sleep", cmd='sleep -m 1 -r 1 -mt 10 -rt 10')
+PI_JOB = MapReduceApp("pi", cmd='pi 1 1000')
+MR_APPS: Dict[str, MapReduceApp] = {
+    "sleep": SLEEP_JOB,
+    "pi": PI_JOB
+}
+DEFAULT_APPS = ["sleep", "pi"]
+
 
 NODEMANAGER_SELECTOR = "Yarn/NodeManager"
 NODE_TO_RUN_ON = "type=Yarn/name=nodemanager2"
@@ -118,6 +124,7 @@ class Netty4TestcasesBuilder:
     def __init__(self, name):
         self.configs: Dict[str, List[str]] = {}
         self.name = name
+        self.apps: List[str] = []
 
     def with_config(self, conf_key: str, value: str):
         if conf_key not in self.configs:
@@ -132,7 +139,13 @@ class Netty4TestcasesBuilder:
         self.configs[conf_key] = values
         return self
 
+    def with_apps(self, *apps):
+        self.apps = list(*apps)
+        return self
+
     def generate_testcases(self):
+        if not self.apps:
+            raise ValueError("No apps defined for testcase: {}".format(self.name))
         testcases = []
         conf_key_prefixed_list = []
         for conf_key, values in self.configs.items():
@@ -145,17 +158,19 @@ class Netty4TestcasesBuilder:
                 conf_name, conf_value = s.split("_")
                 conf_changes[conf_name] = conf_value
                 tc_counter += 1
-            testcases.append(Netty4Testcase(self._generate_tc_name(tc_counter), conf_changes))
+            for app_name in self.apps:
+                testcases.append(Netty4Testcase(self._generate_tc_name(tc_counter, app_name), conf_changes, MR_APPS[app_name]))
         return testcases
 
-    def _generate_tc_name(self, tc_counter):
-        return self.name + '_' + str(tc_counter)
+    def _generate_tc_name(self, tc_counter, app_name):
+        return f"{self.name}_{str(tc_counter)}_{app_name}"
 
 
 @dataclass
 class Netty4Testcase:
     name: str
     config_changes: Dict[str, str]
+    app: MapReduceApp
 
     def __hash__(self):
         return hash(self.name)
@@ -214,35 +229,40 @@ class Netty4RegressionTest(HadesScriptBase):
     TESTCASES = [
         *Netty4TestcasesBuilder("shuffle_max_connections")
             .with_configs(SHUFFLE_MAX_CONNECTIONS, ["2", "5"])
+            .with_apps(DEFAULT_APPS)
             .generate_testcases(),
         *Netty4TestcasesBuilder("shuffle_max_threads")
             .with_configs(SHUFFLE_MAX_THREADS, ["3", "6"])
+            .with_apps(DEFAULT_APPS)
             .generate_testcases(),
         *Netty4TestcasesBuilder("shuffle_max_open_files")
             .with_configs(SHUFFLE_MAX_SESSION_OPEN_FILES, ["2", "5"])
+            .with_apps(DEFAULT_APPS)
             .generate_testcases(),
         *Netty4TestcasesBuilder("shuffle_listen_queue_size")
             .with_configs(SHUFFLE_LISTEN_QUEUE_SIZE, ["10", "50"])
+            .with_apps(DEFAULT_APPS)
             .generate_testcases(),
         *Netty4TestcasesBuilder("shuffle_ssl_enabled")
             .with_configs(SHUFFLE_SSL_ENABLED, ["true"])
+            .with_apps(DEFAULT_APPS)
             .generate_testcases(),
         *Netty4TestcasesBuilder("keepalive")
             .with_config(SHUFFLE_CONNECTION_KEEPALIVE_ENABLE, "true")
             .with_configs(SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT, ["15", "25"])
+            .with_apps(DEFAULT_APPS)
             .generate_testcases()
     ]
-    # TODO replace sleep job with something else or run multiple apps
-    APP = MapReduceApp(cmd='sleep -m 1 -r 1 -mt 10 -rt 10')
 
     def run(self):
         testcases = Netty4RegressionTest.TESTCASES
+        LOG.info("ALL Testcases: %s", testcases)
+
         if Netty4RegressionTest.TC_LIMIT > 0:
             LOG.info("Limiting testcases to %s", Netty4RegressionTest.TC_LIMIT)
             testcases = testcases[:Netty4RegressionTest.TC_LIMIT]
         no_of_tcs = len(testcases)
         LOG.info("Will run %d testcases", no_of_tcs)
-        LOG.info("Testcases: %s", testcases)
 
         self._load_default_yarn_site_configs()
 
@@ -265,7 +285,7 @@ class Netty4RegressionTest(HadesScriptBase):
 
             yarn_log_lines = {}
             roles, log_commands = self._read_logs_into_dict("Yarn", yarn_log_lines)
-            testcase_results[self.tc] = self.run_app_and_collect_logs_to_file(self.APP)
+            testcase_results[self.tc] = self.run_app_and_collect_logs_to_file(self.tc.app)
 
             if testcase_results[self.tc].type == TestcaseResultType.TIMEOUT:
                 LOG.debug("Getting running app id as testcase timed out")

@@ -36,8 +36,9 @@ class MapReduceApp(ApplicationCommand):
     MAPREDUCE_JAR = "{path}/*hadoop-mapreduce-client-jobclient-*-tests.jar"
     YARN_CMD = "yarn jar {jar} {cmd}"
 
-    def __init__(self, path: str = None, cmd: str = None, queue: str = None):
+    def __init__(self, name: str, path: str = None, cmd: str = None, queue: str = None):
         super().__init__(path, queue)
+        self.name = name
         self.cmd = cmd or 'sleep -m 1 -r 1 -mt 1 -rt 1'
 
     def build(self):
@@ -47,6 +48,12 @@ class MapReduceApp(ApplicationCommand):
         cmd = self.YARN_CMD.format(jar=self.MAPREDUCE_JAR.format(path=self.path), cmd=self.cmd)
 
         return cmd
+
+    def __str__(self):
+        return "{}: name: {}, command: {}".format(self.__class__.__name__, self.name, self.cmd)
+
+    def __repr__(self):
+        return str(self)
 
 
 class Application(Enum):
