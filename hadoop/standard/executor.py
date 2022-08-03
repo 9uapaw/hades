@@ -238,7 +238,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return cmd
 
     @staticmethod
-    def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files, compress_dir: bool = False) -> Tuple[str, str]:
+    def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files,
+                               compress_dir: bool = False) -> Tuple[str, str]:
+        logger.info("Creating targz of application logs %s on host %s", app_id, role.host.address)
         targz_file_name = f"{app_id}_{role.host}.tar.gz"
         targz_file_path = f"/tmp/{targz_file_name}"
 
@@ -249,8 +251,12 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             # tar -czvf my_directory.tar.gz -C my_directory .
             if len(files) > 1:
                 raise HadesException("Tried to compress directory with tar and assumed single result file set. Current files: {}".format(files))
+
+            app_data_dir = f"{app_id}_{role.host.address}"
+            target_dir = f"/tmp/{app_data_dir}"
+            role.host.create_cmd(f"rm -rf {target_dir} && mkdir {target_dir} && cp -R {files[0]} {target_dir}").run()
             tar_cmd = role.host.create_cmd(
-                "tar -cvf {fname} -C {dir} .".format(fname=targz_file_path, dir=files[0]))
+                "tar -cvf {fname} -C {parent_dir} {dir}".format(fname=targz_file_path, parent_dir="/tmp", dir=f"./{app_data_dir}"))
         else:
             tar_cmd = role.host.create_cmd(
                 "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(files)))

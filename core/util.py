@@ -62,6 +62,20 @@ class FileUtils:
     def rm_dir(d):
         shutil.rmtree(d, ignore_errors=True)
 
+    @staticmethod
+    def copy_dir_to_temp_dir(child_dir: str, src_dir: str) -> str:
+        if not os.path.isdir(src_dir):
+            raise ValueError("Expected a source dir, got: {}".format(src_dir))
+        dest_dir = os.path.join("/tmp", child_dir)
+        if os.path.exists(dest_dir):
+            FileUtils.rm_dir(dest_dir)
+        os.mkdir(dest_dir)
+
+        LOG.debug("Copying %s -> %s", src_dir, dest_dir)
+        shutil.copytree(src_dir, dest_dir)
+
+        return dest_dir
+
 
 class LoggingUtils:
     @staticmethod
