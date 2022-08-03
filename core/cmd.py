@@ -20,7 +20,7 @@ class RunnableCommand:
     _cmd_prefix = ""
 
     def __key(self):
-        return self.cmd, self.work_dir, self._cmd_prefix
+        return self.cmd, self.work_dir, self._cmd_prefix, self.target
 
     def __hash__(self):
         return hash(self.__key())

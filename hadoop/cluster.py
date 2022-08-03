@@ -66,6 +66,7 @@ class HadoopCluster:
         roles = self.select_roles(selector)
         if not roles:
             logger.warning("No roles found by selector '{}'".format(selector))
+        logger.debug("Selected roles for read logs command: %s", roles)
 
         cmds = self._executor.read_log(*roles, follow=follow, tail=tail, download=download)
 
