@@ -84,7 +84,7 @@ class HadoopCluster:
         return self._executor.get_cluster_status(self.name)
 
     def run_app(self, application: ApplicationCommand, selector: str = "") -> RunnableCommand:
-        logger.info("Running app {}".format(application.__class__.__name__))
+        logger.info("Running app %s", application)
         random_selected = self._select_random_role(selector)
 
         return self._executor.run_app(random_selected, application)

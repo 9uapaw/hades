@@ -274,10 +274,6 @@ class Netty4RegressionTest(HadesScriptBase):
 
         self._load_default_yarn_site_configs()
 
-        # Check if input needs to be generated
-
-        # https://gist.github.com/keyki/11337f32467fa2680dfe
-
         testcase_results: Dict[Netty4Testcase, TestcaseResult] = {}
         for idx, self.tc in enumerate(testcases):
             self.current_tc_dir = os.path.join(self.workdir, self.tc.name)
@@ -288,7 +284,7 @@ class Netty4RegressionTest(HadesScriptBase):
             config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
             initial_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR,
                                                                       HadoopConfigFile.MAPRED_SITE, dir=CONF_DIR_INITIAL)
-            LOG.info("[%d\\%d] Running testcase: %s", idx + 1, no_of_tcs, self.tc)
+            LOG.info("[%d / %d] Running testcase: %s", idx + 1, no_of_tcs, self.tc)
             for config_key, config_val in self.tc.config_changes.items():
                 config.extend_with_args({config_key: config_val})
 
