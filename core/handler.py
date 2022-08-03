@@ -125,8 +125,7 @@ class MainCommandHandler:
     def compress_and_download_app_logs(self, app_id: str):
         cluster = self._create_cluster()
         cmds = cluster.compress_and_download_app_logs("Yarn/NodeManager", app_id)
-        # TODO
-        # NOTE: Cannot use cmd.run_async with download command (scp) as it doesn't recognize when the command ends.
+        # TODO Cannot use cmd.run_async with download command (scp) as it doesn't recognize when the command ends.
         for cmd in cmds:
             cmd.run()
 

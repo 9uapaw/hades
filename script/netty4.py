@@ -2,13 +2,14 @@ import itertools
 import os.path
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, List, Dict
+from typing import Callable, List, Dict, Tuple
 from core.cmd import RunnableCommand
 from core.error import ScriptException, HadesCommandTimedOutException, HadesException
 from core.util import FileUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand
 from hadoop.cluster import HadoopCluster
 from hadoop.config import HadoopConfig
+from hadoop.role import HadoopRoleInstance
 from hadoop.xml_config import HadoopConfigFile
 from script.base import HadesScriptBase
 from tabulate import tabulate
@@ -245,7 +246,6 @@ class Netty4RegressionTest(HadesScriptBase):
 
         self._load_default_yarn_site_configs()
 
-        # TODO search for ".*"\.format and replace them with f-strings
         testcase_results: Dict[Netty4Testcase, TestcaseResult] = {}
         for idx, self.tc in enumerate(testcases):
             self.current_tc_dir = os.path.join(self.workdir, self.tc.name)
@@ -264,7 +264,7 @@ class Netty4RegressionTest(HadesScriptBase):
             self._restart_nms()
 
             yarn_log_lines = {}
-            self._read_logs_and_write_to_files("Yarn", yarn_log_lines)
+            roles, log_commands = self._read_logs_into_dict("Yarn", yarn_log_lines)
             testcase_results[self.tc] = self.run_app_and_collect_logs_to_file(self.APP)
 
             if testcase_results[self.tc].type == TestcaseResultType.TIMEOUT:
@@ -280,15 +280,9 @@ class Netty4RegressionTest(HadesScriptBase):
             tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE,
                                                                  dir=CONF_DIR_TC)
 
-            if not tc_config_files:
-                raise HadesException("Expected non-empty testcase config files list!")
-            if not initial_config_files:
-                raise HadesException("Expected non-empty initial config files list!")
-            if not app_log_tar_files:
-                raise HadesException("Expected non-empty app log tar files list!")
-            if not yarn_log_files:
-                raise HadesException("Expected non-empty YARN log files list!")
-            # TODO Ensure if all RM / NMs are collected (all roles!)
+            self._verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
+                                        yarn_log_files, yarn_log_lines)
+
             files_to_compress = [testcase_results[self.tc].app_log_file] + \
                                 tc_config_files + \
                                 initial_config_files + \
@@ -304,6 +298,27 @@ class Netty4RegressionTest(HadesScriptBase):
             FileUtils.rm_dir(self.current_tc_dir)
 
         self._print_report(testcase_results)
+
+    def _verify_resulted_files(self, app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
+                               yarn_log_files, yarn_log_lines):
+        if not tc_config_files:
+            raise HadesException("Expected non-empty testcase config files list!")
+        if not initial_config_files:
+            raise HadesException("Expected non-empty initial config files list!")
+        if not app_log_tar_files:
+            raise HadesException("Expected non-empty app log tar files list!")
+        if not yarn_log_files:
+            raise HadesException("Expected non-empty YARN log files list!")
+        empty_lines_per_role = []
+        cmd_by_role = {cmd.target: cmd for cmd in log_commands}
+        for r in roles:
+            cmd = cmd_by_role[r]
+            lines = yarn_log_lines[cmd]
+            if not lines:
+                empty_lines_per_role.append(r)
+        # LOG.debug("***cmd_by_role: %s", cmd_by_role)
+        if empty_lines_per_role:
+            raise HadesException("Found empty lines for the following roles: {}".format(empty_lines_per_role))
 
     def _get_app_log_tar_files(self, app_id: str):
         if app_id == APP_ID_NOT_AVAILABLE:
@@ -350,8 +365,10 @@ class Netty4RegressionTest(HadesScriptBase):
         for h in handlers:
             h.wait()
 
-    def _read_logs_and_write_to_files(self, selector, yarn_log_lines):
+    def _read_logs_into_dict(self, selector, yarn_log_lines) -> Tuple[List[HadoopRoleInstance], List[RunnableCommand]]:
         LOG.debug("Reading YARN logs from cluster...")
+
+        roles = self.cluster.select_roles(selector)
         log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=selector)
         LOG.debug("YARN log commands: %s", log_commands)
         for read_logs_command in log_commands:
@@ -359,6 +376,7 @@ class Netty4RegressionTest(HadesScriptBase):
                       read_logs_command.target.host)
             read_logs_command.run_async(stdout=_callback(read_logs_command, yarn_log_lines),
                                         stderr=_callback(read_logs_command, yarn_log_lines))
+        return roles, log_commands
 
     def write_config_files(self, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[
         str]:
