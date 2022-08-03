@@ -3,6 +3,7 @@
 import logging
 import os
 import time
+from copy import copy
 from os import path
 from typing import List, Tuple
 
@@ -254,13 +255,12 @@ def run_script(ctx, script: str, session_dir: bool = False):
 
         level = ctx.obj['loglevel']
         root_logger = logging.getLogger()
-        handlers = root_logger.handlers
+        handlers = copy(root_logger.handlers)
         file_handler = LoggingUtils.create_file_handler(workdir, level, fname="hades-session")
-        # TODO File logger formatter is still not the same as CLI's
         file_handler.formatter = None
         logger.info("Logging to file: %s", file_handler.baseFilename)
         handlers.append(file_handler)
-        logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=level, handlers=handlers)
+        logging.basicConfig(force=True, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=level, handlers=handlers)
     else:
         workdir = os.getcwd()
     handler.run_script(script, workdir=workdir)
