@@ -21,26 +21,7 @@ CONF_DIR_TC = "testcase_config"
 CONF_DIR_INITIAL = "initial_config"
 APP_ID_NOT_AVAILABLE = "N/A"
 
-DEFAULT_TIMEOUT = 30
 TIMEOUT_MSG_TEMPLATE = "Timed out after {} seconds"
-
-SLEEP_JOB = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=DEFAULT_TIMEOUT)
-PI_JOB = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000', timeout=DEFAULT_TIMEOUT)
-LOADGEN_JOB = MapReduceApp(MapReduceAppType.LOADGEN, cmd=f"loadgen -m 200 -r 150 -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text", timeout=300)
-
-SORT_INPUT_DIR = "/user/systest/sortInputDir"
-SORT_OUTPUT_DIR = "/user/systest/sortOutputDir"
-RANDOM_WRITER_JOB = MapReduceApp(MapReduceAppType.RANDOM_WRITER, cmd=f"randomwriter {SORT_INPUT_DIR}")
-MAPRED_SORT_JOB = MapReduceApp(MapReduceAppType.TEST_MAPRED_SORT, cmd=f"testmapredsort -sortInput {SORT_INPUT_DIR} -sortOutput {SORT_OUTPUT_DIR}")
-
-MR_APPS: Dict[MapReduceAppType, MapReduceApp] = {
-    MapReduceAppType.SLEEP: SLEEP_JOB,
-    MapReduceAppType.PI: PI_JOB,
-    MapReduceAppType.TEST_MAPRED_SORT: MAPRED_SORT_JOB,
-    MapReduceAppType.RANDOM_WRITER: RANDOM_WRITER_JOB,
-    MapReduceAppType.LOADGEN: LOADGEN_JOB
-}
-DEFAULT_APPS = [MapReduceAppType.SLEEP, MapReduceAppType.LOADGEN]
 
 NODEMANAGER_SELECTOR = "Yarn/NodeManager"
 NODE_TO_RUN_ON = "type=Yarn/name=nodemanager2"
@@ -114,6 +95,28 @@ SHUFFLE_LOG_BACKUPS_DEFAULT = 0
 
 # END OF DEFAULT CONFIGS
 
+DEFAULT_CONFIGS = {
+    SHUFFLE_MANAGE_OS_CACHE: SHUFFLE_MANAGE_OS_CACHE_DEFAULT,
+    SHUFFLE_READAHEAD_BYTES: SHUFFLE_READAHEAD_BYTES_DEFAULT,
+    SHUFFLE_MAX_CONNECTIONS: SHUFFLE_MAX_CONNECTIONS_DEFAULT,
+    SHUFFLE_MAX_THREADS: SHUFFLE_MAX_THREADS_DEFAULT,
+    SHUFFLE_TRANSFER_BUFFER_SIZE: SHUFFLE_TRANSFER_BUFFER_SIZE_DEFAULT,
+    SHUFFLE_TRANSFERTO_ALLOWED: SHUFFLE_TRANSFERTO_ALLOWED_DEFAULT,
+    SHUFFLE_MAX_SESSION_OPEN_FILES: SHUFFLE_MAX_SESSION_OPEN_FILES_DEFAULT,
+    SHUFFLE_LISTEN_QUEUE_SIZE: SHUFFLE_LISTEN_QUEUE_SIZE_DEFAULT,
+    SHUFFLE_PORT: SHUFFLE_PORT_DEFAULT,
+    SHUFFLE_SSL_FILE_BUFFER_SIZE: SHUFFLE_SSL_FILE_BUFFER_SIZE_DEFAULT,
+    SHUFFLE_CONNECTION_KEEPALIVE_ENABLE: SHUFFLE_CONNECTION_KEEPALIVE_ENABLE_DEFAULT,
+    SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT: SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT_DEFAULT,
+    SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE: SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE_DEFAULT,
+    SHUFFLE_SSL_ENABLED: SHUFFLE_SSL_ENABLED_DEFAULT,
+    SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES: SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES_DEFAULT,
+    SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL: SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL_DEFAULT,
+    SHUFFLE_PATHCACHE_MAX_WEIGHT: SHUFFLE_PATHCACHE_MAX_WEIGHT_DEFAULT,
+    SHUFFLE_LOG_SEPARATE: SHUFFLE_LOG_SEPARATE_DEFAULT,
+    SHUFFLE_LOG_LIMIT_KB: SHUFFLE_LOG_LIMIT_KB_DEFAULT,
+    SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT,
+}
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
@@ -154,7 +157,7 @@ class Netty4TestcasesBuilder:
         self.apps = list(*apps)
         return self
 
-    def generate_testcases(self):
+    def generate_testcases(self, config):
         if not self.apps:
             raise ValueError("No apps defined for testcase: {}".format(self.name))
         testcases = []
@@ -170,7 +173,7 @@ class Netty4TestcasesBuilder:
                 conf_changes[conf_name] = conf_value
                 tc_counter += 1
             for app_type in self.apps:
-                testcases.append(Netty4Testcase(self._generate_tc_name(tc_counter, app_type), conf_changes, MR_APPS[app_type]))
+                testcases.append(Netty4Testcase(self._generate_tc_name(tc_counter, app_type), conf_changes, config.mr_apps[app_type]))
         return testcases
 
     def _generate_tc_name(self, tc_counter, app_type: MapReduceAppType):
@@ -200,77 +203,83 @@ class TestcaseResult:
     details: str = None
 
 
+@dataclass
+class Netty4TestConfig:
+    # TODO
+    testcase_limit = 1
+    extract_tar_files = True
+    timeout = 120
+
+    def __post_init__(self):
+        sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
+        pi_job = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000', timeout=self.timeout)
+        loadgen_job = MapReduceApp(MapReduceAppType.LOADGEN,
+                                   cmd=f"loadgen -m 200 -r 150 -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text",
+                                   timeout=300)
+
+        sort_input_dir = "/user/systest/sortInputDir"
+        sort_output_dir = "/user/systest/sortOutputDir"
+        random_writer_job = MapReduceApp(MapReduceAppType.RANDOM_WRITER, cmd=f"randomwriter {sort_input_dir}")
+        mapred_sort_job = MapReduceApp(MapReduceAppType.TEST_MAPRED_SORT,
+                                       cmd=f"testmapredsort -sortInput {sort_input_dir} -sortOutput {sort_output_dir}")
+
+        self.mr_apps: Dict[MapReduceAppType, MapReduceApp] = {
+            MapReduceAppType.SLEEP: sleep_job,
+            MapReduceAppType.PI: pi_job,
+            MapReduceAppType.TEST_MAPRED_SORT: mapred_sort_job,
+            MapReduceAppType.RANDOM_WRITER: random_writer_job,
+            MapReduceAppType.LOADGEN: loadgen_job
+        }
+        self.default_apps = [MapReduceAppType.SLEEP, MapReduceAppType.LOADGEN]
+
+        self.testcases = [
+            *Netty4TestcasesBuilder("shuffle_max_connections")
+            .with_configs(SHUFFLE_MAX_CONNECTIONS, ["2", "5"])
+            .with_apps(self.default_apps)
+            .generate_testcases(self),
+            *Netty4TestcasesBuilder("shuffle_max_threads")
+            .with_configs(SHUFFLE_MAX_THREADS, ["3", "6"])
+            .with_apps(self.default_apps)
+            .generate_testcases(self),
+            *Netty4TestcasesBuilder("shuffle_max_open_files")
+            .with_configs(SHUFFLE_MAX_SESSION_OPEN_FILES, ["2", "5"])
+            .with_apps(self.default_apps)
+            .generate_testcases(self),
+            *Netty4TestcasesBuilder("shuffle_listen_queue_size")
+            .with_configs(SHUFFLE_LISTEN_QUEUE_SIZE, ["10", "50"])
+            .with_apps(self.default_apps)
+            .generate_testcases(self),
+            *Netty4TestcasesBuilder("shuffle_ssl_enabled")
+            .with_configs(SHUFFLE_SSL_ENABLED, ["true"])
+            .with_apps(self.default_apps)
+            .generate_testcases(self),
+            *Netty4TestcasesBuilder("keepalive")
+            .with_config(SHUFFLE_CONNECTION_KEEPALIVE_ENABLE, "true")
+            .with_configs(SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT, ["15", "25"])
+            .with_apps(self.default_apps)
+            .generate_testcases(self)
+        ]
+
+
 class Netty4RegressionTest(HadesScriptBase):
     def __init__(self, cluster: HadoopCluster, workdir: str):
         super().__init__(cluster, workdir)
         LOG.info("Using workdir: %s", self.workdir)
         self.tc = None
         self.current_tc_dir = None
-
-    TC_LIMIT = 999
-
-    DEFAULT_CONFIGS = {
-        SHUFFLE_MANAGE_OS_CACHE: SHUFFLE_MANAGE_OS_CACHE_DEFAULT,
-        SHUFFLE_READAHEAD_BYTES: SHUFFLE_READAHEAD_BYTES_DEFAULT,
-        SHUFFLE_MAX_CONNECTIONS: SHUFFLE_MAX_CONNECTIONS_DEFAULT,
-        SHUFFLE_MAX_THREADS: SHUFFLE_MAX_THREADS_DEFAULT,
-        SHUFFLE_TRANSFER_BUFFER_SIZE: SHUFFLE_TRANSFER_BUFFER_SIZE_DEFAULT,
-        SHUFFLE_TRANSFERTO_ALLOWED: SHUFFLE_TRANSFERTO_ALLOWED_DEFAULT,
-        SHUFFLE_MAX_SESSION_OPEN_FILES: SHUFFLE_MAX_SESSION_OPEN_FILES_DEFAULT,
-        SHUFFLE_LISTEN_QUEUE_SIZE: SHUFFLE_LISTEN_QUEUE_SIZE_DEFAULT,
-        SHUFFLE_PORT: SHUFFLE_PORT_DEFAULT,
-        SHUFFLE_SSL_FILE_BUFFER_SIZE: SHUFFLE_SSL_FILE_BUFFER_SIZE_DEFAULT,
-        SHUFFLE_CONNECTION_KEEPALIVE_ENABLE: SHUFFLE_CONNECTION_KEEPALIVE_ENABLE_DEFAULT,
-        SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT: SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT_DEFAULT,
-        SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE: SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE_DEFAULT,
-        SHUFFLE_SSL_ENABLED: SHUFFLE_SSL_ENABLED_DEFAULT,
-        SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES: SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES_DEFAULT,
-        SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL: SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL_DEFAULT,
-        SHUFFLE_PATHCACHE_MAX_WEIGHT: SHUFFLE_PATHCACHE_MAX_WEIGHT_DEFAULT,
-        SHUFFLE_LOG_SEPARATE: SHUFFLE_LOG_SEPARATE_DEFAULT,
-        SHUFFLE_LOG_LIMIT_KB: SHUFFLE_LOG_LIMIT_KB_DEFAULT,
-        SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT,
-    }
+        self.config = Netty4TestConfig()
 
     YARN_SITE_DEFAULT_CONFIGS = {
         CONF_DEBUG_DELAY: "99999999"
     }
 
-    TESTCASES = [
-        *Netty4TestcasesBuilder("shuffle_max_connections")
-            .with_configs(SHUFFLE_MAX_CONNECTIONS, ["2", "5"])
-            .with_apps(DEFAULT_APPS)
-            .generate_testcases(),
-        *Netty4TestcasesBuilder("shuffle_max_threads")
-            .with_configs(SHUFFLE_MAX_THREADS, ["3", "6"])
-            .with_apps(DEFAULT_APPS)
-            .generate_testcases(),
-        *Netty4TestcasesBuilder("shuffle_max_open_files")
-            .with_configs(SHUFFLE_MAX_SESSION_OPEN_FILES, ["2", "5"])
-            .with_apps(DEFAULT_APPS)
-            .generate_testcases(),
-        *Netty4TestcasesBuilder("shuffle_listen_queue_size")
-            .with_configs(SHUFFLE_LISTEN_QUEUE_SIZE, ["10", "50"])
-            .with_apps(DEFAULT_APPS)
-            .generate_testcases(),
-        *Netty4TestcasesBuilder("shuffle_ssl_enabled")
-            .with_configs(SHUFFLE_SSL_ENABLED, ["true"])
-            .with_apps(DEFAULT_APPS)
-            .generate_testcases(),
-        *Netty4TestcasesBuilder("keepalive")
-            .with_config(SHUFFLE_CONNECTION_KEEPALIVE_ENABLE, "true")
-            .with_configs(SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT, ["15", "25"])
-            .with_apps(DEFAULT_APPS)
-            .generate_testcases()
-    ]
-
     def run(self):
-        testcases = Netty4RegressionTest.TESTCASES
+        testcases = self.config.testcases
         LOG.info("ALL Testcases: %s", testcases)
 
-        if Netty4RegressionTest.TC_LIMIT > 0:
-            LOG.info("Limiting testcases to %s", Netty4RegressionTest.TC_LIMIT)
-            testcases = testcases[:Netty4RegressionTest.TC_LIMIT]
+        if self.config.testcase_limit > 0:
+            LOG.info("Limiting testcases to %s", self.config.testcase_limit)
+            testcases = testcases[:self.config.testcase_limit]
         no_of_tcs = len(testcases)
         LOG.info("Will run %d testcases", no_of_tcs)
 
@@ -437,10 +446,10 @@ class Netty4RegressionTest(HadesScriptBase):
 
         LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
         try:
-            app_command.run_async(block=True, stderr=lambda line: app_log.append(line), timeout=DEFAULT_TIMEOUT)
+            app_command.run_async(block=True, stderr=lambda line: app_log.append(line), timeout=app.get_timeout_seconds())
         except HadesCommandTimedOutException:
             timed_out = True
-            LOG.error("Command timed out: %s", app_command)
+            LOG.error("Command '%s' timed out after %d seconds", app_command, app.get_timeout_seconds())
 
         app_log_file = APP_LOG_FILE_NAME_FORMAT.format(app="MRPI")
         file_path = os.path.join(self.current_tc_dir, app_log_file)
@@ -467,7 +476,7 @@ class Netty4RegressionTest(HadesScriptBase):
 
     def _load_default_mapred_configs(self):
         LOG.info("Loading default MR ShuffleHandler configs...")
-        self._load_configs(HadoopConfigFile.MAPRED_SITE, self.DEFAULT_CONFIGS, NODEMANAGER_SELECTOR)
+        self._load_configs(HadoopConfigFile.MAPRED_SITE, DEFAULT_CONFIGS, NODEMANAGER_SELECTOR)
 
     def _load_default_yarn_site_configs(self):
         LOG.info("Loading default yarn-site.xml configs...")
