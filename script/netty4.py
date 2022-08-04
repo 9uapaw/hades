@@ -205,10 +205,12 @@ class TestcaseResult:
 
 @dataclass
 class Netty4TestConfig:
-    # TODO
+    # TODO Remove this limit
     testcase_limit = 1
     extract_tar_files = True
     timeout = 120
+    compress_tc_result = False
+    decompress_app_container_logs = True
 
     def __post_init__(self):
         sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
@@ -283,6 +285,12 @@ class Netty4RegressionTest(HadesScriptBase):
         no_of_tcs = len(testcases)
         LOG.info("Will run %d testcases", no_of_tcs)
 
+        # TODO Implement switching from trunk to patched mapreduce with Netty patch (checkout branch)
+        # TODO Verify if Netty is patched to the cluster or not: grep in debug logs for "*** HADOOP-15327: netty upgrade"
+        # TODO Verify if Netty is NOT patched to the cluster or not: grep in debug logs for "*** HADOOP-15327: netty upgrade" should not return results
+        # TODO Turn on DEBUG logging for ShuffleHandler
+        # TODO Add figlet for testcases + boundary between trunk vs. patched jar
+
         self._load_default_yarn_site_configs()
 
         testcase_results: Dict[Netty4Testcase, TestcaseResult] = {}
@@ -322,19 +330,28 @@ class Netty4RegressionTest(HadesScriptBase):
             self._verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
                                         yarn_log_files, yarn_log_lines)
 
-            files_to_compress = [testcase_results[self.tc].app_log_file] + \
-                                tc_config_files + \
-                                initial_config_files + \
-                                app_log_tar_files + \
-                                yarn_log_files
-            tc_no = f"0{str(idx + 1)}" if idx < 9 else str(idx + 1)
-            tc_targz_filename = os.path.join(self.workdir, f"testcase_{tc_no}_{self.tc.name}.tar.gz")
+            if self.config.decompress_app_container_logs:
+                # TODO Decompress YARN app container logs in session dir
+                for app_log_tar_file in app_log_tar_files:
+                    # TODO verify if dir is correct
+                    target_dir = os.path.join(self.current_tc_dir)
+                    LOG.debug("Extracting file '%s' to %s", app_log_tar_file, target_dir)
+                    CompressedFileUtils.extract_targz_file(app_log_tar_file, target_dir)
 
-            if self.using_custom_workdir:
-                FileUtils.compress_dir(filename=tc_targz_filename, dir=self.current_tc_dir)
-            else:
-                FileUtils.compress_files(filename=tc_targz_filename, files=files_to_compress)
-            FileUtils.rm_dir(self.current_tc_dir)
+            if self.config.compress_tc_result:
+                files_to_compress = [testcase_results[self.tc].app_log_file] + \
+                                    tc_config_files + \
+                                    initial_config_files + \
+                                    app_log_tar_files + \
+                                    yarn_log_files
+                tc_no = f"0{str(idx + 1)}" if idx < 9 else str(idx + 1)
+                tc_targz_filename = os.path.join(self.workdir, f"testcase_{tc_no}_{self.tc.name}.tar.gz")
+
+                if self.using_custom_workdir:
+                    FileUtils.compress_dir(filename=tc_targz_filename, dir=self.current_tc_dir)
+                else:
+                    FileUtils.compress_files(filename=tc_targz_filename, files=files_to_compress)
+                FileUtils.rm_dir(self.current_tc_dir)
 
         self._print_report(testcase_results)
 
