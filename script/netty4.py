@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Callable, List, Dict, Tuple
 from core.cmd import RunnableCommand
 from core.error import ScriptException, HadesCommandTimedOutException, HadesException
-from core.util import FileUtils
+from core.util import FileUtils, CompressedFileUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand, MapReduceAppType
 from hadoop.cluster import HadoopCluster
 from hadoop.config import HadoopConfig
@@ -236,7 +236,7 @@ class Netty4TestConfig:
 
         self.testcases = [
             *Netty4TestcasesBuilder("shuffle_max_connections")
-            .with_configs(SHUFFLE_MAX_CONNECTIONS, ["2", "5"])
+            .with_configs(SHUFFLE_MAX_CONNECTIONS, ["5", "10"])
             .with_apps(self.default_apps)
             .generate_testcases(self),
             *Netty4TestcasesBuilder("shuffle_max_threads")
@@ -331,7 +331,6 @@ class Netty4RegressionTest(HadesScriptBase):
                                         yarn_log_files, yarn_log_lines)
 
             if self.config.decompress_app_container_logs:
-                # TODO Decompress YARN app container logs in session dir
                 for app_log_tar_file in app_log_tar_files:
                     # TODO verify if dir is correct
                     target_dir = os.path.join(self.current_tc_dir)
