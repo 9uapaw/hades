@@ -71,6 +71,16 @@ def cli(ctx, config: str, cluster: str, debug: bool, prefix: str):
     ctx.obj['handler'] = MainCommandHandler(context)
 
 
+@cli.group()
+@click.pass_context
+def yarn(ctx):
+    """
+    Yarn specific commands
+    """
+    pass
+
+
+
 @cli.command()
 @click.option('-n', '--no-wrap', is_flag=True, help='Turns off the wrapping')
 def usage(no_wrap: bool = False):
@@ -171,7 +181,7 @@ def discover(ctx, cluster_type: str or None, host: str or None, username: str or
     handler.discover()
 
 
-@cli.command()
+@yarn.command()
 @click.pass_context
 @click.argument('selector')
 @click.option('-f', '--follow', is_flag=True, help='whether to follow the logs file instead of just reading it')
@@ -266,7 +276,7 @@ def run_script(ctx, script: str, session_dir: bool = False):
     handler.run_script(script, workdir=workdir)
 
 
-@cli.command()
+@yarn.command()
 @click.pass_context
 def get_latest_app_logs(ctx):
     """
@@ -321,15 +331,6 @@ def restart_role(ctx, selector: str):
     """
     handler: MainCommandHandler = ctx.obj['handler']
     handler.role_action(selector, RoleAction.RESTART)
-
-
-@cli.group()
-@click.pass_context
-def yarn(ctx):
-    """
-    Yarn specific commands
-    """
-    pass
 
 
 @yarn.command()
