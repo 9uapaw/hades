@@ -1,8 +1,15 @@
-import logging
+import datetime
+import os
+import shutil
 import textwrap
-from typing import Callable
+from logging.handlers import TimedRotatingFileHandler
+from typing import Callable, List
 
+from core.cmd import RunnableCommand
 from hadoop.role import HadoopRoleInstance
+
+import logging
+LOG = logging.getLogger(__name__)
 
 
 class Formatter(logging.Formatter):
@@ -21,3 +28,75 @@ class Formatter(logging.Formatter):
 def generate_role_output(logger: logging.Logger, target: HadoopRoleInstance, grep: Callable) -> Callable[[str], None]:
     return lambda line: logger.info("{} {}".format(target.get_colorized_output(), line.replace("\n", ""))) \
         if not grep or grep(line) else ""
+
+
+class FileUtils:
+    @staticmethod
+    def compress_files(filename: str, files: List[str]):
+        cmd = RunnableCommand("tar -cvf {fname} {files}".format(fname=filename, files=" ".join(files)))
+        cmd.run()
+        for file in files:
+            LOG.debug("Removing file: %s", file)
+            os.remove(file)
+
+    @staticmethod
+    def compress_dir(filename: str, dir: str):
+        files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(dir) for f in filenames]
+        LOG.debug("Compressing dir: %s", dir)
+        LOG.debug("Files: %s", files)
+        cmd = RunnableCommand("tar -cvf {fname} -C {dir} .".format(fname=filename, dir=dir))
+        cmd.run()
+        shutil.rmtree(dir, ignore_errors=True)
+
+    @staticmethod
+    def find_files(pattern: str, dir: str = '.'):
+        find_cmd = RunnableCommand("find {dir} -name \"*{pattern}*\" -print".format(dir=dir, pattern=pattern))
+        find_cmd.run()
+        if not find_cmd.stdout:
+            LOG.warning("No files found for pattern '%s' in dir '%s'", pattern, dir)
+            LOG.warning(find_cmd.stderr)
+            return ""
+        return find_cmd.stdout
+
+    @staticmethod
+    def rm_dir(d):
+        shutil.rmtree(d, ignore_errors=True)
+
+    @staticmethod
+    def copy_dir_to_temp_dir(child_dir: str, src_dir: str) -> str:
+        if not os.path.isdir(src_dir):
+            raise ValueError("Expected a source dir, got: {}".format(src_dir))
+        dest_dir = os.path.join("/tmp", child_dir)
+        if os.path.exists(dest_dir):
+            FileUtils.rm_dir(dest_dir)
+        os.mkdir(dest_dir)
+
+        LOG.debug("Copying %s -> %s", src_dir, dest_dir)
+        shutil.copytree(src_dir, dest_dir)
+
+        return dest_dir
+
+
+class LoggingUtils:
+    @staticmethod
+    def create_file_handler(log_file_dir, level: int, fname: str = "hades"):
+        file_name = f"{fname}.log"
+        log_file_path = os.path.join(log_file_dir, file_name)
+        fh = TimedRotatingFileHandler(log_file_path, when="midnight")
+        fh.suffix = "%Y_%m_%d.log"
+        fh.setLevel(level)
+        return fh
+
+
+class DateUtils:
+    @staticmethod
+    def get_current_datetime(fmt="%Y%m%d_%H%M%S"):
+        return DateUtils.now_formatted(fmt)
+
+    @classmethod
+    def now(cls):
+        return datetime.datetime.now()
+
+    @classmethod
+    def now_formatted(cls, fmt):
+        return DateUtils.now().strftime(fmt)

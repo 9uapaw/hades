@@ -3,7 +3,7 @@ import random
 from typing import List, Callable, Dict
 
 import hadoop.selector
-from core.cmd import RunnableCommand
+from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from core.context import HadesContext
 from hadoop.app.example import ApplicationCommand
@@ -66,9 +66,18 @@ class HadoopCluster:
         roles = self.select_roles(selector)
         if not roles:
             logger.warning("No roles found by selector '{}'".format(selector))
+        logger.debug("Selected roles for read logs command: %s", roles)
 
         cmds = self._executor.read_log(*roles, follow=follow, tail=tail, download=download)
 
+        return cmds
+
+    def compress_and_download_app_logs(self, selector: str, app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
+        roles = self.select_roles(selector)
+        if not roles:
+            logger.warning("No roles found by selector '{}'".format(selector))
+
+        cmds = self._executor.compress_app_logs(*roles, app_id=app_id, workdir=workdir, compress_dir=compress_dir)
         return cmds
 
     def get_status(self) -> List[HadoopClusterStatusEntry]:
@@ -84,9 +93,9 @@ class HadoopCluster:
         selector_expr = hadoop.selector.HadoopRoleSelector(self.get_services())
         return selector_expr.select(selector)
 
-    def update_config(self, selector: str, config: HadoopConfig, no_backup: bool = False):
+    def update_config(self, selector: str, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
         selected = self.select_roles(selector)
-        self._executor.update_config(*selected, config=config, no_backup=no_backup)
+        self._executor.update_config(*selected, config=config, no_backup=no_backup, workdir=workdir)
 
     def restart_roles(self, selector: str) -> List[RunnableCommand]:
         selected = self.select_roles(selector)
@@ -124,3 +133,11 @@ class HadoopCluster:
     def _select_random_role(self, selector: str = "") -> HadoopRoleInstance:
         selected = self.select_roles(selector)
         return selected[random.randint(0, len(selected) - 1)]
+
+    def get_running_apps(self, selector: str = "") -> RunnableCommand:
+        random_selected = self._select_random_role(selector)
+        return self._executor.get_running_apps(random_selected)
+
+    def get_finished_apps(self, selector: str = "") -> RunnableCommand:
+        random_selected = self._select_random_role(selector)
+        return self._executor.get_finished_apps(random_selected)

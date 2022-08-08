@@ -1,8 +1,8 @@
 import logging
+import os
 import time
-from abc import ABC
 from contextlib import contextmanager
-from typing import Callable, Any
+from typing import Callable
 
 from hadoop.cluster import HadoopCluster
 
@@ -10,8 +10,10 @@ from hadoop.cluster import HadoopCluster
 class HadesScriptBase:
     LOGGER = logging.getLogger(__name__)
 
-    def __init__(self, cluster: HadoopCluster):
+    def __init__(self, cluster: HadoopCluster, workdir: str):
         self.cluster = cluster
+        self.workdir = workdir
+        self.using_custom_workdir = True if workdir != os.getcwd() else False
 
     def run(self):
         raise NotImplementedError()

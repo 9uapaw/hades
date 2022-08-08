@@ -108,7 +108,7 @@ class CmExecutor(HadoopOperationExecutor):
 
         return cmd
 
-    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool):
+    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool, workdir: str = "."):
         for role in args:
             existing_conf = self._cm_api.get_config(role.service.cluster.name, role.name, role.service.name)
             safety_valve = ""

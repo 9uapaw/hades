@@ -1,10 +1,11 @@
 import logging
 import time
 import os
-from typing import List, Type, Dict
+from typing import List, Type, Dict, Tuple
 
-from core.cmd import RunnableCommand
+from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
+from core.error import CommandExecutionException, MultiCommandExecutionException, HadesException
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 class StandardUpstreamExecutor(HadoopOperationExecutor):
     JAR_DIR = "/opt/hadoop/share/"
     LOG_DIR = "/opt/hadoop/logs"
+    APP_LOG_DIR = "/tmp/hadoop-logs"
     CONFIG_FILE_PATH = "/opt/hadoop/etc/hadoop/{}"
 
     def __init__(self, rm_host: str):
@@ -67,7 +69,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         for role in args:
             role_type = role.role_type.value
 
-            file = "{log_dir}*/*{role_type}*".format(log_dir=self.LOG_DIR, role_type=role_type)
+            file = "{log_dir}*/*{role_type}*log".format(log_dir=self.LOG_DIR, role_type=role_type)
             if download:
                 cmds.append(role.host.download(file))
                 continue
@@ -77,6 +79,58 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                 cmd = "cat {file}"
             cmds.append(role.host.create_cmd(cmd.format(file=file)))
 
+        return cmds
+
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
+        if app_id.startswith("application_"):
+            app_id_no = app_id.split("application_")[1]
+        else:
+            app_id_no = app_id
+        app_id_spec = f"application_{app_id_no}"
+        logger.info("Looking for application with ID: '%s'", app_id_spec)
+
+        find_failed_on_hosts: List[Tuple, CommandExecutionException] = []
+        tar_files_created: Dict[HadoopRoleInstance, str] = {}
+        no_of_hosts = len(args)
+
+        # /tmp/hadoop-logs/application_1657557929851_0006_DEL_1658219238731/container_1657557929851_0006_01_000001
+        # /tmp/hadoop-logs/application_1657557929851_0006_DEL_1658219238731/container_1657557929851_0006_01_000003
+        # OR
+        # /tmp/hadoop-logs/application_1657557929851_0006/container_1657557929851_0006_01_000001/
+        find_cmd = "find {dir} -name {name} -print".format(dir=self.APP_LOG_DIR, name=app_id_spec)
+        cmds = []
+        for role in args:
+            try:
+                find_results, stderr = role.host.create_cmd(find_cmd).run()
+            except CommandExecutionException as e:
+                # No need to raise immediately if files not found on a host
+                find_failed_on_hosts.append((role, e))
+                continue
+
+            logger.debug("Find command: '%s' on host '%s', results: %s", find_cmd, role.host, find_results)
+            # only run tar if this was successful and there are files found
+            if not find_results:
+                logger.warning("Find did not return files on host '%s'", role.host)
+                continue
+
+            targz_file_path, targz_file_name = self._create_tar_gz_on_host(app_id, role, find_results, compress_dir=compress_dir)
+            tar_files_created[role] = targz_file_path
+            parent_dir = os.getcwd() if workdir == '.' else workdir
+            local_file_path = os.path.join(parent_dir, targz_file_name)
+            download_command = role.host.download(source=targz_file_path, dest=local_file_path)
+            cmds.append(download_command)
+
+        if len(tar_files_created) == 0:
+            hosts = [role.host for role in args]
+            raise HadesException("Failed to compress app logs, no tar file created on any of the hosts: {}".format(hosts))
+
+        if no_of_hosts == len(find_failed_on_hosts):
+            logger.error("Command '%s' failed on all hosts: %s", find_cmd, [r.host for r in args])
+            for role, tar_file in tar_files_created.items():
+                logger.debug("Removing file: %s from host '%s'", tar_file, role.host)
+                role.host.create_cmd(f"rm {tar_file}").run()
+            excs = [t[1] for t in find_failed_on_hosts]
+            raise MultiCommandExecutionException(excs)
         return cmds
 
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
@@ -95,25 +149,27 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         return cmd
 
-    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False):
+    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
         config_name, config_ext = config.file.split(".")
 
         for role in args:
             logger.info("Setting config {} on {}".format(config.file, role.get_colorized_output()))
             local_file = "{config}-{host}-{time}.{ext}".format(
                 host=role.host, config=config_name, time=int(time.time()), ext=config_ext)
+            parent_dir = os.getcwd() if workdir == "." else workdir
+            local_file_path = os.path.join(parent_dir, local_file)
             config_file_path = self.CONFIG_FILE_PATH.format(config.file)
-            role.host.download(config_file_path, local_file).run()
+            role.host.download(config_file_path, local_file_path).run()
 
-            config.xml = local_file
+            config.xml = local_file_path
             config.merge()
             config.commit()
 
             role.host.upload(config.file, config_file_path).run()
 
             if no_backup:
-                logger.info("Backup is turned off. Deleting file {}".format(local_file))
-                os.remove(local_file)
+                logger.info("Backup is turned off. Deleting file {}".format(local_file_path))
+                os.remove(local_file_path)
 
     def restart_roles(self, *args: HadoopRoleInstance) -> List[RunnableCommand]:
         return [role.host.create_cmd("yarn --daemon stop {role} && yarn --daemon start {role}".format(
@@ -169,3 +225,47 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                     role.host.make_backup(remote_jar).run()
                     role.host.upload(local_jar, remote_jar).run()
 
+    def get_running_apps(self, random_selected: HadoopRoleInstance):
+        # https://stackoverflow.com/a/61321426/1106893
+        # We don't want core.cmd.RunnableCommand.run to fail if grep's exit code is 1 when no result is found
+        cmd = random_selected.host.create_cmd("yarn application -list 2>/dev/null | grep -oe application_[0-9]*_[0-9]* | sort -r || true")
+        return cmd
+
+    def get_finished_apps(self, random_selected: HadoopRoleInstance):
+        # https://stackoverflow.com/a/61321426/1106893
+        # We don't want core.cmd.RunnableCommand.run to fail if grep's exit code is 1 when no result is found
+        cmd = random_selected.host.create_cmd("yarn application -list -appStates FINISHED 2>/dev/null | grep -oe application_[0-9]*_[0-9]* | sort -r || true")
+        return cmd
+
+    @staticmethod
+    def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files,
+                               compress_dir: bool = False) -> Tuple[str, str]:
+        logger.info("Creating targz of application logs %s on host %s", app_id, role.host.address)
+        targz_file_name = f"{app_id}_{role.host}.tar.gz"
+        targz_file_path = f"/tmp/{targz_file_name}"
+
+        if compress_dir:
+            # Assuming single result directory
+            # Find command: 'find /tmp/hadoop-logs -name application_1658218984267_0087 -print'
+            # results: ['/tmp/hadoop-logs/application_1658218984267_0087']
+            # tar -czvf my_directory.tar.gz -C my_directory .
+            if len(files) > 1:
+                raise HadesException("Tried to compress directory with tar and assumed single result file set. Current files: {}".format(files))
+
+            app_data_dir = f"{app_id}_{role.host.address}"
+            target_dir = f"/tmp/{app_data_dir}"
+            role.host.create_cmd(f"rm -rf {target_dir} && mkdir {target_dir} && cp -R {files[0]} {target_dir}").run()
+            tar_cmd = role.host.create_cmd(
+                "tar -cvf {fname} -C {parent_dir} {dir}".format(fname=targz_file_path, parent_dir="/tmp", dir=f"./{app_data_dir}"))
+        else:
+            tar_cmd = role.host.create_cmd(
+                "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(files)))
+        try:
+            stdout, stderr = tar_cmd.run()
+            logger.debug("stdout: %s", stdout)
+            logger.debug("stderr: %s", stderr)
+        except CommandExecutionException as e:
+            # If any of the tar commands fail, raise the Exception
+            raise e
+
+        return targz_file_path, targz_file_name

@@ -20,7 +20,6 @@ class CliArgException(HadesException):
 
 
 class CommandExecutionException(HadesException):
-
     def __init__(self, msg: str, cmd: str = None, stderr: List[str] = None, stdout: List[str] = None):
         self._msg = msg
         self._cmd = cmd
@@ -32,5 +31,26 @@ class CommandExecutionException(HadesException):
             self.__class__.__name__, self._msg, self._cmd if self._cmd else "", "\n".join(self.stderr), "\n".join(self.stdout))
 
 
+class MultiCommandExecutionException(HadesException):
+    def __init__(self, exceptions: List[CommandExecutionException]):
+        self._exceptions = exceptions
+
+    def __str__(self):
+        return "{}: {}".format(self.__class__.__name__, self._exceptions)
+
+
+class HadesCommandTimedOutException(CommandExecutionException):
+    def __init__(self, msg: str, cmd: str = None, stderr: List[str] = None, stdout: List[str] = None):
+        super().__init__(msg, cmd, stderr, stdout)
+
+    def __str__(self):
+        return super().__str__()
+
+
 class SelectorException(HadesException):
     pass
+
+
+class ScriptException(HadesException):
+    def __init__(self, reason):
+        self.reason = reason

@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 
 import logging
+import os
 import time
+from copy import copy
 from os import path
 from typing import List, Tuple
 
 import click
 from rich import print as rich_print, box
 from rich.table import Table
-from rich.tree import Tree
 
 from core.config import Config, ClusterConfig
-from hadoop.action import RoleAction
-from hadoop.app.example import Application
-from hadoop.cluster_type import ClusterType
 from core.context import HadesContext
 from core.error import HadesException, ConfigSetupException, CliArgException
 from core.handler import MainCommandHandler
+from core.util import FileUtils, LoggingUtils, DateUtils
+from hadoop.action import RoleAction
+from hadoop.app.example import Application
+from hadoop.cluster_type import ClusterType
 from hadoop.xml_config import HadoopConfigFile
-from hadoop.yarn.rm_api import RmApi
 from hadoop.yarn.yarn_mutation import MutationRequest
 from hadoop_dir.module import HadoopModule
 
@@ -40,6 +41,7 @@ def cli(ctx, config: str, cluster: str, debug: bool, prefix: str):
     sh_log = logging.getLogger("sh")
     sh_log.setLevel(logging.CRITICAL)
     ctx.ensure_object(dict)
+    ctx.obj['loglevel'] = level
 
     logger.info("Invoked command {}".format(ctx.invoked_subcommand))
 
@@ -67,6 +69,16 @@ def cli(ctx, config: str, cluster: str, debug: bool, prefix: str):
 
     context = HadesContext(config=config_file, cluster_config=cluster_file, config_path=config, cluster_config_path=cluster)
     ctx.obj['handler'] = MainCommandHandler(context)
+
+
+@cli.group()
+@click.pass_context
+def yarn(ctx):
+    """
+    Yarn specific commands
+    """
+    pass
+
 
 
 @cli.command()
@@ -169,7 +181,7 @@ def discover(ctx, cluster_type: str or None, host: str or None, username: str or
     handler.discover()
 
 
-@cli.command()
+@yarn.command()
 @click.pass_context
 @click.argument('selector')
 @click.option('-f', '--follow', is_flag=True, help='whether to follow the logs file instead of just reading it')
@@ -182,6 +194,17 @@ def log(ctx, selector: str, follow: bool, tail: int or None, grep: str or None, 
     """
     handler: MainCommandHandler = ctx.obj['handler']
     handler.log(selector, follow, tail, grep, download)
+
+
+@cli.command()
+@click.pass_context
+@click.argument('app_id')
+def app_logs(ctx, app_id):
+    """
+    Read the logs of apps
+    """
+    handler: MainCommandHandler = ctx.obj['handler']
+    handler.compress_and_download_app_logs(app_id)
 
 
 @cli.command()
@@ -228,12 +251,42 @@ def run_app(ctx, app: str, cmd: str = None, queue: str = None):
 @cli.command()
 @click.pass_context
 @click.argument('script')
-def run_script(ctx, script: str):
+@click.option('-s', '--session-dir', is_flag=True, help='Whether to use session dir to save output files.')
+def run_script(ctx, script: str, session_dir: bool = False):
     """
     Runs the selected Hades script file in script/ directory
     """
     handler: MainCommandHandler = ctx.obj['handler']
-    handler.run_script(script)
+
+    if session_dir:
+        workdir = os.path.join(os.getcwd(), f"session-{DateUtils.get_current_datetime()}")
+        os.mkdir(workdir)
+        logger.debug("Session dir: %s", workdir)
+
+        level = ctx.obj['loglevel']
+        root_logger = logging.getLogger()
+        handlers = copy(root_logger.handlers)
+        file_handler = LoggingUtils.create_file_handler(workdir, level, fname="hades-session")
+        file_handler.formatter = None
+        logger.info("Logging to file: %s", file_handler.baseFilename)
+        handlers.append(file_handler)
+        logging.basicConfig(force=True, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=level, handlers=handlers)
+    else:
+        workdir = os.getcwd()
+    handler.run_script(script, workdir=workdir)
+
+
+@yarn.command()
+@click.pass_context
+def get_latest_app_logs(ctx):
+    """
+    Read the logs of the last running app
+    """
+    handler: MainCommandHandler = ctx.obj['handler']
+    app_id = handler.get_latest_running_app()
+    handler.compress_and_download_app_logs(app_id)
+    files = FileUtils.find_files(app_id)
+    FileUtils.compress_files(filename=f"cmd_get_latest_app_logs_{app_id}", files=files)
 
 
 @cli.command()
@@ -278,15 +331,6 @@ def restart_role(ctx, selector: str):
     """
     handler: MainCommandHandler = ctx.obj['handler']
     handler.role_action(selector, RoleAction.RESTART)
-
-
-@cli.group()
-@click.pass_context
-def yarn(ctx):
-    """
-    Yarn specific commands
-    """
-    pass
 
 
 @yarn.command()

@@ -122,6 +122,13 @@ class MainCommandHandler:
 
         [p.wait() for p in handlers]
 
+    def compress_and_download_app_logs(self, app_id: str):
+        cluster = self._create_cluster()
+        cmds = cluster.compress_and_download_app_logs("Yarn/NodeManager", app_id)
+        # TODO Cannot use cmd.run_async with download command (scp) as it doesn't recognize when the command ends.
+        for cmd in cmds:
+            cmd.run()
+
     def print_status(self):
         cluster = self._create_cluster()
         status = cluster.get_status()
@@ -197,7 +204,7 @@ class MainCommandHandler:
         hadoop_dir.add_modules(*modules, with_jar=True)
         cluster.replace_module_jars(selector, hadoop_dir)
 
-    def run_script(self, name: str):
+    def run_script(self, name: str, workdir: str):
         mod = __import__('script.{}'.format(name))
         script_module = getattr(mod, name, None)
         if not script_module:
@@ -213,7 +220,7 @@ class MainCommandHandler:
             raise HadesException("No subclass of HadesScriptBase found in file {}".format(name))
 
         logger.info("Running script {} in file {}".format(found_cls.__name__, name))
-        script = found_cls(self._create_cluster())
+        script = found_cls(self._create_cluster(), workdir=workdir)
         script.run()
 
     def print_scheduler_info(self):
@@ -221,3 +228,13 @@ class MainCommandHandler:
         info = cluster.get_rm_api().get_scheduler_info()
         logger.info("Scheduler info")
         logger.info(BlobFormat(info).format())
+
+    def get_latest_running_app(self):
+        cluster = self._create_cluster()
+        cmd = cluster.get_running_apps()
+        running_apps, stderr = cmd.run()
+        if len(running_apps) == 0:
+            raise HadesException("Expected 1 running application. Found no application")
+        current_app_id = running_apps[0]
+        logger.info("Found running application: %s", current_app_id)
+        return current_app_id

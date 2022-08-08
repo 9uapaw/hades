@@ -32,3 +32,10 @@ class HadoopRoleInstance:
     def get_colorized_output(self) -> str:
         return "[{} | {}]".format(color(self.name, fore=self._color), color(self.host, fore=self._color))
 
+    def __str__(self):
+        return "{}: Host: {}:{}".format(
+            self.__class__.__name__, self.host, self.role_type.name
+        )
+
+    def __repr__(self):
+        return str(self)

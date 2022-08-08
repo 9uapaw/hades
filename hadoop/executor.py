@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Type, Dict
 
-from core.cmd import RunnableCommand
+from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from hadoop.app.example import ApplicationCommand
 from hadoop.config import HadoopConfig
@@ -28,6 +28,10 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
+        raise NotImplementedError()
+
+    @abstractmethod
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
         raise NotImplementedError()
 
@@ -36,7 +40,7 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def update_config(self, *args: 'HadoopRoleInstance', config: HadoopConfig, no_backup: bool):
+    def update_config(self, *args: 'HadoopRoleInstance', config: HadoopConfig, no_backup: bool, workdir: str = "."):
         raise NotImplementedError()
 
     @abstractmethod
@@ -53,3 +57,8 @@ class HadoopOperationExecutor(ABC):
     def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):
         raise NotImplementedError()
 
+    def get_running_apps(self, *args: 'HadoopRoleInstance') -> RunnableCommand:
+        raise NotImplementedError()
+
+    def get_finished_apps(self, random_selected: 'HadoopRoleInstance'):
+        raise NotImplementedError()
