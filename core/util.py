@@ -29,14 +29,15 @@ class Formatter(logging.Formatter):
 
 
 def generate_role_output(logger: logging.Logger, target: HadoopRoleInstance, grep: Callable) -> Callable[[str], None]:
-    return lambda line: logger.info("{} {}".format(target.get_colorized_output(), line.replace("\n", ""))) \
+    return lambda line: logger.info("%s %s", target.get_colorized_output(), line.replace("\n", "")) \
         if not grep or grep(line) else ""
 
 
 class FileUtils:
     @staticmethod
     def compress_files(filename: str, files: List[str]):
-        cmd = RunnableCommand("tar -cvf {fname} {files}".format(fname=filename, files=" ".join(files)))
+        file_list = " ".join(files)
+        cmd = RunnableCommand(f"tar -cvf {filename} {file_list}")
         cmd.run()
         for file in files:
             LOG.debug("Removing file: %s", file)
@@ -47,13 +48,13 @@ class FileUtils:
         files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(dir) for f in filenames]
         LOG.debug("Compressing dir: %s", dir)
         LOG.debug("Files: %s", files)
-        cmd = RunnableCommand("tar -cvf {fname} -C {dir} .".format(fname=filename, dir=dir))
+        cmd = RunnableCommand(f"tar -cvf {filename} -C {dir} .")
         cmd.run()
         shutil.rmtree(dir, ignore_errors=True)
 
     @staticmethod
     def find_files(pattern: str, dir: str = '.'):
-        find_cmd = RunnableCommand("find {dir} -name \"*{pattern}*\" -print".format(dir=dir, pattern=pattern))
+        find_cmd = RunnableCommand(f"find {dir} -name \"*{pattern}*\" -print")
         find_cmd.run()
         if not find_cmd.stdout:
             LOG.warning("No files found for pattern '%s' in dir '%s'", pattern, dir)
@@ -68,7 +69,7 @@ class FileUtils:
     @staticmethod
     def copy_dir_to_temp_dir(child_dir: str, src_dir: str) -> str:
         if not os.path.isdir(src_dir):
-            raise ValueError("Expected a source dir, got: {}".format(src_dir))
+            raise ValueError(f"Expected a source dir, got: {src_dir}")
         dest_dir = os.path.join("/tmp", child_dir)
         if os.path.exists(dest_dir):
             FileUtils.rm_dir(dest_dir)
@@ -100,7 +101,7 @@ class FileUtils:
             raise ValueError("Path parameter should not be None or empty!")
 
         if not create and not os.path.exists(path):
-            raise ValueError("No such file or directory: {}".format(path))
+            raise ValueError(f"No such file or directory: {path}")
 
         path_comps = path.split(os.sep)
         dirs = path_comps[:-1]

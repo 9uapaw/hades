@@ -17,7 +17,7 @@ class MavenCompiler:
     def compile(self, modules: HadoopDir):
         cmd = self._config.compile_cmd
         for module in modules.get_modules():
-            cmd += " -pl {}:{}".format(self.MODULE_PREFIX, module)
+            cmd += f" -pl {self.MODULE_PREFIX}:{module}"
 
         compile_cmd = RunnableCommand(cmd, work_dir=modules.get_hadoop_dir())
         try:
@@ -33,7 +33,7 @@ class MavenCompiler:
                     err += s + "\n"
 
             if err:
-                raise CommandExecutionException("Error while running compilation command\n{}".format(err), cmd)
+                raise CommandExecutionException(f"Error while running compilation command\n{err}", cmd)
 
     def compile_single_module(self, hadoop_dir: HadoopDir, module: HadoopModule):
         compile_cmd = RunnableCommand(self._config.compile_cmd, work_dir=hadoop_dir.get_module_abs_path(module))

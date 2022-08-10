@@ -43,7 +43,7 @@ def cli(ctx, config: str, cluster: str, debug: bool, prefix: str):
     ctx.ensure_object(dict)
     ctx.obj['loglevel'] = level
 
-    logger.info("Invoked command {}".format(ctx.invoked_subcommand))
+    logger.info("Invoked command %s", ctx.invoked_subcommand)
 
     if ctx.invoked_subcommand == "init":
         hades_ctx = HadesContext(config_path=config, cluster_config_path=cluster)
@@ -303,7 +303,7 @@ def update_config(ctx, selector: str, file: str, property: Tuple[str], value: Tu
     Update properties on a config file for selected roles
     """
     if len(property) != len(value):
-        raise CliArgException("All property must map to a value. Properties: {} Values: {}".format(len(property), len(value)))
+        raise CliArgException(f"All property must map to a value. Properties: {(property)} Values: {len(value)}")
 
     handler: MainCommandHandler = ctx.obj['handler']
     file = HadoopConfigFile(file)
@@ -433,8 +433,8 @@ if __name__ == "__main__":
     try:
         cli()
         after = time.time()
-        logger.info("Executed successfully after {}s".format(int(after - before)))
+        logger.info("Executed successfully after %d seconds", int(after - before))
     except HadesException as e:
         logger.error(str(e))
         after = time.time()
-        logger.info("Error during execution after {}s".format(int(after - before)))
+        logger.info("Error during execution after %d seconds", int(after - before))

@@ -159,7 +159,7 @@ class Netty4TestcasesBuilder:
 
     def generate_testcases(self, config):
         if not self.apps:
-            raise ValueError("No apps defined for testcase: {}".format(self.name))
+            raise ValueError(f"No apps defined for testcase: {self.name}")
         testcases = []
         conf_key_prefixed_list = []
         for conf_key, values in self.configs.items():
@@ -286,10 +286,10 @@ class Netty4RegressionTest(HadesScriptBase):
         LOG.info("Will run %d testcases", no_of_tcs)
 
         # TODO Implement switching from trunk to patched mapreduce with Netty patch (checkout branch)
-        # TODO Verify if Netty is patched to the cluster or not: grep in debug logs for "*** HADOOP-15327: netty upgrade"
-        # TODO Verify if Netty is NOT patched to the cluster or not: grep in debug logs for "*** HADOOP-15327: netty upgrade" should not return results
         # TODO Turn on DEBUG logging for ShuffleHandler
         # TODO Add figlet for testcases + boundary between trunk vs. patched jar
+        # TODO Round 1: Verify if Netty is NOT patched to the cluster or not: grep in debug logs for "*** HADOOP-15327: netty upgrade" should not return results
+        # TODO Round 2: Verify if Netty is patched to the cluster or not: grep in debug logs for "*** HADOOP-15327: netty upgrade"
 
         self._load_default_yarn_site_configs()
 
@@ -373,7 +373,7 @@ class Netty4RegressionTest(HadesScriptBase):
                 empty_lines_per_role.append(r)
         # LOG.debug("***cmd_by_role: %s", cmd_by_role)
         if empty_lines_per_role:
-            raise HadesException("Found empty lines for the following roles: {}".format(empty_lines_per_role))
+            raise HadesException(f"Found empty lines for the following roles: {empty_lines_per_role}")
 
     def _get_app_log_tar_files(self, app_id: str):
         if app_id == APP_ID_NOT_AVAILABLE:
@@ -390,7 +390,7 @@ class Netty4RegressionTest(HadesScriptBase):
         cmd = self.cluster.get_running_apps()
         running_apps, stderr = cmd.run()
         if len(running_apps) > 1:
-            raise ScriptException("Expected 1 running application. Found more: {}".format(running_apps))
+            raise ScriptException(f"Expected 1 running application. Found more: {running_apps}")
         elif len(running_apps) == 0:
             raise ScriptException("Expected 1 running application. Found no application")
         current_app_id = running_apps[0]

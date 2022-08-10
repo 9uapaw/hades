@@ -37,7 +37,7 @@ class HadoopDir:
         self._hadoop_dir = hadoop_dir
 
     def extract_changed_modules(self):
-        logger.info("Searching modules in hadoop dir {}".format(self._hadoop_dir))
+        logger.info("Searching modules in hadoop dir %s", self._hadoop_dir)
         module_cmd = RunnableCommand(self.CHANGED_MODULES_CMD, work_dir=self._hadoop_dir)
 
         module_cmd.run()
@@ -71,30 +71,30 @@ class HadoopDir:
                 elif "hdfs" in module:
                     new_path = self.HDFS_JAR_DIR
 
-                full_path = "{}/{}".format(dest, new_path)
-                logger.info("Copying {} to {}".format(original_jar, full_path))
+                full_path = f"{dest}/{new_path}"
+                logger.info("Copying %s to %s", original_jar, full_path)
                 shutil.copy2(original_jar, full_path)
 
     def get_module_abs_path(self, module: HadoopModule):
-        return "{}/{}".format(self._hadoop_dir, module.value)
+        return f"{self._hadoop_dir}/{module.value}"
 
     def copy_module_to_dist(self, module: HadoopModule):
-        logger.info("Copying module {}".format(module.name))
+        logger.info("Copying module %s", module.name)
         if module == HadoopModule.YARN_UI2:
-            for module_path, dist_path in zip(glob.glob("{}/{}".format(self._hadoop_dir, self.YARN_UI2_MODULE_PATH)),
-                                    glob.glob("{}/{}".format(self._hadoop_dir, self.YARN_UI2_DIST_PATH))):
-                logger.info("Copying {} to {}".format(module_path, dist_path))
+            for module_path, dist_path in zip(glob.glob(f"{self._hadoop_dir}/{self.YARN_UI2_MODULE_PATH}"),
+                                    glob.glob(f"{self._hadoop_dir}/{self.YARN_UI2_DIST_PATH}")):
+                logger.info("Copying %s to %s", module_path, dist_path)
                 dir_util.copy_tree(module_path, dist_path)
 
     def _find_jar(self, module: str) -> str:
         jar_cmd = RunnableCommand(self.FIND_JAR_OF_MODULE_TEMPLATE.format(module=module), work_dir=self._hadoop_dir)
         jar_cmd.run()
         if not jar_cmd.stdout:
-            logger.warning("No jar found for module {}".format(module))
+            logger.warning("No jar found for module %s", module)
             logger.warning(jar_cmd.stderr)
             return ""
 
-        jar_absolute = "{}/{}".format(self._hadoop_dir, jar_cmd.stdout[0])
+        jar_absolute = f"{self._hadoop_dir}/{jar_cmd.stdout[0]}"
 
         return jar_absolute
 

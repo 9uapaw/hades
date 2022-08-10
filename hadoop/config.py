@@ -81,7 +81,7 @@ class HadoopConfig(Iterable):
             if prop_name in self._extension:
                 if prop_value != self._extension[prop_name]:
                     prop.findall('value')[0].text = self._extension[prop_name]
-                    logger.debug("Setting {} to {}".format(prop_name, prop[1].text))
+                    logger.debug("Setting %s to %s", prop_name, prop[1].text)
 
                 properties_to_set.remove(prop_name)
 
@@ -92,7 +92,7 @@ class HadoopConfig(Iterable):
             new_config_value = Element('value')
             new_config_value.text = self._extension[remaining_prop]
 
-            logger.debug("Adding new property {} with value {}".format(remaining_prop, new_config_value.text))
+            logger.debug("Adding new property %s with value %s", remaining_prop, new_config_value.text)
 
             new_config_prop.append(new_config_prop_name)
             new_config_prop.append(new_config_value)

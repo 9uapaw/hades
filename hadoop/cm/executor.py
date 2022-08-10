@@ -79,7 +79,7 @@ class CmExecutor(HadoopOperationExecutor):
                 if v == role.role_type.value:
                     role_type = k
 
-            file = "{log_dir}*/*{role_type}*".format(log_dir=self.LOG_DIR, role_type=role_type.upper())
+            file = f"{self.LOG_DIR}*/*{role_type.upper()}*"
             if download:
                 cmds.append(role.host.download(file))
                 continue
@@ -124,7 +124,7 @@ class CmExecutor(HadoopOperationExecutor):
             self._cm_api.update_config(role.service.cluster.name, role.name, role.service.name, c)
 
     def get_config(self, *args: HadoopRoleInstance, config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
-        find_config = "find {} -name \"*{}*\" -print".format(self.PROCESS_DIR, config.value)
+        find_config = f"find {self.PROCESS_DIR} -name \"*{config.value}*\" -print"
         configs = {}
         for role in args:
             try:
@@ -139,7 +139,7 @@ class CmExecutor(HadoopOperationExecutor):
                 recent_process = recent_process[0]
             else:
                 continue
-            xml = role.host.create_cmd("cat {}".format(recent_process)).run()
+            xml = role.host.create_cmd(f"cat {recent_process}").run()
             config = HadoopConfig(config)
             config.set_xml_str("\n".join(xml[0]))
             configs[role.name] = config
@@ -150,12 +150,12 @@ class CmExecutor(HadoopOperationExecutor):
         unique_args = {role.host.get_address(): role for role in args}
         cached_found_jar = {}
         for role in unique_args.values():
-            logger.info("Replacing jars on {}".format(role.host.get_address()))
+            logger.info("Replacing jars on %s", role.host.get_address())
             for module, jar in modules.get_jar_paths().items():
-                logger.info("Replacing jar {}".format(jar))
+                logger.info("Replacing jar %s", jar)
                 local_jar = jar
                 if module not in cached_found_jar:
-                    find_remote_jar = role.host.find_file(self.JAR_DIR, "*{}*".format(module)).run()
+                    find_remote_jar = role.host.find_file(self.JAR_DIR, f"*{module}*").run()
                     remote_jar = ""
                     if find_remote_jar[0]:
                         remote_jar = find_remote_jar[0][0]

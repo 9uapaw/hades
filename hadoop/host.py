@@ -45,7 +45,7 @@ class RemoteHostInstance(HadoopHostInstance):
     HADES_BACKUP_DIR = "/tmp/hades-bkp"
 
     def upload(self, source: str, dest: str) -> RunnableCommand:
-        return RunnableCommand("scp {source} {user}@{host}:{dest}".format(source=source, user=self.user, host=self.get_address(), dest=dest), target=self.role)
+        return RunnableCommand(f"scp {source} {self.user}@{self.get_address()}:{dest}", target=self.role)
 
     def download(self, source: str, dest: str = None) -> RunnableCommand:
         if not dest:
@@ -54,26 +54,26 @@ class RemoteHostInstance(HadoopHostInstance):
             dest_file = os.path.basename(source)
         else:
             dest_file = os.path.basename(dest)
-        cmd = "scp {user}@{host}:{source} {dest}".format(source=source, user=self.user,
-                                                         host=self.get_address(), dest=dest)
+        cmd = f"scp {self.user}@{self.get_address()}:{source} {dest}"
         return DownloadCommand(cmd, target=self.role, dest=dest, local_file=dest_file)
 
     def make_backup(self, dest: str) -> RunnableCommand:
         dest = PurePath(dest)
-        backup = "{bkp_dir}/{file}-{time}{suffix}".format(bkp_dir=self.HADES_BACKUP_DIR, file=dest.stem,
-                                                          time=int(time.time()), suffix=dest.suffix)
+        file = dest.stem
+        t = int(time.time())
+        backup = f"{self.HADES_BACKUP_DIR}/{file}-{t}{dest.suffix}"
 
-        logger.info("Backup file {} as {}".format(dest, backup))
-        return RemoteRunnableCommand("mkdir -p {} && cp {} {}".format(self.HADES_BACKUP_DIR, dest, backup), self.user, self.get_address(), target=self.role)
+        logger.info("Backup file %s as %s", dest, backup)
+        return RemoteRunnableCommand(f"mkdir -p {self.HADES_BACKUP_DIR} && cp {dest} {backup}", self.user, self.get_address(), target=self.role)
 
     def find_file(self, dir: str, search: str) -> RunnableCommand:
-        return self.create_cmd("find {source} -name {search} -print".format(source=dir, search=search))
+        return self.create_cmd(f"find {dir} -name {search} -print")
 
     def create_cmd(self, cmd: str) -> RunnableCommand:
         prefix = self.role.service.cluster.ctx.config.cmd_prefix
         cmds = [cmd for cmd in self.role.service.cluster.ctx.config.cmd_hook]
         if prefix:
-            cmd = "{} {}".format(prefix, cmd)
+            cmd = f"{prefix} {cmd}"
 
         cmds.append(cmd)
         cmd = " && ".join(cmds)

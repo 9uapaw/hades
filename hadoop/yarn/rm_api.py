@@ -45,23 +45,25 @@ class RmApi:
         if self._authentication == HadoopAuthentication.SIMPLE:
             endpoint = endpoint + "?user.name=yarn"
         rm_host = self._get_rm_address()
-        return requests.get("{}/{}/{}".format(rm_host, self.PREFIX, endpoint)).json()
+        return requests.get(f"{rm_host}/{self.PREFIX}/{endpoint}").json()
 
     def _put(self, endpoint: str, data: str):
         if self._authentication == HadoopAuthentication.SIMPLE:
             endpoint = endpoint + "?user.name=yarn"
         headers = {'Content-Type': 'application/xml'}
-        res = requests.put("{}/{}/{}".format(self._get_rm_address(), self.PREFIX, endpoint), data, headers=headers)
+        rm_host = self._get_rm_address()
+        res = requests.put(f"{rm_host}/{self.PREFIX}/{endpoint}", data, headers=headers)
         if res.status_code < 200 or res.status_code >= 300:
-            raise HadesException("Error while sending PUT request to {}. Cause: {}".format(res.url, res.text))
+            raise HadesException(f"Error while sending PUT request to {res.url}. Cause: {res.text}")
 
     def _post(self, endpoint: str, data: str):
         if self._authentication == HadoopAuthentication.SIMPLE:
             endpoint = endpoint + "?user.name=yarn"
         headers = {'Content-Type': 'application/xml'}
-        res = requests.post("{}/{}/{}".format(self._get_rm_address(), self.PREFIX, endpoint), data, headers=headers)
+        rm_host = self._get_rm_address()
+        res = requests.post(f"{rm_host}/{self.PREFIX}/{endpoint}", data, headers=headers)
         if res.status_code < 200 or res.status_code >= 300:
-            raise HadesException("Error while sending POST request to {}. Cause: {}".format(res.url, res.text))
+            raise HadesException(f"Error while sending POST request to {res.url}. Cause: {res.text}")
 
     def _get_rm_address(self):
         rm_address = self._rm.host.get_address()
@@ -74,7 +76,7 @@ class RmApi:
             port = rm_address_with_port[1]
             rm_host = rm_address_with_port[0]
 
-        rm_host = "http://{host}:{port}".format(host=rm_host, port=port)
+        rm_host = f"http://{rm_host}:{port}"
 
         return rm_host
 

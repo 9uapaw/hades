@@ -16,15 +16,15 @@ class DockerContainerInstance(HadoopHostInstance):
         raise NotImplementedError()
 
     def download(self, source: str, dest: str = None) -> RunnableCommand:
-        logger.info("Copying file from {}:{} to local:{}".format(self, source, dest))
-        return RunnableCommand("docker cp {container}:{source} {dest}".format(dest=dest, container=self.address, source=source))
+        logger.info("Copying file from %s:%s to local:%s", self, source, dest)
+        return RunnableCommand(f"docker cp {self.address}:{source} {dest}")
 
     def upload(self, source: str, dest: str) -> RunnableCommand:
-        logger.info("Copying file from local:{} to {}:{}".format(source, self, dest))
-        return RunnableCommand("docker cp {source} {container}:{dest}".format(dest=dest, container=self.address, source=source))
+        logger.info("Copying file from local:%s to %s:%s", source, self, dest)
+        return RunnableCommand(f"docker cp {source} {self.address}:{dest}")
 
     def get_address(self) -> str:
         return "localhost"
 
     def create_cmd(self, cmd: str) -> RunnableCommand:
-        return RunnableCommand("docker exec {} bash -c '{}'".format(self.get_address(), cmd), target=self.role)
+        return RunnableCommand(f"docker exec {self.get_address()} bash -c '{cmd}'", target=self.role)

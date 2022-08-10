@@ -65,7 +65,7 @@ class HadoopCluster:
     def read_logs(self, selector: str, follow: bool = False, tail: int or None = 10, download: bool = None) -> List[RunnableCommand]:
         roles = self.select_roles(selector)
         if not roles:
-            logger.warning("No roles found by selector '{}'".format(selector))
+            logger.warning("No roles found by selector '%s'", selector)
         logger.debug("Selected roles for read logs command: %s", roles)
 
         cmds = self._executor.read_log(*roles, follow=follow, tail=tail, download=download)
@@ -75,7 +75,7 @@ class HadoopCluster:
     def compress_and_download_app_logs(self, selector: str, app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
         roles = self.select_roles(selector)
         if not roles:
-            logger.warning("No roles found by selector '{}'".format(selector))
+            logger.warning("No roles found by selector '%s'", selector)
 
         cmds = self._executor.compress_app_logs(*roles, app_id=app_id, workdir=workdir, compress_dir=compress_dir)
         return cmds
@@ -116,7 +116,7 @@ class HadoopCluster:
     def distribute(self, selector: str, source: str, dest: str):
         selected = self.select_roles(selector)
         for role in selected:
-            logger.info("Distributing local file {} to remote host '{}' path {}".format(source, role.name, dest))
+            logger.info("Distributing local file %s to remote host '%s' path %s", source, role.name, dest)
             role.host.make_backup(dest).run()
             role.host.upload(source, dest).run()
 

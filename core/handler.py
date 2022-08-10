@@ -79,7 +79,7 @@ class MainCommandHandler:
         with open(self.ctx.cluster_config_path, 'w') as f:
             f.write(cluster_config.to_json())
 
-        logger.info("Created cluster file {}".format(self.ctx.cluster_config_path))
+        logger.info("Created cluster file %s", self.ctx.cluster_config_path)
 
     def compile(self, changed=False, deploy=False, modules=None, no_copy=False, single=None):
         if not self.ctx.config.hadoop_jar_path:
@@ -100,7 +100,7 @@ class MainCommandHandler:
             hadoop_modules.add_modules(*self.ctx.config.default_modules, with_jar=True)
             hadoop_modules.extract_changed_modules()
 
-        logger.info("Found modules: {}".format(hadoop_modules.get_modules()))
+        logger.info(f"Found modules: %s", hadoop_modules.get_modules())
         mvn.compile(hadoop_modules)
 
         if not no_copy:
@@ -208,7 +208,7 @@ class MainCommandHandler:
         mod = __import__('script.{}'.format(name))
         script_module = getattr(mod, name, None)
         if not script_module:
-            raise HadesException("Script {} not found".format(name))
+            raise HadesException(f"Script {name} not found")
 
         cls_members = inspect.getmembers(script_module, inspect.isclass)
         found_cls = None  # type: Type[HadesScriptBase]
@@ -217,9 +217,9 @@ class MainCommandHandler:
                 found_cls = cls
 
         if not found_cls:
-            raise HadesException("No subclass of HadesScriptBase found in file {}".format(name))
+            raise HadesException(f"No subclass of HadesScriptBase found in file {name}")
 
-        logger.info("Running script {} in file {}".format(found_cls.__name__, name))
+        logger.info("Running script %s in file %s", found_cls.__name__, name)
         script = found_cls(self._create_cluster(), workdir=workdir)
         script.run()
 
