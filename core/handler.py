@@ -102,7 +102,9 @@ class MainCommandHandler:
             hadoop_modules.extract_changed_modules()
 
         logger.info(f"Found modules: %s", hadoop_modules.get_modules())
-        mvn.compile(hadoop_modules)
+
+        if not all:
+            mvn.compile(hadoop_modules)
 
         if not no_copy:
             hadoop_modules.copy_modules_to_dist(self.ctx.config.hadoop_jar_path)
