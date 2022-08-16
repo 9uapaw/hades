@@ -8,7 +8,7 @@ from core.error import ScriptException, HadesCommandTimedOutException, HadesExce
 from core.handler import MainCommandHandler
 from core.util import FileUtils, CompressedFileUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand, MapReduceAppType
-from hadoop.cluster import HadoopCluster
+from hadoop.cluster import HadoopCluster, HadoopLogLevel
 from hadoop.config import HadoopConfig
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
 from hadoop.xml_config import HadoopConfigFile
@@ -252,6 +252,7 @@ class Netty4TestConfig:
     timeout = 120
     compress_tc_result = False
     decompress_app_container_logs = True
+    shufflehandler_log_level = HadoopLogLevel.DEBUG
 
     def __post_init__(self):
         sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
@@ -365,7 +366,6 @@ class Netty4RegressionTest(HadesScriptBase):
             self.testcase_results: Dict[Netty4Testcase, TestcaseResult] = {}
 
             # TODO Add figlet for testcases + boundary between trunk vs. patched jar
-            # TODO Turn on DEBUG logging for ShuffleHandler
 
             for idx, self.tc in enumerate(testcases):
                 context.update_current_tc(idx, self.workdir, self.tc, no_of_testcases)
@@ -381,6 +381,8 @@ class Netty4RegressionTest(HadesScriptBase):
                     config.extend_with_args({config_key: config_val})
 
                 self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True, workdir=self.workdir)
+                self._set_shufflehandler_loglevel()
+
                 nm_restart_log_lines = {}
                 # TODO refactor: Create separate class to read log lines, as dict is ugly! (also used the same way below) + include verifications in an optimized way
                 self._restart_nms(log_lines_dict=nm_restart_log_lines)
@@ -552,6 +554,17 @@ class Netty4RegressionTest(HadesScriptBase):
             read_logs_command.run_async(stdout=_callback(read_logs_command, yarn_log_lines),
                                         stderr=_callback(read_logs_command, yarn_log_lines))
         return roles, log_commands
+
+    def _set_shufflehandler_loglevel(self):
+        LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
+
+        set_log_level_cmds: List[RunnableCommand] = self.cluster.set_log_level(NODEMANAGER_SELECTOR,
+                                                                         package="org.apache.hadoop.mapred.ShuffleHandler",
+                                                                         log_level=self.config.shufflehandler_log_level)
+        LOG.debug("YARN set log level commands: %s", set_log_level_cmds)
+        for cmd in set_log_level_cmds:
+            LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
+            cmd.run_async()
 
     def write_config_files(self, context, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[
         str]:

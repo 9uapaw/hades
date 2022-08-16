@@ -9,6 +9,7 @@ from core.config import ClusterConfig, ClusterContextConfig, ClusterRoleConfig
 from core.context import HadesContext
 from core.error import HadesException, CommandExecutionException
 from hadoop.app.example import ApplicationCommand
+from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
 from hadoop.cm.cm_api import CmApi
 from hadoop.config import HadoopConfig
@@ -90,6 +91,9 @@ class CmExecutor(HadoopOperationExecutor):
             cmds.append(role.host.create_cmd(cmd.format(file=file)))
 
         return cmds
+
+    def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: HadoopLogLevel) -> List[RunnableCommand]:
+        raise NotImplementedError()
 
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
         services = self._cm_api.get_services(cluster_name)

@@ -4,6 +4,7 @@ from typing import List, Type, Dict
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from hadoop.app.example import ApplicationCommand
+from hadoop.cluster import HadoopLogLevel
 from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
 from hadoop.host import HadoopHostInstance
@@ -25,6 +26,10 @@ class HadoopOperationExecutor(ABC):
 
     @abstractmethod
     def read_log(self, *args: 'HadoopRoleInstance', follow: bool = False, tail: int or None = 10, download: bool = None) -> List[RunnableCommand]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: HadoopLogLevel) -> List[RunnableCommand]:
         raise NotImplementedError()
 
     @abstractmethod

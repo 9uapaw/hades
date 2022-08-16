@@ -1,5 +1,6 @@
 import logging
 import random
+from enum import Enum
 from typing import List, Callable, Dict
 
 import hadoop.selector
@@ -19,6 +20,11 @@ from hadoop.yarn.rm_api import RmApi
 from hadoop_dir.module import HadoopModule, HadoopDir
 
 logger = logging.getLogger(__name__)
+
+
+class HadoopLogLevel(Enum):
+    INFO = "INFO"
+    DEBUG = "DEBUG"
 
 
 class HadoopCluster:
@@ -70,6 +76,15 @@ class HadoopCluster:
 
         cmds = self._executor.read_log(*roles, follow=follow, tail=tail, download=download)
 
+        return cmds
+
+    def set_log_level(self, selector: str, package: str, log_level: HadoopLogLevel) -> List[RunnableCommand]:
+        roles = self.select_roles(selector)
+        if not roles:
+            logger.warning("No roles found by selector '%s'", selector)
+        logger.debug("Selected roles for read logs command: %s", roles)
+
+        cmds = self._executor.set_log_level(*roles, package=package, level=log_level)
         return cmds
 
     def compress_and_download_app_logs(self, selector: str, app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:

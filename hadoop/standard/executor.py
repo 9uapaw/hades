@@ -7,6 +7,7 @@ from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from core.error import CommandExecutionException, MultiCommandExecutionException, HadesException
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
+from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry
@@ -78,6 +79,14 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             else:
                 cmd = "cat {file}"
             cmds.append(role.host.create_cmd(cmd.format(file=file)))
+
+        return cmds
+
+    def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: HadoopLogLevel) -> List[RunnableCommand]:
+        cmds = []
+        for role in args:
+            cmd = f"yarn daemonlog -setlevel `hostname`:8088 {package} {level.value}"
+            cmds.append(role.host.create_cmd(cmd))
 
         return cmds
 

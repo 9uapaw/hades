@@ -8,6 +8,7 @@ import yaml
 from core.cmd import RunnableCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
+from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry
@@ -69,6 +70,9 @@ class HadockExecutor(HadoopOperationExecutor):
             cmds.append(RunnableCommand(cmd, target=role))
 
         return cmds
+
+    def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: HadoopLogLevel) -> List[RunnableCommand]:
+        raise NotImplementedError()
 
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
         cmd = RunnableCommand("docker container list | grep bde2020/hadoop")
