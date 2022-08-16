@@ -6,7 +6,7 @@ from typing import Callable, List, Dict, Tuple
 from core.cmd import RunnableCommand
 from core.error import ScriptException, HadesCommandTimedOutException, HadesException
 from core.handler import MainCommandHandler
-from core.util import FileUtils, CompressedFileUtils
+from core.util import FileUtils, CompressedFileUtils, PrintUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand, MapReduceAppType
 from hadoop.cluster import HadoopCluster, HadoopLogLevel
 from hadoop.config import HadoopConfig
@@ -128,7 +128,6 @@ YARN_LOG_FORMAT = "{name} - {log}"
 CONF_FORMAT = "{host}_{conf}.xml"
 
 
-
 def _callback(cmd: RunnableCommand, logs_dict: Dict[RunnableCommand, List[str]]) -> Callable:
     def _cb(line: str):
         if cmd not in logs_dict or not logs_dict[cmd]:
@@ -214,7 +213,7 @@ class Netty4TestContext:
     patch_file: str = None
     nm_log_msg_verification: str = None
     invert_nm_log_msg_verification: str = None
-    skip_compile: bool = False
+    compile: bool = True
 
     # Dynamic fields
     idx = None
@@ -253,6 +252,7 @@ class Netty4TestConfig:
     compress_tc_result = False
     decompress_app_container_logs = True
     shufflehandler_log_level = HadoopLogLevel.DEBUG
+    enable_compilation = True
 
     def __post_init__(self):
         sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
@@ -281,11 +281,13 @@ class Netty4TestConfig:
         # TODO don't hardcode NM in parameter name, create LogFilter class with role type + text + inverted or not
         self.contexts = [Netty4TestContext("without netty patch on trunk",
                                            DEFAULT_BRANCH,
-                                           invert_nm_log_msg_verification=netty_log_message),
+                                           invert_nm_log_msg_verification=netty_log_message,
+                                           compile=self.enable_compilation),
                          Netty4TestContext("with netty patch based on trubk",
                                            DEFAULT_BRANCH,
                                            patch_file=patch,
                                            nm_log_msg_verification=netty_log_message,
+                                           compile=self.enable_compilation
                                            )]
 
         self.testcases = [
@@ -359,15 +361,14 @@ class Netty4RegressionTest(HadesScriptBase):
 
             LOG.info("[%s] Starting compilation...", context)
 
-            if not context.skip_compile:
+            if context.compile:
                 handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
 
             self._load_default_yarn_site_configs()
             self.testcase_results: Dict[Netty4Testcase, TestcaseResult] = {}
 
-            # TODO Add figlet for testcases + boundary between trunk vs. patched jar
-
             for idx, self.tc in enumerate(testcases):
+                PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
                 context.update_current_tc(idx, self.workdir, self.tc, no_of_testcases)
 
                 self._load_default_mapred_configs()

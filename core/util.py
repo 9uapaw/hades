@@ -8,6 +8,8 @@ import zipfile
 from logging.handlers import TimedRotatingFileHandler
 from typing import Callable, List
 
+import pyfiglet
+
 from core.cmd import RunnableCommand
 from hadoop.role import HadoopRoleInstance
 
@@ -143,6 +145,22 @@ class LoggingUtils:
         fh.suffix = "%Y_%m_%d.log"
         fh.setLevel(level)
         return fh
+
+
+class PrintUtils:
+    HORIZONTAL_LINE = "============================================================\n"
+
+    @staticmethod
+    def print_banner(string):
+        LOG.info(PrintUtils.HORIZONTAL_LINE)
+        LOG.info(string)
+        LOG.info(PrintUtils.HORIZONTAL_LINE)
+
+    @staticmethod
+    def print_banner_figlet(string):
+        LOG.info(PrintUtils.HORIZONTAL_LINE)
+        LOG.info(pyfiglet.figlet_format(string))
+        LOG.info(PrintUtils.HORIZONTAL_LINE)
 
 
 class DateUtils:
