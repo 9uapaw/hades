@@ -14,14 +14,23 @@ class MavenCompiler:
     def __init__(self, config: Config):
         self._config = config
 
-    def compile(self, modules: HadoopDir):
+    def compile(self, modules: HadoopDir, all=False):
         cmd = self._config.compile_cmd
-        for module in modules.get_modules():
-            cmd += f" -pl {self.MODULE_PREFIX}:{module}"
+        block = False
 
-        compile_cmd = RunnableCommand(cmd, work_dir=modules.get_hadoop_dir())
+        if all:
+            block = True
+            compile_cmd = RunnableCommand(cmd, work_dir=modules.get_hadoop_dir())
+        else:
+            for module in modules.get_modules():
+                cmd += f" -pl {self.MODULE_PREFIX}:{module}"
+
+            compile_cmd = RunnableCommand(cmd, work_dir=modules.get_hadoop_dir())
         try:
-            compile_cmd.run_async()
+            if block:
+                compile_cmd.run_async(block=True, timeout=999999)
+            else:
+                compile_cmd.run_async()
         except CommandExecutionException as e:
             err = ""
             for s in compile_cmd.stdout:
