@@ -1,8 +1,12 @@
 import itertools
+import logging
 import os.path
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, List, Dict, Tuple
+from typing import Callable, List, Dict
+
+from tabulate import tabulate
+
 from core.cmd import RunnableCommand
 from core.error import ScriptException, HadesCommandTimedOutException, HadesException
 from core.handler import MainCommandHandler
@@ -10,13 +14,10 @@ from core.util import FileUtils, CompressedFileUtils, PrintUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand, MapReduceAppType
 from hadoop.cluster import HadoopCluster, HadoopLogLevel
 from hadoop.config import HadoopConfig
-from hadoop.role import HadoopRoleInstance, HadoopRoleType
+from hadoop.role import HadoopRoleType
 from hadoop.xml_config import HadoopConfigFile
 from hadoop_dir.module import HadoopDir
 from script.base import HadesScriptBase
-from tabulate import tabulate
-
-import logging
 
 DEFAULT_BRANCH = "origin/trunk"
 LOG = logging.getLogger(__name__)
@@ -215,6 +216,93 @@ class TestcaseResult:
 
 
 @dataclass
+class LogsByRoles:
+    cluster: HadoopCluster
+    selector: str
+    roles = None
+    log_commands = None
+    written_files = None
+
+    def __post_init__(self):
+        self.log_lines_dict = {}
+
+    def read_logs_into_dict(self):
+        LOG.debug("Reading YARN logs from cluster...")
+
+        self.roles = self.cluster.select_roles(self.selector)
+        self.log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=self.selector)
+        LOG.debug("YARN log commands: %s", self.log_commands)
+
+        for read_logs_command in self.log_commands:
+            LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd,
+                      read_logs_command.target.host)
+            read_logs_command.run_async(stdout=_callback(read_logs_command, self.log_lines_dict),
+                                        stderr=_callback(read_logs_command, self.log_lines_dict))
+
+    def write_to_files(self, context, prefix: str = "", app: str = ""):
+        self.written_files = []
+        if not self.log_lines_dict:
+            raise HadesException("YARN log lines dictionary is empty!")
+        if not prefix and not app:
+            raise HadesException("Either prefix or app should be specified for this method!")
+
+        for cmd, lines in self.log_lines_dict.items():
+            if prefix:
+                yarn_log_file = PREFIXED_YARN_LOG_FILE_NAME_FORMAT.format(prefix=prefix,
+                                                                          host=cmd.target.host,
+                                                                          role=cmd.target.role_type.name)
+            else:
+                yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(host=cmd.target.host,
+                                                                 role=cmd.target.role_type.name,
+                                                                 app="YARN")
+            file_path = os.path.join(context.current_tc_dir, yarn_log_file)
+            self.written_files.append(file_path)
+            with open(file_path, 'w') as f:
+                f.writelines(lines)
+
+    def search_in_logs(self, verification: LogVerification):
+        filtered_roles = list(filter(lambda rc: rc.target.role_type in [verification.role_type], list(self.log_lines_dict.keys())))
+
+        valid = True if verification.inverted_mode else False
+        bad_role = None
+        for role in filtered_roles:
+            for line in self.log_lines_dict[role]:
+                if verification.text in line:
+                    if verification.inverted_mode:
+                        valid = False
+                        bad_role = role
+                        break
+                    else:
+                        valid = True
+                        break
+
+        if not valid:
+            if verification.inverted_mode:
+                raise HadesException(
+                    "Found log line in NM log: '{}'.\n"
+                    "This shouldn't have been included in the current version's logs.\n"
+                    "NM log that include the line: {}\n"
+                    "Lines: {}".format(bad_role, verification.text, self.log_lines_dict[bad_role]))
+            else:
+                raise HadesException(
+                    "Not found log line in none of the NM logs: '{}'.\n"
+                    "This should have been included in the current version's logs.\n"
+                    "All lines for NM logs: {}".format(verification.text, self.log_lines_dict))
+
+    def verify_no_empty_lines(self, raise_exc=True):
+        empty_lines_per_role = []
+        cmd_by_role = {cmd.target: cmd for cmd in self.log_commands}
+        for r in self.roles:
+            cmd = cmd_by_role[r]
+            lines = self.log_lines_dict[cmd]
+            if not lines:
+                empty_lines_per_role.append(r)
+        # LOG.debug("***cmd_by_role: %s", cmd_by_role)
+        if empty_lines_per_role and raise_exc:
+            raise HadesException(f"Found empty lines for the following roles: {empty_lines_per_role}")
+
+
+@dataclass
 class Netty4TestContext:
     name: str
     base_branch: str = DEFAULT_BRANCH
@@ -260,7 +348,7 @@ class Netty4TestConfig:
     compress_tc_result = False
     decompress_app_container_logs = True
     shufflehandler_log_level = HadoopLogLevel.DEBUG
-    enable_compilation = True
+    enable_compilation = False
 
     def __post_init__(self):
         sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
@@ -390,13 +478,12 @@ class Netty4RegressionTest(HadesScriptBase):
                 self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True, workdir=self.workdir)
                 self._set_shufflehandler_loglevel()
 
-                nm_restart_log_lines = {}
-                # TODO refactor: Create separate class to read log lines, as dict is ugly! (also used the same way below) + include verifications in an optimized way
-                self._restart_nms(log_lines_dict=nm_restart_log_lines)
-                yarn_restart_nm_log_files: List[str] = self.write_yarn_restart_logs(context, nm_restart_log_lines)
+                nm_restart_logs = LogsByRoles(self.cluster, selector=NODEMANAGER_SELECTOR)
+                self._restart_nms(logs_by_roles=nm_restart_logs)
+                self.write_yarn_restart_logs(context, nm_restart_logs)
 
-                yarn_log_lines = {}
-                roles, log_commands = self._read_logs_into_dict("Yarn", yarn_log_lines)
+                yarn_logs = LogsByRoles(self.cluster, selector="Yarn")
+                yarn_logs.read_logs_into_dict()
                 self.testcase_results[self.tc] = self.run_app_and_collect_logs_to_file(context, self.tc.app)
 
                 if self.current_tc_result.type == TestcaseResultType.TIMEOUT:
@@ -408,18 +495,18 @@ class Netty4RegressionTest(HadesScriptBase):
 
                 if context.log_verifications:
                     for verification in context.log_verifications:
-                        self._search_in_logs(yarn_log_lines, verification)
+                        yarn_logs.search_in_logs(verification)
 
                 # Now it's okay to write the YARN log files as the app is either finished or timed out
-                yarn_log_files: List[str] = self.write_yarn_logs(context, yarn_log_lines)
+                self.write_yarn_logs(context, yarn_logs)
                 app_log_tar_files = self._get_app_log_tar_files(context, app_id)
                 tc_config_files: List[str] = self.write_config_files(context,
                                                                      NODEMANAGER_SELECTOR,
                                                                      HadoopConfigFile.MAPRED_SITE,
                                                                      dir=CONF_DIR_TC)
 
-                self._verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
-                                            yarn_log_files, yarn_restart_nm_log_files, yarn_log_lines)
+                self._verify_resulted_files(app_log_tar_files, initial_config_files, tc_config_files,
+                                            nm_restart_logs, yarn_logs)
 
                 if self.config.decompress_app_container_logs:
                     for app_log_tar_file in app_log_tar_files:
@@ -433,7 +520,7 @@ class Netty4RegressionTest(HadesScriptBase):
                                         tc_config_files + \
                                         initial_config_files + \
                                         app_log_tar_files + \
-                                        yarn_log_files
+                                        yarn_logs.written_files
 
                     if self.using_custom_workdir:
                         FileUtils.compress_dir(filename=context.get_targz_filename(), dir=context.current_tc_dir)
@@ -443,58 +530,20 @@ class Netty4RegressionTest(HadesScriptBase):
             self._print_report()
 
     @staticmethod
-    def _search_in_logs(yarn_log_lines, verification: LogVerification):
-        filtered_roles = list(filter(lambda rc: rc.target.role_type in [verification.role_type], list(yarn_log_lines.keys())))
-
-        valid = True if verification.inverted_mode else False
-        bad_role = None
-        for role in filtered_roles:
-            for line in yarn_log_lines[role]:
-                if verification.text in line:
-                    if verification.inverted_mode:
-                        valid = False
-                        bad_role = role
-                        break
-                    else:
-                        valid = True
-                        break
-
-        if not valid:
-            if verification.inverted_mode:
-                raise HadesException(
-                    "Found log line in NM log: '{}'.\n"
-                    "This shouldn't have been included in the current version's logs.\n"
-                    "NM log that include the line: {}\n"
-                    "Lines: {}".format(bad_role, verification.text, yarn_log_lines[bad_role]))
-            else:
-                raise HadesException(
-                    "Not found log line in none of the NM logs: '{}'.\n"
-                    "This should have been included in the current version's logs.\n"
-                    "All lines for NM logs: {}".format(verification.text, yarn_log_lines))
-
-    @staticmethod
-    def _verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
-                               yarn_log_files, yarn_restart_nm_log_files, yarn_log_lines):
+    def _verify_resulted_files(app_log_tar_files, initial_config_files, tc_config_files,
+                               nm_restart_logs: LogsByRoles, yarn_logs: LogsByRoles):
         if not tc_config_files:
             raise HadesException("Expected non-empty testcase config files list!")
         if not initial_config_files:
             raise HadesException("Expected non-empty initial config files list!")
         if not app_log_tar_files:
             raise HadesException("Expected non-empty app log tar files list!")
-        if not yarn_log_files:
+        if not yarn_logs.written_files:
             raise HadesException("Expected non-empty YARN log files list!")
-        if not yarn_restart_nm_log_files:
+        if not nm_restart_logs.written_files:
             raise HadesException("Expected non-empty YARN NM restart log files!")
-        empty_lines_per_role = []
-        cmd_by_role = {cmd.target: cmd for cmd in log_commands}
-        for r in roles:
-            cmd = cmd_by_role[r]
-            lines = yarn_log_lines[cmd]
-            if not lines:
-                empty_lines_per_role.append(r)
-        # LOG.debug("***cmd_by_role: %s", cmd_by_role)
-        if empty_lines_per_role:
-            raise HadesException(f"Found empty lines for the following roles: {empty_lines_per_role}")
+
+        yarn_logs.verify_no_empty_lines()
 
     def _get_app_log_tar_files(self, context, app_id: str):
         if app_id == APP_ID_NOT_AVAILABLE:
@@ -534,40 +583,25 @@ class Netty4RegressionTest(HadesScriptBase):
         # Topmost row is the latest app
         return finished_apps[0]
 
-    def _restart_nms(self, log_lines_dict):
-        roles, log_commands = self._read_logs_into_dict(NODEMANAGER_SELECTOR, log_lines_dict)
+    def _restart_nms(self, logs_by_roles: LogsByRoles):
+        logs_by_roles.read_logs_into_dict()
         handlers = []
         for cmd in self.cluster.restart_roles(NODEMANAGER_SELECTOR):
             handlers.append(cmd.run_async())
         for h in handlers:
             h.wait()
 
-    def _read_logs_into_dict(self, selector, yarn_log_lines) -> Tuple[List[HadoopRoleInstance], List[RunnableCommand]]:
-        LOG.debug("Reading YARN logs from cluster...")
-
-        roles = self.cluster.select_roles(selector)
-        log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=selector)
-        LOG.debug("YARN log commands: %s", log_commands)
-        for read_logs_command in log_commands:
-            LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd,
-                      read_logs_command.target.host)
-            read_logs_command.run_async(stdout=_callback(read_logs_command, yarn_log_lines),
-                                        stderr=_callback(read_logs_command, yarn_log_lines))
-        return roles, log_commands
-
     def _set_shufflehandler_loglevel(self):
         LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
 
-        set_log_level_cmds: List[RunnableCommand] = self.cluster.set_log_level(NODEMANAGER_SELECTOR,
-                                                                         package="org.apache.hadoop.mapred.ShuffleHandler",
-                                                                         log_level=self.config.shufflehandler_log_level)
+        set_log_level_cmds: List[RunnableCommand] = self.cluster.set_log_level(package="org.apache.hadoop.mapred.ShuffleHandler",
+                                                                               log_level=self.config.shufflehandler_log_level)
         LOG.debug("YARN set log level commands: %s", set_log_level_cmds)
         for cmd in set_log_level_cmds:
             LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
-            cmd.run_async()
+            cmd.run()
 
-    def write_config_files(self, context, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[
-        str]:
+    def write_config_files(self, context, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[str]:
         configs = self.cluster.get_config(selector, conf_type)
 
         generated_config_files = []
@@ -610,35 +644,13 @@ class Netty4RegressionTest(HadesScriptBase):
             return TestcaseResult(TestcaseResultType.TIMEOUT, app_command, file_path, details=TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds()))
         return TestcaseResult(TestcaseResultType.PASSED, app_command, file_path)
 
-    def write_yarn_logs(self, context, log_lines_dict: Dict[RunnableCommand, List[str]]):
-        return self.write_to_files(context, log_lines_dict, prefix="", app="YARN")
-
-    def write_yarn_restart_logs(self, context, log_lines_dict: Dict[RunnableCommand, List[str]]):
-        return self.write_to_files(context, log_lines_dict, prefix="restart-", app="YARN")
+    @staticmethod
+    def write_yarn_logs(context, logs_by_roles: LogsByRoles):
+        logs_by_roles.write_to_files(context, prefix="", app="YARN")
 
     @staticmethod
-    def write_to_files(context, log_lines_dict: Dict[RunnableCommand, List[str]], prefix: str = "", app: str = ""):
-        files = []
-        if not log_lines_dict:
-            raise HadesException("YARN log lines dictionary is empty!")
-        if not prefix and not app:
-            raise HadesException("Either prefix or app should be specified for this method!")
-
-        for cmd, lines in log_lines_dict.items():
-            if prefix:
-                yarn_log_file = PREFIXED_YARN_LOG_FILE_NAME_FORMAT.format(prefix=prefix,
-                                                                          host=cmd.target.host,
-                                                                          role=cmd.target.role_type.name)
-            else:
-                yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(host=cmd.target.host,
-                                                                 role=cmd.target.role_type.name,
-                                                                 app="YARN")
-            file_path = os.path.join(context.current_tc_dir, yarn_log_file)
-            files.append(file_path)
-            with open(file_path, 'w') as f:
-                f.writelines(lines)
-        return files
-
+    def write_yarn_restart_logs(context, logs_by_roles: LogsByRoles):
+        logs_by_roles.write_to_files(context, prefix="restart-", app="YARN")
 
     def _load_default_mapred_configs(self):
         LOG.info("Loading default MR ShuffleHandler configs...")
