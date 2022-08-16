@@ -314,7 +314,8 @@ class Netty4TestContext:
     allow_verification_failure: bool = False
 
     # Dynamic fields
-    idx = None
+    workdir = None
+    tc_no = None
     tc = None
     no_of_testcases = None
     current_tc_dir = None
@@ -325,21 +326,22 @@ class Netty4TestContext:
     def __hash__(self):
         return hash(self.name)
 
-    def update_current_tc(self, idx, workdir, tc, no_of_testcases):
+    def update_current_tc(self, idx: int, workdir: str, tc: Netty4Testcase, no_of_testcases: int):
         self.workdir = workdir
-        self.idx = idx
+        self.tc_no = idx + 1
         self.tc = tc
         self.no_of_testcases = no_of_testcases
+        # TODO Change working dir to ctx/tcname/... + use it from only a single place!
         self.current_tc_dir = os.path.join(workdir, tc.name)
         if not os.path.exists(self.current_tc_dir):
             os.mkdir(self.current_tc_dir)
         LOG.debug("Current TC dir is: %s", self.current_tc_dir)
 
     def log_running_testcase(self):
-        LOG.info("[%s] [%d / %d] Running testcase: %s", self, self.idx + 1, self.no_of_testcases, self.tc)
+        LOG.info("[%s] [%d / %d] Running testcase: %s", self, self.tc_no, self.no_of_testcases, self.tc)
 
     def get_targz_filename(self):
-        tc_no = f"0{str(self.idx + 1)}" if self.idx < 9 else str(self.idx + 1)
+        tc_no = f"0{str(self.tc_no)}" if self.tc_no < 9 else str(self.tc_no)
         tc_targz_filename = os.path.join(self.workdir, f"testcase_{tc_no}_{self.tc.name}.tar.gz")
         return tc_targz_filename
 
@@ -353,8 +355,7 @@ class Netty4TestConfig:
     decompress_app_container_logs = True
     shufflehandler_log_level = HadoopLogLevel.DEBUG
 
-    # TODO
-    enable_compilation = False
+    enable_compilation = True
     allow_verification_failure = True
 
     def __post_init__(self):
@@ -423,6 +424,52 @@ class Netty4TestConfig:
         ]
 
 
+class Netty4TestResults:
+    def __init__(self):
+        self.results: Dict[Netty4TestContext, Dict[Netty4Testcase, TestcaseResult]] = {}
+        self.context = None
+        self.tc = None
+
+    @property
+    def current_result(self):
+        return self.results[self.context][self.tc]
+
+    @property
+    def is_current_tc_timed_out(self):
+        curr = self.results[self.context][self.tc]
+        return curr.type == TestcaseResultType.TIMEOUT
+
+    def update_with_context_and_testcase(self, context, testcase):
+        self.context = context
+        self.results[self.context] = {}
+        self.tc = testcase
+
+    def update_with_result(self, tc, result):
+        self.results[self.context][tc] = result
+
+    def print_report(self):
+        sep = "=" * 60
+        LOG.info(sep)
+        LOG.info("TESTCASE RESULTS")
+        LOG.info(sep)
+
+        data = []
+        for tc, result in self.results[self.context].items():
+            data.append([tc.name, result.app_command.cmd, result.type.value, result.details])
+        tabulated = tabulate(data, ["TESTCASE", "COMMAND", "RESULT", "DETAILS"], tablefmt="fancy_grid")
+        LOG.info("\n" + tabulated)
+
+    def compare(self, reference_ctx):
+        LOG.debug("PRINTING ALL RESULTS: %s", self.results)
+        results1 = self.results[reference_ctx]
+
+        for context, results in self.results.items():
+            if results != results1:
+                raise HadesException("Different results for contexts!\n"
+                                     "Context1: {}, results: {}\n"
+                                     "Context2: {}, results: {}".format(reference_ctx, results1, context, results))
+
+
 class Netty4RegressionTest(HadesScriptBase):
     def __init__(self, cluster: HadoopCluster, workdir: str):
         super().__init__(cluster, workdir)
@@ -444,14 +491,11 @@ class Netty4RegressionTest(HadesScriptBase):
 
         self._run_testcases(testcases, handler)
 
-    @property
-    def current_tc_result(self):
-        return self.testcase_results[self.context][self.tc]
-
     def _run_testcases(self, testcases, handler):
         no_of_testcases = len(testcases)
         LOG.info("Will run %d testcases", no_of_testcases)
 
+        self.test_results = Netty4TestResults()
         for self.context in self.config.contexts:
             LOG.info("Starting: %s", self.context)
 
@@ -463,14 +507,13 @@ class Netty4RegressionTest(HadesScriptBase):
                 hadoop_dir.apply_patch(self.context.patch_file, force_reset=True)
 
             LOG.info("[%s] Starting compilation...", self.context)
-
             if self.context.compile:
                 handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
 
             self._load_default_yarn_site_configs()
-            self.testcase_results: Dict[Netty4TestContext, Dict[Netty4Testcase, TestcaseResult]] = {}
 
             for idx, self.tc in enumerate(testcases):
+                self.test_results.update_with_context_and_testcase(self.context, self.tc)
                 PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
                 self.context.update_current_tc(idx, self.workdir, self.tc, no_of_testcases)
 
@@ -493,10 +536,11 @@ class Netty4RegressionTest(HadesScriptBase):
 
                 yarn_logs = LogsByRoles(self.cluster, selector="Yarn")
                 yarn_logs.read_logs_into_dict()
-                self.testcase_results[self.context] = {}
-                self.testcase_results[self.context][self.tc] = self.run_app_and_collect_logs_to_file(self.context, self.tc.app)
 
-                if self.current_tc_result.type == TestcaseResultType.TIMEOUT:
+                result = self.run_app_and_collect_logs_to_file(self.context, self.tc.app)
+                self.test_results.update_with_result(self.tc, result)
+
+                if self.test_results.is_current_tc_timed_out:
                     LOG.debug("[%s] Getting running app id as testcase timed out", self.context)
                     app_id = self._get_latest_running_app()
                 else:
@@ -527,13 +571,12 @@ class Netty4RegressionTest(HadesScriptBase):
 
                 if self.config.decompress_app_container_logs:
                     for app_log_tar_file in app_log_tar_files:
-                        # TODO verify if dir is correct
                         target_dir = os.path.join(self.context.current_tc_dir)
-                        LOG.debug("[%s] Extracting file '%s' to %s", app_log_tar_file, target_dir, self.context)
+                        LOG.debug("[%s] Extracting file '%s' to %s", self.context, app_log_tar_file, target_dir)
                         CompressedFileUtils.extract_targz_file(app_log_tar_file, target_dir)
 
                 if self.config.compress_tc_result:
-                    files_to_compress = [self.current_tc_result.app_log_file] + \
+                    files_to_compress = [self.test_results.current_result.app_log_file] + \
                                         tc_config_files + \
                                         initial_config_files + \
                                         app_log_tar_files + \
@@ -544,7 +587,7 @@ class Netty4RegressionTest(HadesScriptBase):
                     else:
                         FileUtils.compress_files(filename=self.context.get_targz_filename(), files=files_to_compress)
                     FileUtils.rm_dir(self.context.current_tc_dir)
-            self._print_report(self.context)
+            self.test_results.print_report()
         self._compare_results()
 
     @staticmethod
@@ -686,28 +729,8 @@ class Netty4RegressionTest(HadesScriptBase):
             default_config.extend_with_args({k: v})
         self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir)
 
-    def _print_report(self, context):
-        sep = "=" * 60
-        LOG.info(sep)
-        LOG.info("TESTCASE RESULTS")
-        LOG.info(sep)
-
-        data = []
-        for tc, result in self.testcase_results[context].items():
-            data.append([tc.name, result.app_command.cmd, result.type.value, result.details])
-        tabulated = tabulate(data, ["TESTCASE", "COMMAND", "RESULT", "DETAILS"], tablefmt="fancy_grid")
-        LOG.info("\n" + tabulated)
-
     def _compare_results(self):
         if self.config.testcase_limit < TC_LIMIT_UNLIMITED:
             LOG.warning("Skipping comparison of testcase results as the testcase limit is set to: %s", self.config.testcase_limit)
             return
-        LOG.debug("PRINTING ALL RESULTS: %s", self.testcase_results)
-        ctx = self.config.contexts[0]
-        results1 = self.testcase_results[ctx]
-
-        for context, results in self.testcase_results.items():
-            if results != results1:
-                raise HadesException("Different results for contexts!\n"
-                                     "Context1: {}, results: {}\n"
-                                     "Context2: {}, results: {}".format(ctx, results1, context, results))
+        self.test_results.compare(self.config.contexts[0])
