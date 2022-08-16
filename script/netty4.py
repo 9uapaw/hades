@@ -286,7 +286,6 @@ class Netty4TestConfig:
 
         patch = "~/googledrive/development_drive/_upstream/HADOOP-15327/patches/backup-patch-test-changes-20220815.patch"
         netty_log_message = "*** HADOOP-15327: netty upgrade"
-        # TODO don't hardcode NM in parameter name, create LogFilter class with role type + text + inverted or not
         self.contexts = [Netty4TestContext("without netty patch on trunk",
                                            DEFAULT_BRANCH,
                                            log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=True)],
@@ -407,8 +406,6 @@ class Netty4RegressionTest(HadesScriptBase):
                     LOG.debug("[%s] Getting finished app id as testcase passed", context)
                     app_id = self._get_latest_finished_app()
 
-                # TODO write restart logs of NMs to separate files
-                # yarn_log_files: List[str] = self.write_yarn_logs(context, yarn_log_lines)
                 if context.log_verifications:
                     for verification in context.log_verifications:
                         self._search_in_logs(yarn_log_lines, verification)
