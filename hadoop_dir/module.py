@@ -2,6 +2,7 @@ import enum
 import glob
 import logging
 import distutils
+import re
 from distutils import dir_util
 from typing import Dict, List
 import shutil
@@ -22,6 +23,7 @@ class HadoopModule(enum.Enum):
 
 class HadoopDir:
     CHANGED_MODULES_CMD = "git status --porcelain | grep \".*hadoop.*\" | sed -E \"s/.*\\/(.*)\\/src.*/\\1/g\""
+    # CHANGED_MODULES_CMD = "git status --porcelain | grep \".*hadoop.*\" | sed -E \"s/.*\\/(.*)\\/src.*/\\1/g\" | sed -E \"s/.*\\/(.*)\\/pom\\.xml/\\1/g\""
     SWITCH_BRANCH_CMD_TEMPLATE = "git checkout {}"
     RESET_HARD_CMD_TEMPLATE = "git reset {} --hard"
     APPLY_PATCH_CMD_TEMPLATE = "git apply {}"
@@ -44,12 +46,19 @@ class HadoopDir:
         module_cmd = RunnableCommand(self.CHANGED_MODULES_CMD, work_dir=self._hadoop_dir)
 
         module_cmd.run()
-        if not module_cmd.stdout:
-            raise CommandExecutionException("\n".join(module_cmd.stdout), self.CHANGED_MODULES_CMD)
+        stdout = module_cmd.stdout
+        if not stdout:
+            raise CommandExecutionException("\n".join(stdout), self.CHANGED_MODULES_CMD)
 
-        for module in set(module_cmd.stdout):
+        modules = set(stdout)
+        for module in modules:
+            m = re.search('\\s*M ', module)
+            if m:
+                logger.warning("Ignoring changed file, couldn't determine module for: %s", module)
+                continue
             try:
                 jar = self._find_jar(module)
+                logger.debug("Found jar '%s' for module '%s'", jar, module)
                 self._modules[module] = jar
                 self._changed[module] = self._modules[module]
             except CommandExecutionException as e:
@@ -58,6 +67,7 @@ class HadoopDir:
                     continue
                 else:
                     raise e
+        logger.debug("Discovered changed modules: %", self._changed)
 
     def copy_modules_to_dist(self, dest: str, *args):
         if not args:
