@@ -27,6 +27,7 @@ CONF_DIR_INITIAL = "initial_config"
 APP_ID_NOT_AVAILABLE = "N/A"
 
 TIMEOUT_MSG_TEMPLATE = "Timed out after {} seconds"
+TC_LIMIT_UNLIMITED = 99999999
 
 NODEMANAGER_SELECTOR = "Yarn/NodeManager"
 NODE_TO_RUN_ON = "type=Yarn/name=nodemanager2"
@@ -345,8 +346,7 @@ class Netty4TestContext:
 
 @dataclass
 class Netty4TestConfig:
-    # TODO Remove this limit
-    testcase_limit = 1
+    testcase_limit = TC_LIMIT_UNLIMITED
     extract_tar_files = True
     timeout = 120
     compress_tc_result = False
