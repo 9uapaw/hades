@@ -1,6 +1,6 @@
 import itertools
 import os.path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, List, Dict, Tuple
 from core.cmd import RunnableCommand
@@ -200,6 +200,13 @@ class TestcaseResultType(Enum):
 
 
 @dataclass
+class LogVerification:
+    role_type: HadoopRoleType
+    text: str
+    inverted_mode: bool = False
+
+
+@dataclass
 class TestcaseResult:
     type: TestcaseResultType
     app_command: RunnableCommand
@@ -212,7 +219,7 @@ class Netty4TestContext:
     name: str
     base_branch: str = DEFAULT_BRANCH
     patch_file: str = None
-    nm_log_msg_verification: str = None
+    log_verifications: List[LogVerification] = field(default_factory=list)
     invert_nm_log_msg_verification: str = None
     compile: bool = True
 
@@ -282,12 +289,12 @@ class Netty4TestConfig:
         # TODO don't hardcode NM in parameter name, create LogFilter class with role type + text + inverted or not
         self.contexts = [Netty4TestContext("without netty patch on trunk",
                                            DEFAULT_BRANCH,
-                                           invert_nm_log_msg_verification=netty_log_message,
+                                           log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=True)],
                                            compile=self.enable_compilation),
-                         Netty4TestContext("with netty patch based on trubk",
+                         Netty4TestContext("with netty patch based on trunk",
                                            DEFAULT_BRANCH,
                                            patch_file=patch,
-                                           nm_log_msg_verification=netty_log_message,
+                                           log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=False)],
                                            compile=self.enable_compilation
                                            )]
 
@@ -339,8 +346,6 @@ class Netty4RegressionTest(HadesScriptBase):
             testcases = testcases[:self.config.testcase_limit]
 
         self._run_testcases(testcases, handler)
-        # TODO Verify if results are the same for both execution
-        return
 
     @property
     def current_tc_result(self):
@@ -350,6 +355,7 @@ class Netty4RegressionTest(HadesScriptBase):
         no_of_testcases = len(testcases)
         LOG.info("Will run %d testcases", no_of_testcases)
 
+        # TODO Verify if results are the same for both execution, control it by a flag!
         for context in self.config.contexts:
             LOG.info("Starting: %s", context)
 
@@ -403,17 +409,9 @@ class Netty4RegressionTest(HadesScriptBase):
 
                 # TODO write restart logs of NMs to separate files
                 # yarn_log_files: List[str] = self.write_yarn_logs(context, yarn_log_lines)
-                if context.nm_log_msg_verification:
-                    self._search_in_logs(yarn_log_lines,
-                                         role_types=[HadoopRoleType.NM],
-                                         text=context.nm_log_msg_verification,
-                                         inverted_mode=False)
-
-                if context.invert_nm_log_msg_verification:
-                    self._search_in_logs(yarn_log_lines,
-                                         role_types=[HadoopRoleType.NM],
-                                         text=context.invert_nm_log_msg_verification,
-                                         inverted_mode=True)
+                if context.log_verifications:
+                    for verification in context.log_verifications:
+                        self._search_in_logs(yarn_log_lines, verification)
 
                 # Now it's okay to write the YARN log files as the app is either finished or timed out
                 yarn_log_files: List[str] = self.write_yarn_logs(context, yarn_log_lines)
@@ -448,15 +446,15 @@ class Netty4RegressionTest(HadesScriptBase):
             self._print_report()
 
     @staticmethod
-    def _search_in_logs(yarn_log_lines, role_types: List[HadoopRoleType], text, inverted_mode=False):
-        filtered_roles = list(filter(lambda rc: rc.target.role_type in role_types, list(yarn_log_lines.keys())))
+    def _search_in_logs(yarn_log_lines, verification: LogVerification):
+        filtered_roles = list(filter(lambda rc: rc.target.role_type in [verification.role_type], list(yarn_log_lines.keys())))
 
-        valid = True if inverted_mode else False
+        valid = True if verification.inverted_mode else False
         bad_role = None
         for role in filtered_roles:
             for line in yarn_log_lines[role]:
-                if text in line:
-                    if inverted_mode:
+                if verification.text in line:
+                    if verification.inverted_mode:
                         valid = False
                         bad_role = role
                         break
@@ -465,17 +463,17 @@ class Netty4RegressionTest(HadesScriptBase):
                         break
 
         if not valid:
-            if inverted_mode:
+            if verification.inverted_mode:
                 raise HadesException(
                     "Found log line in NM log: '{}'.\n"
                     "This shouldn't have been included in the current version's logs.\n"
                     "NM log that include the line: {}\n"
-                    "Lines: {}".format(bad_role, text, yarn_log_lines[bad_role]))
+                    "Lines: {}".format(bad_role, verification.text, yarn_log_lines[bad_role]))
             else:
                 raise HadesException(
                     "Not found log line in none of the NM logs: '{}'.\n"
                     "This should have been included in the current version's logs.\n"
-                    "All lines for NM logs: {}".format(text, yarn_log_lines))
+                    "All lines for NM logs: {}".format(verification.text, yarn_log_lines))
 
     @staticmethod
     def _verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
