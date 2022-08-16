@@ -78,7 +78,8 @@ class HadoopCluster:
 
         return cmds
 
-    def set_log_level(self, selector: str, package: str, log_level: HadoopLogLevel) -> List[RunnableCommand]:
+    def set_log_level(self, package: str, log_level: HadoopLogLevel) -> List[RunnableCommand]:
+        selector = "ResourceManager"
         roles = self.select_roles(selector)
         if not roles:
             logger.warning("No roles found by selector '%s'", selector)
