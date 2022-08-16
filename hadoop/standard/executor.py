@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class StandardUpstreamExecutor(HadoopOperationExecutor):
-    JAR_DIR = "/opt/hadoop/share/"
+    JAR_DIR = "/opt/hadoop/share/hadoop/"
     LOG_DIR = "/opt/hadoop/logs"
     APP_LOG_DIR = "/tmp/hadoop-logs"
     CONFIG_FILE_PATH = "/opt/hadoop/etc/hadoop/{}"
@@ -230,6 +230,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
                 if remote_jar:
                     role.host.make_backup(remote_jar).run()
+                    logger.info("Replacing remote jar %s:%s with local jar: %s", role.host, remote_jar, local_jar)
                     role.host.upload(local_jar, remote_jar).run()
 
     def get_running_apps(self, random_selected: HadoopRoleInstance):
