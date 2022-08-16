@@ -81,19 +81,20 @@ class MainCommandHandler:
 
         logger.info("Created cluster file %s", self.ctx.cluster_config_path)
 
-    def compile(self, changed=False, deploy=False, modules=None, no_copy=False, single=None):
+    def compile(self, all=False, changed=False, deploy=False, modules=None, no_copy=False, single=None):
         if not self.ctx.config.hadoop_jar_path:
             raise ConfigSetupException("hadoopJarPath", "not set")
 
         mvn = MavenCompiler(self.ctx.config)
         hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
 
-        if single:
+        if all:
+            mvn.compile(modules=hadoop_modules, all=True)
+        elif single:
             mvn.compile_single_module(hadoop_modules, single)
             hadoop_modules.copy_module_to_dist(single)
             return
-
-        if modules:
+        elif modules:
             hadoop_modules.add_modules(*modules, with_jar=True)
 
         if changed and not modules:
