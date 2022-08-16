@@ -5,16 +5,20 @@ from enum import Enum
 from typing import Callable, List, Dict, Tuple
 from core.cmd import RunnableCommand
 from core.error import ScriptException, HadesCommandTimedOutException, HadesException
+from core.handler import MainCommandHandler
 from core.util import FileUtils, CompressedFileUtils
 from hadoop.app.example import MapReduceApp, ApplicationCommand, MapReduceAppType
 from hadoop.cluster import HadoopCluster
 from hadoop.config import HadoopConfig
-from hadoop.role import HadoopRoleInstance
+from hadoop.role import HadoopRoleInstance, HadoopRoleType
 from hadoop.xml_config import HadoopConfigFile
+from hadoop_dir.module import HadoopDir
 from script.base import HadesScriptBase
 from tabulate import tabulate
 
 import logging
+
+DEFAULT_BRANCH = "origin/trunk"
 LOG = logging.getLogger(__name__)
 
 CONF_DIR_TC = "testcase_config"
@@ -204,6 +208,43 @@ class TestcaseResult:
 
 
 @dataclass
+class Netty4TestContext:
+    name: str
+    base_branch: str = DEFAULT_BRANCH
+    patch_file: str = None
+    nm_log_msg_verification: str = None
+    invert_nm_log_msg_verification: str = None
+    skip_compile: bool = False
+
+    # Dynamic fields
+    idx = None
+    tc = None
+    no_of_testcases = None
+    current_tc_dir = None
+
+    def __str__(self):
+        return f"Context: {self.name}"
+
+    def update_current_tc(self, idx, workdir, tc, no_of_testcases):
+        self.workdir = workdir
+        self.idx = idx
+        self.tc = tc
+        self.no_of_testcases = no_of_testcases
+        self.current_tc_dir = os.path.join(workdir, tc.name)
+        if not os.path.exists(self.current_tc_dir):
+            os.mkdir(self.current_tc_dir)
+        LOG.debug("Current TC dir is: %s", self.current_tc_dir)
+
+    def log_running_testcase(self):
+        LOG.info("[%s] [%d / %d] Running testcase: %s", self, self.idx + 1, self.no_of_testcases, self.tc)
+
+    def get_targz_filename(self):
+        tc_no = f"0{str(self.idx + 1)}" if self.idx < 9 else str(self.idx + 1)
+        tc_targz_filename = os.path.join(self.workdir, f"testcase_{tc_no}_{self.tc.name}.tar.gz")
+        return tc_targz_filename
+
+
+@dataclass
 class Netty4TestConfig:
     # TODO Remove this limit
     testcase_limit = 1
@@ -233,6 +274,18 @@ class Netty4TestConfig:
             MapReduceAppType.LOADGEN: loadgen_job
         }
         self.default_apps = [MapReduceAppType.SLEEP, MapReduceAppType.LOADGEN]
+
+        patch = "~/googledrive/development_drive/_upstream/HADOOP-15327/patches/backup-patch-test-changes-20220815.patch"
+        netty_log_message = "*** HADOOP-15327: netty upgrade"
+        # TODO don't hardcode NM in parameter name, create LogFilter class with role type + text + inverted or not
+        self.contexts = [Netty4TestContext("without netty patch on trunk",
+                                           DEFAULT_BRANCH,
+                                           invert_nm_log_msg_verification=netty_log_message),
+                         Netty4TestContext("with netty patch based on trubk",
+                                           DEFAULT_BRANCH,
+                                           patch_file=patch,
+                                           nm_log_msg_verification=netty_log_message,
+                                           )]
 
         self.testcases = [
             *Netty4TestcasesBuilder("shuffle_max_connections")
@@ -268,7 +321,6 @@ class Netty4RegressionTest(HadesScriptBase):
         super().__init__(cluster, workdir)
         LOG.info("Using workdir: %s", self.workdir)
         self.tc = None
-        self.current_tc_dir = None
         self.config = Netty4TestConfig()
 
     YARN_SITE_DEFAULT_CONFIGS = {
@@ -278,83 +330,150 @@ class Netty4RegressionTest(HadesScriptBase):
     def run(self, handler: MainCommandHandler):
         testcases = self.config.testcases
         LOG.info("ALL Testcases: %s", testcases)
-
         if self.config.testcase_limit > 0:
             LOG.info("Limiting testcases to %s", self.config.testcase_limit)
             testcases = testcases[:self.config.testcase_limit]
-        no_of_tcs = len(testcases)
-        LOG.info("Will run %d testcases", no_of_tcs)
 
-        # TODO Implement switching from trunk to patched mapreduce with Netty patch (checkout branch)
-        # TODO Turn on DEBUG logging for ShuffleHandler
-        # TODO Add figlet for testcases + boundary between trunk vs. patched jar
-        # TODO Round 1: Verify if Netty is NOT patched to the cluster or not: grep in debug logs for "*** HADOOP-15327: netty upgrade" should not return results
-        # TODO Round 2: Verify if Netty is patched to the cluster or not: grep in debug logs for "*** HADOOP-15327: netty upgrade"
+        self._run_testcases(testcases, handler)
+        # TODO Verify if results are the same for both execution
+        return
 
-        self._load_default_yarn_site_configs()
+    @property
+    def current_tc_result(self):
+        return self.testcase_results[self.tc]
 
-        testcase_results: Dict[Netty4Testcase, TestcaseResult] = {}
-        for idx, self.tc in enumerate(testcases):
-            self.current_tc_dir = os.path.join(self.workdir, self.tc.name)
-            os.mkdir(self.current_tc_dir)
-            LOG.debug("Current TC dir is: %s", self.current_tc_dir)
+    def _run_testcases(self, testcases, handler):
+        no_of_testcases = len(testcases)
+        LOG.info("Will run %d testcases", no_of_testcases)
 
-            self._load_default_mapred_configs()
-            config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
-            initial_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR,
-                                                                      HadoopConfigFile.MAPRED_SITE, dir=CONF_DIR_INITIAL)
-            LOG.info("[%d / %d] Running testcase: %s", idx + 1, no_of_tcs, self.tc)
-            for config_key, config_val in self.tc.config_changes.items():
-                config.extend_with_args({config_key: config_val})
+        for context in self.config.contexts:
+            LOG.info("Starting: %s", context)
 
-            self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True, workdir=self.workdir)
-            self._restart_nms()
+            # Checkout branch, apply patch if required
+            hadoop_dir = HadoopDir(handler.ctx.config.hadoop_path)
+            hadoop_dir.switch_branch_to(context.base_branch)
 
-            yarn_log_lines = {}
-            roles, log_commands = self._read_logs_into_dict("Yarn", yarn_log_lines)
-            testcase_results[self.tc] = self.run_app_and_collect_logs_to_file(self.tc.app)
+            if context.patch_file:
+                hadoop_dir.apply_patch(context.patch_file, force_reset=True)
 
-            if testcase_results[self.tc].type == TestcaseResultType.TIMEOUT:
-                LOG.debug("Getting running app id as testcase timed out")
-                app_id = self._get_latest_running_app()
-            else:
-                LOG.debug("Getting finished app id as testcase passed")
-                app_id = self._get_latest_finished_app()
+            LOG.info("[%s] Starting compilation...", context)
 
-            # Now it's okay to write the YARN log files as the app is either finished or timed out
-            yarn_log_files: List[str] = self.write_yarn_logs(yarn_log_lines)
-            app_log_tar_files = self._get_app_log_tar_files(app_id)
-            tc_config_files: List[str] = self.write_config_files(NODEMANAGER_SELECTOR, HadoopConfigFile.MAPRED_SITE,
-                                                                 dir=CONF_DIR_TC)
+            if not context.skip_compile:
+                handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
 
-            self._verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
-                                        yarn_log_files, yarn_log_lines)
+            self._load_default_yarn_site_configs()
+            self.testcase_results: Dict[Netty4Testcase, TestcaseResult] = {}
 
-            if self.config.decompress_app_container_logs:
-                for app_log_tar_file in app_log_tar_files:
-                    # TODO verify if dir is correct
-                    target_dir = os.path.join(self.current_tc_dir)
-                    LOG.debug("Extracting file '%s' to %s", app_log_tar_file, target_dir)
-                    CompressedFileUtils.extract_targz_file(app_log_tar_file, target_dir)
+            # TODO Add figlet for testcases + boundary between trunk vs. patched jar
+            # TODO Turn on DEBUG logging for ShuffleHandler
 
-            if self.config.compress_tc_result:
-                files_to_compress = [testcase_results[self.tc].app_log_file] + \
-                                    tc_config_files + \
-                                    initial_config_files + \
-                                    app_log_tar_files + \
-                                    yarn_log_files
-                tc_no = f"0{str(idx + 1)}" if idx < 9 else str(idx + 1)
-                tc_targz_filename = os.path.join(self.workdir, f"testcase_{tc_no}_{self.tc.name}.tar.gz")
+            for idx, self.tc in enumerate(testcases):
+                context.update_current_tc(idx, self.workdir, self.tc, no_of_testcases)
 
-                if self.using_custom_workdir:
-                    FileUtils.compress_dir(filename=tc_targz_filename, dir=self.current_tc_dir)
+                self._load_default_mapred_configs()
+                config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
+                initial_config_files: List[str] = self.write_config_files(context,
+                                                                          NODEMANAGER_SELECTOR,
+                                                                          HadoopConfigFile.MAPRED_SITE,
+                                                                          dir=CONF_DIR_INITIAL)
+                context.log_running_testcase()
+                for config_key, config_val in self.tc.config_changes.items():
+                    config.extend_with_args({config_key: config_val})
+
+                self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True, workdir=self.workdir)
+                nm_restart_log_lines = {}
+                # TODO refactor: Create separate class to read log lines, as dict is ugly! (also used the same way below) + include verifications in an optimized way
+                self._restart_nms(log_lines_dict=nm_restart_log_lines)
+
+                yarn_log_lines = {}
+                roles, log_commands = self._read_logs_into_dict("Yarn", yarn_log_lines)
+                self.testcase_results[self.tc] = self.run_app_and_collect_logs_to_file(context, self.tc.app)
+
+                if self.current_tc_result.type == TestcaseResultType.TIMEOUT:
+                    LOG.debug("[%s] Getting running app id as testcase timed out", context)
+                    app_id = self._get_latest_running_app()
                 else:
-                    FileUtils.compress_files(filename=tc_targz_filename, files=files_to_compress)
-                FileUtils.rm_dir(self.current_tc_dir)
+                    LOG.debug("[%s] Getting finished app id as testcase passed", context)
+                    app_id = self._get_latest_finished_app()
 
-        self._print_report(testcase_results)
+                # TODO write restart logs of NMs to separate files
+                # yarn_log_files: List[str] = self.write_yarn_logs(context, yarn_log_lines)
+                if context.nm_log_msg_verification:
+                    self._search_in_logs(yarn_log_lines,
+                                         role_types=[HadoopRoleType.NM],
+                                         text=context.nm_log_msg_verification,
+                                         inverted_mode=False)
 
-    def _verify_resulted_files(self, app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
+                if context.invert_nm_log_msg_verification:
+                    self._search_in_logs(yarn_log_lines,
+                                         role_types=[HadoopRoleType.NM],
+                                         text=context.invert_nm_log_msg_verification,
+                                         inverted_mode=True)
+
+                # Now it's okay to write the YARN log files as the app is either finished or timed out
+                yarn_log_files: List[str] = self.write_yarn_logs(context, yarn_log_lines)
+                app_log_tar_files = self._get_app_log_tar_files(context, app_id)
+                tc_config_files: List[str] = self.write_config_files(context,
+                                                                     NODEMANAGER_SELECTOR,
+                                                                     HadoopConfigFile.MAPRED_SITE,
+                                                                     dir=CONF_DIR_TC)
+
+                self._verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
+                                            yarn_log_files, yarn_log_lines)
+
+                if self.config.decompress_app_container_logs:
+                    for app_log_tar_file in app_log_tar_files:
+                        # TODO verify if dir is correct
+                        target_dir = os.path.join(context.current_tc_dir)
+                        LOG.debug("[%s] Extracting file '%s' to %s", app_log_tar_file, target_dir, context)
+                        CompressedFileUtils.extract_targz_file(app_log_tar_file, target_dir)
+
+                if self.config.compress_tc_result:
+                    files_to_compress = [self.current_tc_result.app_log_file] + \
+                                        tc_config_files + \
+                                        initial_config_files + \
+                                        app_log_tar_files + \
+                                        yarn_log_files
+
+                    if self.using_custom_workdir:
+                        FileUtils.compress_dir(filename=context.get_targz_filename(), dir=context.current_tc_dir)
+                    else:
+                        FileUtils.compress_files(filename=context.get_targz_filename(), files=files_to_compress)
+                    FileUtils.rm_dir(context.current_tc_dir)
+            self._print_report()
+
+    @staticmethod
+    def _search_in_logs(yarn_log_lines, role_types: List[HadoopRoleType], text, inverted_mode=False):
+        filtered_roles = list(filter(lambda rc: rc.target.role_type in role_types, list(yarn_log_lines.keys())))
+
+        valid = True if inverted_mode else False
+        bad_role = None
+        for role in filtered_roles:
+            for line in yarn_log_lines[role]:
+                if text in line:
+                    if inverted_mode:
+                        valid = False
+                        bad_role = role
+                        break
+                    else:
+                        valid = True
+                        break
+
+        if not valid:
+            if inverted_mode:
+                raise HadesException(
+                    "Found log line in NM log: '{}'.\n"
+                    "This shouldn't have been included in the current version's logs.\n"
+                    "NM log that include the line: {}\n"
+                    "Lines: {}".format(bad_role, text, yarn_log_lines[bad_role]))
+            else:
+                raise HadesException(
+                    "Not found log line in none of the NM logs: '{}'.\n"
+                    "This should have been included in the current version's logs.\n"
+                    "All lines for NM logs: {}".format(text, yarn_log_lines))
+
+    @staticmethod
+    def _verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
                                yarn_log_files, yarn_log_lines):
         if not tc_config_files:
             raise HadesException("Expected non-empty testcase config files list!")
@@ -375,12 +494,12 @@ class Netty4RegressionTest(HadesScriptBase):
         if empty_lines_per_role:
             raise HadesException(f"Found empty lines for the following roles: {empty_lines_per_role}")
 
-    def _get_app_log_tar_files(self, app_id: str):
+    def _get_app_log_tar_files(self, context, app_id: str):
         if app_id == APP_ID_NOT_AVAILABLE:
             return []
 
         app_log_tar_files = []
-        cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id, workdir=self.current_tc_dir, compress_dir=True)
+        cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id, workdir=context.current_tc_dir, compress_dir=True)
         for cmd in cmds:
             cmd.run()
             app_log_tar_files.append(cmd.dest)
@@ -413,7 +532,8 @@ class Netty4RegressionTest(HadesScriptBase):
         # Topmost row is the latest app
         return finished_apps[0]
 
-    def _restart_nms(self):
+    def _restart_nms(self, log_lines_dict):
+        roles, log_commands = self._read_logs_into_dict(NODEMANAGER_SELECTOR, log_lines_dict)
         handlers = []
         for cmd in self.cluster.restart_roles(NODEMANAGER_SELECTOR):
             handlers.append(cmd.run_async())
@@ -433,7 +553,7 @@ class Netty4RegressionTest(HadesScriptBase):
                                         stderr=_callback(read_logs_command, yarn_log_lines))
         return roles, log_commands
 
-    def write_config_files(self, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[
+    def write_config_files(self, context, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[
         str]:
         configs = self.cluster.get_config(selector, conf_type)
 
@@ -441,12 +561,12 @@ class Netty4RegressionTest(HadesScriptBase):
         for host, conf in configs.items():
             config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name)
             if dir:
-                dir_path = os.path.join(self.current_tc_dir, dir)
+                dir_path = os.path.join(context.current_tc_dir, dir)
                 if not os.path.exists(dir_path):
                     os.mkdir(dir_path)
                 file_path = os.path.join(dir_path, config_file_name)
             else:
-                file_path = os.path.join(self.current_tc_dir, config_file_name)
+                file_path = os.path.join(context.current_tc_dir, config_file_name)
 
             LOG.debug("Writing config file '%s' on host '%s'", file_path, host)
             with open(file_path, 'w') as f:
@@ -454,7 +574,7 @@ class Netty4RegressionTest(HadesScriptBase):
             generated_config_files.append(file_path)
         return generated_config_files
 
-    def run_app_and_collect_logs_to_file(self, app: ApplicationCommand) -> TestcaseResult:
+    def run_app_and_collect_logs_to_file(self, context, app: ApplicationCommand) -> TestcaseResult:
         app_log = []
         timed_out = False
         with self.overwrite_config(cmd_prefix="sudo -u systest"):
@@ -468,7 +588,7 @@ class Netty4RegressionTest(HadesScriptBase):
             LOG.error("Command '%s' timed out after %d seconds", app_command, app.get_timeout_seconds())
 
         app_log_file = APP_LOG_FILE_NAME_FORMAT.format(app="MRPI")
-        file_path = os.path.join(self.current_tc_dir, app_log_file)
+        file_path = os.path.join(context.current_tc_dir, app_log_file)
         LOG.debug("Writing app log file '%s' on host '%s'", file_path, app_command.target.host)
         with open(file_path, 'w') as f:
             f.writelines(app_log)
@@ -477,14 +597,14 @@ class Netty4RegressionTest(HadesScriptBase):
             return TestcaseResult(TestcaseResultType.TIMEOUT, app_command, file_path, details=TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds()))
         return TestcaseResult(TestcaseResultType.PASSED, app_command, file_path)
 
-    def write_yarn_logs(self, log_lines_dict: Dict[RunnableCommand, List[str]]):
+    def write_yarn_logs(self, context, log_lines_dict: Dict[RunnableCommand, List[str]]):
         files = []
         if not log_lines_dict:
             raise HadesException("YARN log lines dictionary is empty!")
         for cmd, lines in log_lines_dict.items():
             yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(host=cmd.target.host,
                                                              role=cmd.target.role_type.name, app="YARN")
-            file_path = os.path.join(self.current_tc_dir, yarn_log_file)
+            file_path = os.path.join(context.current_tc_dir, yarn_log_file)
             files.append(file_path)
             with open(file_path, 'w') as f:
                 f.writelines(lines)
@@ -506,15 +626,14 @@ class Netty4RegressionTest(HadesScriptBase):
             default_config.extend_with_args({k: v})
         self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir)
 
-    @staticmethod
-    def _print_report(testcase_results: Dict[Netty4Testcase, TestcaseResult]):
+    def _print_report(self):
         sep = "=" * 60
         LOG.info(sep)
         LOG.info("TESTCASE RESULTS")
         LOG.info(sep)
 
         data = []
-        for tc, result in testcase_results.items():
+        for tc, result in self.testcase_results.items():
             data.append([tc.name, result.app_command.cmd, result.type.value, result.details])
         tabulated = tabulate(data, ["TESTCASE", "COMMAND", "RESULT", "DETAILS"], tablefmt="fancy_grid")
         LOG.info("\n" + tabulated)
