@@ -3,7 +3,7 @@ import logging
 import os.path
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, List, Dict
+from typing import Callable, List, Dict, Tuple
 
 from tabulate import tabulate
 
@@ -212,7 +212,6 @@ class LogVerification:
 class TestcaseResult:
     type: TestcaseResultType
     app_command: RunnableCommand
-    app_log_file: str
     details: str = None
 
 
@@ -470,6 +469,47 @@ class Netty4TestResults:
                                      "Context2: {}, results: {}".format(reference_ctx, results1, context, results))
 
 
+class OutputFileType(Enum):
+    INITIAL_CONFIG = "initial_config"
+    TC_CONFIG = "testcase_config"
+    APP_LOG_TAR = "app_log_tar"
+    NM_RESTART_LOGS = "nm_restart_logs"
+    YARN_DAEMON_LOGS = "yarn_daemon_logs"
+    APP_LOG_FILE = "app_log_file"
+
+
+class GeneratedOutputFiles:
+    def __init__(self):
+        self._files: Dict[Netty4TestContext, Dict[Netty4Testcase, Dict[OutputFileType, List[str]]]] = {}
+        self.ctx = None
+        self.tc = None
+        self._curr_files_dict = None
+
+    def update_with_ctx_and_tc(self, context, tc):
+        self.ctx = context
+        self.tc = tc
+
+        self._files[self.ctx] = {}
+        self._files[self.ctx][self.tc] = {}
+        self._curr_files_dict = self._files[self.ctx][self.tc]
+
+    def register_files(self, out_type: OutputFileType, files: List[str]):
+        if out_type in self._curr_files_dict:
+            raise HadesException("Output type is already used: {}".format(out_type))
+        self._curr_files_dict[out_type] = files
+
+    def get(self, out_type):
+        return self._curr_files_dict[out_type]
+
+    def get_all_for_current_ctx(self):
+        res = list(itertools.chain(self._curr_files_dict.values()))
+        LOG.debug("All files for context '%s' / testcase '%s'", self.ctx, self.tc)
+        return res
+
+    def print_all(self):
+        LOG.debug("All generated files: %s", self._files)
+
+
 class Netty4RegressionTest(HadesScriptBase):
     def __init__(self, cluster: HadoopCluster, workdir: str):
         super().__init__(cluster, workdir)
@@ -512,34 +552,51 @@ class Netty4RegressionTest(HadesScriptBase):
 
             self._load_default_yarn_site_configs()
 
+            self.generated_files = GeneratedOutputFiles()
             for idx, self.tc in enumerate(testcases):
-                self.test_results.update_with_context_and_testcase(self.context, self.tc)
                 PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
-                self.context.update_current_tc(idx, self.workdir, self.tc, no_of_testcases)
 
+                # 1. Update context, TestResults
+                self.context.update_current_tc(idx, self.workdir, self.tc, no_of_testcases)
+                self.test_results.update_with_context_and_testcase(self.context, self.tc)
+                self.generated_files.update_with_ctx_and_tc(self.context, self.tc)
+
+                # 2. Load default configs
                 self._load_default_mapred_configs()
                 config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
-                initial_config_files: List[str] = self.write_config_files(self.context,
-                                                                          NODEMANAGER_SELECTOR,
-                                                                          HadoopConfigFile.MAPRED_SITE,
-                                                                          dir=CONF_DIR_INITIAL)
+
+                # 3. Write initial config files
+                self.generated_files.register_files(OutputFileType.INITIAL_CONFIG, self.write_config_files(self.context,
+                                                                                                           NODEMANAGER_SELECTOR,
+                                                                                                           HadoopConfigFile.MAPRED_SITE,
+                                                                                                           dir=CONF_DIR_INITIAL)
+                                                    )
                 self.context.log_running_testcase()
+
+                # 4. Apply testcase configs
                 for config_key, config_val in self.tc.config_changes.items():
                     config.extend_with_args({config_key: config_val})
 
                 self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True, workdir=self.workdir)
+
+                # 5. Set log level of ShuffleHandler to DEBUG
                 self._set_shufflehandler_loglevel()
 
+                # 6. Restart NodeManagers with new config + Save NodeManager logs
                 nm_restart_logs = LogsByRoles(self.cluster, selector=NODEMANAGER_SELECTOR)
                 self._restart_nms(logs_by_roles=nm_restart_logs)
                 self.write_yarn_restart_logs(self.context, nm_restart_logs)
+                self.generated_files.register_files(OutputFileType.NM_RESTART_LOGS, nm_restart_logs.written_files)
 
                 yarn_logs = LogsByRoles(self.cluster, selector="Yarn")
                 yarn_logs.read_logs_into_dict()
 
-                result = self.run_app_and_collect_logs_to_file(self.context, self.tc.app)
+                # 7. Run app of the testcase + Record test results
+                result, app_log_file = self.run_app_and_collect_logs_to_file(self.context, self.tc.app)
+                self.generated_files.register_files(OutputFileType.APP_LOG_FILE, [app_log_file])
                 self.test_results.update_with_result(self.tc, result)
 
+                # 8. Get application according to status
                 if self.test_results.is_current_tc_timed_out:
                     LOG.debug("[%s] Getting running app id as testcase timed out", self.context)
                     app_id = self._get_latest_running_app()
@@ -547,61 +604,54 @@ class Netty4RegressionTest(HadesScriptBase):
                     LOG.debug("[%s] Getting finished app id as testcase passed", self.context)
                     app_id = self._get_latest_finished_app()
 
+                # 9. Ensure if version is correct by checking certain logs
                 if self.context.log_verifications:
                     try:
                         for verification in self.context.log_verifications:
                             yarn_logs.search_in_logs(verification)
                     except HadesException as e:
                         if self.context.allow_verification_failure:
-                            # LOG.warning("Allowed verification failure!")
                             LOG.exception("Allowed verification failure!")
                         else:
                             raise e
 
-                # Now it's okay to write the YARN log files as the app is either finished or timed out
+                # 10. Write YARN daemon logs - Now it's okay to write the YARN log files as the app is either finished or timed out
                 self.write_yarn_logs(self.context, yarn_logs)
-                app_log_tar_files = self._get_app_log_tar_files(self.context, app_id)
-                tc_config_files: List[str] = self.write_config_files(self.context,
-                                                                     NODEMANAGER_SELECTOR,
-                                                                     HadoopConfigFile.MAPRED_SITE,
-                                                                     dir=CONF_DIR_TC)
-
-                self._verify_resulted_files(app_log_tar_files, initial_config_files, tc_config_files,
-                                            nm_restart_logs, yarn_logs)
+                self.generated_files.register_files(OutputFileType.YARN_DAEMON_LOGS, yarn_logs.written_files)
+                self.generated_files.register_files(OutputFileType.APP_LOG_TAR, self._get_app_log_tar_files(self.context, app_id))
+                self.generated_files.register_files(OutputFileType.TC_CONFIG,
+                                                    self.write_config_files(self.context,
+                                                                            NODEMANAGER_SELECTOR,
+                                                                            HadoopConfigFile.MAPRED_SITE,
+                                                                            dir=CONF_DIR_TC)
+                                                    )
+                self._verify_resulted_files(yarn_logs)
 
                 if self.config.decompress_app_container_logs:
-                    for app_log_tar_file in app_log_tar_files:
+                    for app_log_tar_file in self.generated_files.get(OutputFileType.APP_LOG_TAR):
                         target_dir = os.path.join(self.context.current_tc_dir)
                         LOG.debug("[%s] Extracting file '%s' to %s", self.context, app_log_tar_file, target_dir)
                         CompressedFileUtils.extract_targz_file(app_log_tar_file, target_dir)
 
                 if self.config.compress_tc_result:
-                    files_to_compress = [self.test_results.current_result.app_log_file] + \
-                                        tc_config_files + \
-                                        initial_config_files + \
-                                        app_log_tar_files + \
-                                        yarn_logs.written_files
-
                     if self.using_custom_workdir:
                         FileUtils.compress_dir(filename=self.context.get_targz_filename(), dir=self.context.current_tc_dir)
                     else:
-                        FileUtils.compress_files(filename=self.context.get_targz_filename(), files=files_to_compress)
+                        FileUtils.compress_files(filename=self.context.get_targz_filename(), files=self.generated_files.get_all_for_current_ctx())
                     FileUtils.rm_dir(self.context.current_tc_dir)
             self.test_results.print_report()
         self._compare_results()
 
-    @staticmethod
-    def _verify_resulted_files(app_log_tar_files, initial_config_files, tc_config_files,
-                               nm_restart_logs: LogsByRoles, yarn_logs: LogsByRoles):
-        if not tc_config_files:
+    def _verify_resulted_files(self, yarn_logs):
+        if not self.generated_files.get(OutputFileType.TC_CONFIG):
             raise HadesException("Expected non-empty testcase config files list!")
-        if not initial_config_files:
+        if not self.generated_files.get(OutputFileType.INITIAL_CONFIG):
             raise HadesException("Expected non-empty initial config files list!")
-        if not app_log_tar_files:
+        if not self.generated_files.get(OutputFileType.APP_LOG_TAR):
             raise HadesException("Expected non-empty app log tar files list!")
-        if not yarn_logs.written_files:
+        if not self.generated_files.get(OutputFileType.YARN_DAEMON_LOGS):
             raise HadesException("Expected non-empty YARN log files list!")
-        if not nm_restart_logs.written_files:
+        if not self.generated_files.get(OutputFileType.NM_RESTART_LOGS):
             raise HadesException("Expected non-empty YARN NM restart log files!")
 
         yarn_logs.verify_no_empty_lines()
@@ -682,7 +732,7 @@ class Netty4RegressionTest(HadesScriptBase):
             generated_config_files.append(file_path)
         return generated_config_files
 
-    def run_app_and_collect_logs_to_file(self, context, app: ApplicationCommand) -> TestcaseResult:
+    def run_app_and_collect_logs_to_file(self, context, app: ApplicationCommand) -> Tuple[TestcaseResult, str]:
         app_log = []
         timed_out = False
         with self.overwrite_config(cmd_prefix="sudo -u systest"):
@@ -696,14 +746,14 @@ class Netty4RegressionTest(HadesScriptBase):
             LOG.error("Command '%s' timed out after %d seconds", app_command, app.get_timeout_seconds())
 
         app_log_file = APP_LOG_FILE_NAME_FORMAT.format(app="MRPI")
-        file_path = os.path.join(context.current_tc_dir, app_log_file)
-        LOG.debug("Writing app log file '%s' on host '%s'", file_path, app_command.target.host)
-        with open(file_path, 'w') as f:
+        app_log_file_path = os.path.join(context.current_tc_dir, app_log_file)
+        LOG.debug("Writing app log file '%s' on host '%s'", app_log_file_path, app_command.target.host)
+        with open(app_log_file_path, 'w') as f:
             f.writelines(app_log)
 
         if timed_out:
-            return TestcaseResult(TestcaseResultType.TIMEOUT, app_command, file_path, details=TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds()))
-        return TestcaseResult(TestcaseResultType.PASSED, app_command, file_path)
+            return TestcaseResult(TestcaseResultType.TIMEOUT, app_command, details=TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds())), app_log_file_path
+        return TestcaseResult(TestcaseResultType.PASSED, app_command), app_log_file_path
 
     @staticmethod
     def write_yarn_logs(context, logs_by_roles: LogsByRoles):
