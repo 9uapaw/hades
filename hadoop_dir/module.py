@@ -22,6 +22,9 @@ class HadoopModule(enum.Enum):
 
 class HadoopDir:
     CHANGED_MODULES_CMD = "git status --porcelain | grep \".*hadoop.*\" | sed -E \"s/.*\\/(.*)\\/src.*/\\1/g\""
+    SWITCH_BRANCH_CMD_TEMPLATE = "git checkout {}"
+    RESET_HARD_CMD_TEMPLATE = "git reset {} --hard"
+    APPLY_PATCH_CMD_TEMPLATE = "git apply {}"
     FIND_JAR_OF_MODULE_TEMPLATE = "find . -name \"*{module}*\" -print | grep \".*{module}/target.*-SNAPSHOT.jar\""
 
     MAPREDUCE_JAR_DIR = "hadoop/mapreduce"
@@ -116,3 +119,38 @@ class HadoopDir:
 
     def get_modules(self) -> List[str]:
         return list(self._modules.keys())
+
+    def switch_branch_to(self, branch):
+        logger.info("Switching branch to %s", branch)
+        cmd = self.SWITCH_BRANCH_CMD_TEMPLATE.format(branch)
+        br_cmd = RunnableCommand(cmd, work_dir=self._hadoop_dir)
+
+        br_cmd.run()
+        if not br_cmd.stdout:
+            raise CommandExecutionException("\n".join(br_cmd.stdout), cmd)
+
+    def reset(self, branch):
+        logger.info("Resetting branch to %s", branch)
+        cmd = self.RESET_HARD_CMD_TEMPLATE.format(branch)
+        reset_cmd = RunnableCommand(cmd, work_dir=self._hadoop_dir)
+
+        reset_cmd.run()
+        if not reset_cmd.stdout:
+            raise CommandExecutionException("\n".join(reset_cmd.stdout), cmd)
+
+        cmd = "git clean -fd"
+        git_clean_cmd = RunnableCommand(cmd, work_dir=self._hadoop_dir)
+        git_clean_cmd.run()
+        # TODO check exit code
+
+    def apply_patch(self, patch_path, expected_branch="origin/trunk", force_reset=False):
+        if force_reset:
+            self.reset(expected_branch)
+        else:
+            self.switch_branch_to(expected_branch)
+        logger.info("Applying patch file %s", patch_path)
+        cmd = self.APPLY_PATCH_CMD_TEMPLATE.format(patch_path)
+        patch_command = RunnableCommand(cmd, work_dir=self._hadoop_dir)
+
+        patch_command.run()
+        # TODO check exit code
