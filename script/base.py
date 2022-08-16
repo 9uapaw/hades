@@ -15,7 +15,7 @@ class HadesScriptBase:
         self.workdir = workdir
         self.using_custom_workdir = True if workdir != os.getcwd() else False
 
-    def run(self):
+    def run(self, handler):
         raise NotImplementedError()
 
     @contextmanager

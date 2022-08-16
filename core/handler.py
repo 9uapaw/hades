@@ -221,7 +221,7 @@ class MainCommandHandler:
 
         logger.info("Running script %s in file %s", found_cls.__name__, name)
         script = found_cls(self._create_cluster(), workdir=workdir)
-        script.run()
+        script.run(self)
 
     def print_scheduler_info(self):
         cluster = self._create_cluster()

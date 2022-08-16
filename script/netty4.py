@@ -275,7 +275,7 @@ class Netty4RegressionTest(HadesScriptBase):
         CONF_DEBUG_DELAY: "99999999"
     }
 
-    def run(self):
+    def run(self, handler: MainCommandHandler):
         testcases = self.config.testcases
         LOG.info("ALL Testcases: %s", testcases)
 
