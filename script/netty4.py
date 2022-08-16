@@ -124,6 +124,7 @@ DEFAULT_CONFIGS = {
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
+PREFIXED_YARN_LOG_FILE_NAME_FORMAT = "{prefix}_{host}_{role}.log"
 YARN_LOG_FORMAT = "{name} - {log}"
 CONF_FORMAT = "{host}_{conf}.xml"
 
@@ -387,6 +388,7 @@ class Netty4RegressionTest(HadesScriptBase):
                 nm_restart_log_lines = {}
                 # TODO refactor: Create separate class to read log lines, as dict is ugly! (also used the same way below) + include verifications in an optimized way
                 self._restart_nms(log_lines_dict=nm_restart_log_lines)
+                yarn_restart_nm_log_files: List[str] = self.write_yarn_restart_logs(context, nm_restart_log_lines)
 
                 yarn_log_lines = {}
                 roles, log_commands = self._read_logs_into_dict("Yarn", yarn_log_lines)
@@ -422,7 +424,7 @@ class Netty4RegressionTest(HadesScriptBase):
                                                                      dir=CONF_DIR_TC)
 
                 self._verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
-                                            yarn_log_files, yarn_log_lines)
+                                            yarn_log_files, yarn_restart_nm_log_files, yarn_log_lines)
 
                 if self.config.decompress_app_container_logs:
                     for app_log_tar_file in app_log_tar_files:
@@ -477,7 +479,7 @@ class Netty4RegressionTest(HadesScriptBase):
 
     @staticmethod
     def _verify_resulted_files(app_log_tar_files, initial_config_files, log_commands, roles, tc_config_files,
-                               yarn_log_files, yarn_log_lines):
+                               yarn_log_files, yarn_restart_nm_log_files, yarn_log_lines):
         if not tc_config_files:
             raise HadesException("Expected non-empty testcase config files list!")
         if not initial_config_files:
@@ -486,6 +488,8 @@ class Netty4RegressionTest(HadesScriptBase):
             raise HadesException("Expected non-empty app log tar files list!")
         if not yarn_log_files:
             raise HadesException("Expected non-empty YARN log files list!")
+        if not yarn_restart_nm_log_files:
+            raise HadesException("Expected non-empty YARN NM restart log files!")
         empty_lines_per_role = []
         cmd_by_role = {cmd.target: cmd for cmd in log_commands}
         for r in roles:
@@ -612,17 +616,34 @@ class Netty4RegressionTest(HadesScriptBase):
         return TestcaseResult(TestcaseResultType.PASSED, app_command, file_path)
 
     def write_yarn_logs(self, context, log_lines_dict: Dict[RunnableCommand, List[str]]):
+        return self.write_to_files(context, log_lines_dict, prefix="", app="YARN")
+
+    def write_yarn_restart_logs(self, context, log_lines_dict: Dict[RunnableCommand, List[str]]):
+        return self.write_to_files(context, log_lines_dict, prefix="restart-", app="YARN")
+
+    @staticmethod
+    def write_to_files(context, log_lines_dict: Dict[RunnableCommand, List[str]], prefix: str = "", app: str = ""):
         files = []
         if not log_lines_dict:
             raise HadesException("YARN log lines dictionary is empty!")
+        if not prefix and not app:
+            raise HadesException("Either prefix or app should be specified for this method!")
+
         for cmd, lines in log_lines_dict.items():
-            yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(host=cmd.target.host,
-                                                             role=cmd.target.role_type.name, app="YARN")
+            if prefix:
+                yarn_log_file = PREFIXED_YARN_LOG_FILE_NAME_FORMAT.format(prefix=prefix,
+                                                                          host=cmd.target.host,
+                                                                          role=cmd.target.role_type.name)
+            else:
+                yarn_log_file = YARN_LOG_FILE_NAME_FORMAT.format(host=cmd.target.host,
+                                                                 role=cmd.target.role_type.name,
+                                                                 app="YARN")
             file_path = os.path.join(context.current_tc_dir, yarn_log_file)
             files.append(file_path)
             with open(file_path, 'w') as f:
                 f.writelines(lines)
         return files
+
 
     def _load_default_mapred_configs(self):
         LOG.info("Loading default MR ShuffleHandler configs...")
