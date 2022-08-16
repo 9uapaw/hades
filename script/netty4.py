@@ -452,7 +452,6 @@ class Netty4RegressionTest(HadesScriptBase):
         no_of_testcases = len(testcases)
         LOG.info("Will run %d testcases", no_of_testcases)
 
-        # TODO Verify if results are the same for both execution, control it by a flag!
         for self.context in self.config.contexts:
             LOG.info("Starting: %s", self.context)
 
@@ -700,10 +699,14 @@ class Netty4RegressionTest(HadesScriptBase):
         LOG.info("\n" + tabulated)
 
     def _compare_results(self):
+        if self.config.testcase_limit < TC_LIMIT_UNLIMITED:
+            LOG.warning("Skipping comparison of testcase results as the testcase limit is set to: %s", self.config.testcase_limit)
+            return
+        LOG.debug("PRINTING ALL RESULTS: %s", self.testcase_results)
         ctx = self.config.contexts[0]
-        results1 = self.config.contexts[0]
+        results1 = self.testcase_results[ctx]
 
-        for context, results in self.testcase_results:
+        for context, results in self.testcase_results.items():
             if results != results1:
                 raise HadesException("Different results for contexts!\n"
                                      "Context1: {}, results: {}\n"
