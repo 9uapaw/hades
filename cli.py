@@ -427,6 +427,7 @@ def raw_mutate(ctx, xml: str):
     handler: MainCommandHandler = ctx.obj['handler']
     handler.mutate_yarn_config(xml)
 
+
 if __name__ == "__main__":
     logger.info("Started application")
     before = time.time()
@@ -438,3 +439,4 @@ if __name__ == "__main__":
         logger.error(str(e))
         after = time.time()
         logger.info("Error during execution after %d seconds", int(after - before))
+        exit(1)
