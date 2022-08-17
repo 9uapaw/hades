@@ -54,7 +54,7 @@ class HadoopDir:
         for module in modules:
             m = re.search('\\s*M ', module)
             if m:
-                logger.warning("Ignoring changed file, couldn't determine module for: %s", module)
+                logger.warning("Ignoring changed file, could not determine module for: %s", module)
                 continue
             try:
                 jar = self._find_jar(module)
@@ -67,7 +67,7 @@ class HadoopDir:
                     continue
                 else:
                     raise e
-        logger.debug("Discovered changed modules: %", self._changed)
+        logger.debug("Discovered changed modules: %s", self._changed)
 
     def copy_modules_to_dist(self, dest: str, *args):
         if not args:
