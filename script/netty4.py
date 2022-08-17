@@ -330,7 +330,7 @@ class Netty4TestContext:
         self.tc_no = idx + 1
         self.tc = tc
         self.no_of_testcases = no_of_testcases
-        # TODO Change working dir to ctx/tcname/... + use it from only a single place!
+        # TODO Consolidate working dir handling to here / Change working dir to ctx/tcname/... + use it from only a single place!
         self.current_tc_dir = os.path.join(workdir, tc.name)
         if not os.path.exists(self.current_tc_dir):
             os.mkdir(self.current_tc_dir)
@@ -338,6 +338,7 @@ class Netty4TestContext:
 
     def log_running_testcase(self):
         LOG.info("[%s] [%d / %d] Running testcase: %s", self, self.tc_no, self.no_of_testcases, self.tc)
+        PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
 
     def get_targz_filename(self):
         tc_no = f"0{str(self.tc_no)}" if self.tc_no < 9 else str(self.tc_no)
@@ -472,10 +473,12 @@ class Netty4TestResults:
 class OutputFileType(Enum):
     INITIAL_CONFIG = "initial_config"
     TC_CONFIG = "testcase_config"
-    APP_LOG_TAR = "app_log_tar"
+    APP_LOG_TAR_GZ = "app_log_tar_gz"
+    ALL_FILES_TAR_GZ = "all_files_tar_gz"
     NM_RESTART_LOGS = "nm_restart_logs"
     YARN_DAEMON_LOGS = "yarn_daemon_logs"
     APP_LOG_FILE = "app_log_file"
+    EXTRACTED_APP_LOG_FILES = "extracted_app_log_files"
 
 
 class GeneratedOutputFiles:
@@ -493,8 +496,8 @@ class GeneratedOutputFiles:
         self._files[self.ctx][self.tc] = {}
         self._curr_files_dict = self._files[self.ctx][self.tc]
 
-    def register_files(self, out_type: OutputFileType, files: List[str]):
-        if out_type in self._curr_files_dict:
+    def register_files(self, out_type: OutputFileType, files: List[str], allow_multiple: bool = False):
+        if out_type in self._curr_files_dict and not allow_multiple:
             raise HadesException("Output type is already used: {}".format(out_type))
         self._curr_files_dict[out_type] = files
 
@@ -503,11 +506,26 @@ class GeneratedOutputFiles:
 
     def get_all_for_current_ctx(self):
         res = list(itertools.chain(self._curr_files_dict.values()))
-        LOG.debug("All files for context '%s' / testcase '%s'", self.ctx, self.tc)
         return res
 
     def print_all(self):
         LOG.debug("All generated files: %s", self._files)
+
+    def print_all_for_current_ctx(self):
+        res = self.get_all_for_current_ctx()
+        LOG.debug("All files for context '%s' / testcase '%s': %s", self.ctx, self.tc, res)
+
+    def verify(self):
+        if not self.get(OutputFileType.TC_CONFIG):
+            raise HadesException("Expected non-empty testcase config files list!")
+        if not self.get(OutputFileType.INITIAL_CONFIG):
+            raise HadesException("Expected non-empty initial config files list!")
+        if not self.get(OutputFileType.APP_LOG_TAR_GZ):
+            raise HadesException("Expected non-empty app log tar files list!")
+        if not self.get(OutputFileType.YARN_DAEMON_LOGS):
+            raise HadesException("Expected non-empty YARN log files list!")
+        if not self.get(OutputFileType.NM_RESTART_LOGS):
+            raise HadesException("Expected non-empty YARN NM restart log files!")
 
 
 class Netty4RegressionTest(HadesScriptBase):
@@ -554,12 +572,11 @@ class Netty4RegressionTest(HadesScriptBase):
 
             self.generated_files = GeneratedOutputFiles()
             for idx, self.tc in enumerate(testcases):
-                PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
-
                 # 1. Update context, TestResults
                 self.context.update_current_tc(idx, self.workdir, self.tc, no_of_testcases)
                 self.test_results.update_with_context_and_testcase(self.context, self.tc)
                 self.generated_files.update_with_ctx_and_tc(self.context, self.tc)
+                self.context.log_running_testcase()
 
                 # 2. Load default configs
                 self._load_default_mapred_configs()
@@ -571,7 +588,6 @@ class Netty4RegressionTest(HadesScriptBase):
                                                                                                            HadoopConfigFile.MAPRED_SITE,
                                                                                                            dir=CONF_DIR_INITIAL)
                                                     )
-                self.context.log_running_testcase()
 
                 # 4. Apply testcase configs
                 for config_key, config_val in self.tc.config_changes.items():
@@ -618,43 +634,37 @@ class Netty4RegressionTest(HadesScriptBase):
                 # 10. Write YARN daemon logs - Now it's okay to write the YARN log files as the app is either finished or timed out
                 self.write_yarn_logs(self.context, yarn_logs)
                 self.generated_files.register_files(OutputFileType.YARN_DAEMON_LOGS, yarn_logs.written_files)
-                self.generated_files.register_files(OutputFileType.APP_LOG_TAR, self._get_app_log_tar_files(self.context, app_id))
+                self.generated_files.register_files(OutputFileType.APP_LOG_TAR_GZ, self._get_app_log_tar_files(self.context, app_id))
                 self.generated_files.register_files(OutputFileType.TC_CONFIG,
                                                     self.write_config_files(self.context,
                                                                             NODEMANAGER_SELECTOR,
                                                                             HadoopConfigFile.MAPRED_SITE,
                                                                             dir=CONF_DIR_TC)
                                                     )
-                self._verify_resulted_files(yarn_logs)
+                self.generated_files.verify()
+                yarn_logs.verify_no_empty_lines()
 
                 if self.config.decompress_app_container_logs:
-                    for app_log_tar_file in self.generated_files.get(OutputFileType.APP_LOG_TAR):
+                    for app_log_tar_file in self.generated_files.get(OutputFileType.APP_LOG_TAR_GZ):
                         target_dir = os.path.join(self.context.current_tc_dir)
                         LOG.debug("[%s] Extracting file '%s' to %s", self.context, app_log_tar_file, target_dir)
                         CompressedFileUtils.extract_targz_file(app_log_tar_file, target_dir)
+                        self.generated_files.register_files(OutputFileType.EXTRACTED_APP_LOG_FILES,
+                                                            FileUtils.find_files("*", target_dir),
+                                                            allow_multiple=True)
 
                 if self.config.compress_tc_result:
+                    tar_gz_filename = self.context.get_targz_filename()
                     if self.using_custom_workdir:
-                        FileUtils.compress_dir(filename=self.context.get_targz_filename(), dir=self.context.current_tc_dir)
+                        FileUtils.compress_dir(filename=tar_gz_filename, dir=self.context.current_tc_dir)
                     else:
-                        FileUtils.compress_files(filename=self.context.get_targz_filename(), files=self.generated_files.get_all_for_current_ctx())
+                        FileUtils.compress_files(filename=tar_gz_filename, files=self.generated_files.get_all_for_current_ctx())
+                    self.generated_files.register_files(OutputFileType.ALL_FILES_TAR_GZ, [tar_gz_filename])
                     FileUtils.rm_dir(self.context.current_tc_dir)
+                self.generated_files.print_all_for_current_ctx()
+            self.generated_files.print_all()
             self.test_results.print_report()
         self._compare_results()
-
-    def _verify_resulted_files(self, yarn_logs):
-        if not self.generated_files.get(OutputFileType.TC_CONFIG):
-            raise HadesException("Expected non-empty testcase config files list!")
-        if not self.generated_files.get(OutputFileType.INITIAL_CONFIG):
-            raise HadesException("Expected non-empty initial config files list!")
-        if not self.generated_files.get(OutputFileType.APP_LOG_TAR):
-            raise HadesException("Expected non-empty app log tar files list!")
-        if not self.generated_files.get(OutputFileType.YARN_DAEMON_LOGS):
-            raise HadesException("Expected non-empty YARN log files list!")
-        if not self.generated_files.get(OutputFileType.NM_RESTART_LOGS):
-            raise HadesException("Expected non-empty YARN NM restart log files!")
-
-        yarn_logs.verify_no_empty_lines()
 
     def _get_app_log_tar_files(self, context, app_id: str):
         if app_id == APP_ID_NOT_AVAILABLE:
