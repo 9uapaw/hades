@@ -151,7 +151,6 @@ class HadoopDir:
         cmd = "git clean -fd"
         git_clean_cmd = RunnableCommand(cmd, work_dir=self._hadoop_dir)
         git_clean_cmd.run()
-        # TODO check exit code
 
     def apply_patch(self, patch_path, expected_branch="origin/trunk", force_reset=False):
         if force_reset:
@@ -163,4 +162,3 @@ class HadoopDir:
         patch_command = RunnableCommand(cmd, work_dir=self._hadoop_dir)
 
         patch_command.run()
-        # TODO check exit code
