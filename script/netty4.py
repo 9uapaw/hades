@@ -650,7 +650,7 @@ class Netty4RegressionTest(HadesScriptBase):
                         LOG.debug("[%s] Extracting file '%s' to %s", self.context, app_log_tar_file, target_dir)
                         CompressedFileUtils.extract_targz_file(app_log_tar_file, target_dir)
                         self.generated_files.register_files(OutputFileType.EXTRACTED_APP_LOG_FILES,
-                                                            FileUtils.find_files("*", target_dir),
+                                                            CompressedFileUtils.list_targz_file(app_log_tar_file),
                                                             allow_multiple=True)
 
                 if self.config.compress_tc_result:

@@ -139,6 +139,15 @@ class CompressedFileUtils:
         file.extractall(dest_path)
         file.close()
 
+    @staticmethod
+    def list_targz_file(file_path: str):
+        FileUtils.ensure_file_exists(file_path)
+        file = tarfile.open(file_path)
+        members = file.getmembers()
+        file.close()
+        return [m.name for m in members]
+
+
 
 class LoggingUtils:
     @staticmethod
