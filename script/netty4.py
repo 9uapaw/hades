@@ -348,15 +348,18 @@ class Netty4TestContext:
 
 @dataclass
 class Netty4TestConfig:
-    testcase_limit = TC_LIMIT_UNLIMITED
+    # TODO
+    LIMIT_TESTCASES = True
+    QUICK_MODE = True
+    testcase_limit = 1 if QUICK_MODE or LIMIT_TESTCASES else TC_LIMIT_UNLIMITED
+    enable_compilation = False if QUICK_MODE else True
+    allow_verification_failure = True if QUICK_MODE else False
+
     extract_tar_files = True
     timeout = 120
     compress_tc_result = False
     decompress_app_container_logs = True
     shufflehandler_log_level = HadoopLogLevel.DEBUG
-
-    enable_compilation = True
-    allow_verification_failure = True
 
     def __post_init__(self):
         sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
