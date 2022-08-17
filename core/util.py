@@ -56,13 +56,17 @@ class FileUtils:
 
     @staticmethod
     def find_files(pattern: str, dir: str = '.'):
-        find_cmd = RunnableCommand(f"find {dir} -name \"*{pattern}*\" -print")
-        find_cmd.run()
-        if not find_cmd.stdout:
+        if pattern == "*" or pattern == ".*":
+            find_cmd = f"find {dir} -print"
+        else:
+            find_cmd = f"find {dir} -name \"*{pattern}*\" -print"
+        cmd = RunnableCommand(find_cmd)
+        cmd.run()
+        if not cmd.stdout:
             LOG.warning("No files found for pattern '%s' in dir '%s'", pattern, dir)
-            LOG.warning(find_cmd.stderr)
+            LOG.warning(cmd.stderr)
             return ""
-        return find_cmd.stdout
+        return cmd.stdout
 
     @staticmethod
     def rm_dir(d):
