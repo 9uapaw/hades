@@ -32,6 +32,7 @@ UNLIMITED = 99999999
 TC_LIMIT_UNLIMITED = UNLIMITED
 
 NODEMANAGER_SELECTOR = "Yarn/NodeManager"
+YARN_SELECTOR = "Yarn"
 NODE_TO_RUN_ON = "type=Yarn/name=nodemanager2"
 MAPREDUCE_PREFIX = "mapreduce"
 YARN_APP_MAPREDUCE_PREFIX = "yarn.app.mapreduce"
@@ -236,7 +237,6 @@ class OutputFileWriter:
         self._generated_files.update_with_ctx_and_tc(self.context, self.tc)
         LOG.info("Using workdir: %s", self.workdir)
 
-        # TODO Consolidate working dir handling to here / Change working dir to ctx/tcname/... + use it from only a single place!
         self.current_ctx_dir = os.path.join(self.workdir, self.context.get_dirname)
         if not os.path.exists(self.current_ctx_dir):
             os.mkdir(self.current_ctx_dir)
@@ -309,7 +309,7 @@ class OutputFileWriter:
                 f.writelines(lines)
         return files_written
 
-    def _save_app_log_tar_files_from_cluster(self, context, app_id: str):
+    def _save_app_log_tar_files_from_cluster(self, app_id: str):
         if app_id == APP_ID_NOT_AVAILABLE:
             return []
 
@@ -351,7 +351,7 @@ class OutputFileWriter:
         self._generated_files.verify()
 
     def save_app_logs_from_cluster(self, app_id):
-        files = self._save_app_log_tar_files_from_cluster(self.context, app_id)
+        files = self._save_app_log_tar_files_from_cluster(app_id)
         self._generated_files.register_files(OutputFileType.APP_LOG_TAR_GZ, files)
 
     def write_yarn_app_logs(self, app_name, app_command, app_log_lines):
@@ -390,6 +390,7 @@ class LogsByRoles:
     def __post_init__(self):
         self.log_lines_dict = {}
 
+    # TODO Move this to ClusterHandler? 
     def read_logs_into_dict(self):
         LOG.debug("Reading YARN logs from cluster...")
 
@@ -469,9 +470,8 @@ class Netty4TestContext:
 
 @dataclass
 class Netty4TestConfig:
-    # TODO
-    LIMIT_TESTCASES = True
-    QUICK_MODE = True
+    LIMIT_TESTCASES = False
+    QUICK_MODE = False
     testcase_limit = 1 if QUICK_MODE or LIMIT_TESTCASES else TC_LIMIT_UNLIMITED
     enable_compilation = False if QUICK_MODE else True
     allow_verification_failure = True if QUICK_MODE else False
@@ -651,17 +651,239 @@ class GeneratedOutputFiles:
             raise HadesException("Expected non-empty YARN NM restart log files!")
 
 
-class Netty4RegressionTest(HadesScriptBase):
+class Netty4RegressionTestSteps:
+    def __init__(self, test, no_of_testcases, handler):
+        self.overwrite_config_func = test.overwrite_config
+        self.no_of_testcases = no_of_testcases
+        self.handler = handler
+        self.cluster_handler = ClusterHandler(test.cluster)
+        self.cluster_config_updater = ClusterConfigUpdater(test.cluster, test.workdir)
+        self.cluster = test.cluster
+        self.config = test.config
+        self.workdir = test.workdir
+        self.using_custom_workdir = test.using_custom_workdir
+        self.test_results = Netty4TestResults()
+        self.context = None
+        self.app_id = None
+        self.hadoop_config = None
+        self.nm_restart_logs = None
+        self.yarn_logs = None
+        self.output_file_writer = None
+        self.tc = None
+
+    def start_context(self, context):
+        self.context = context
+        LOG.info("Starting: %s", self.context)
+        PrintUtils.print_banner_figlet(f"STARTING CONTEXT: {self.context}")
+        self.output_file_writer = OutputFileWriter(self.cluster)
+
+    def setup_branch_and_patch(self):
+        # Checkout branch, apply patch if required
+        hadoop_dir = HadoopDir(self.handler.ctx.hadoop_config.hadoop_path)
+        hadoop_dir.switch_branch_to(self.context.base_branch)
+
+        if self.context.patch_file:
+            hadoop_dir.apply_patch(self.context.patch_file, force_reset=True)
+
+    def compile(self):
+        # TODO cache build jars into hades working dir, with dates to save compilation time? 
+        LOG.info("[%s] Starting compilation...", self.context)
+        if self.context.compile:
+            self.handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
+
+    def load_default_yarn_site_configs(self):
+        LOG.info("Loading default yarn-site.xml configs for NodeManagers...")
+        self.cluster_config_updater.load_configs(HadoopConfigFile.YARN_SITE,
+                                                 ClusterConfigUpdater.YARN_SITE_DEFAULT_CONFIGS,
+                                                 NODEMANAGER_SELECTOR)
+
+    def load_default_mapred_configs(self):
+        LOG.info("Loading default MR ShuffleHandler configs for NodeManagers...")
+        self.cluster_config_updater.load_configs(HadoopConfigFile.MAPRED_SITE,
+                                                 DEFAULT_CONFIGS,
+                                                 NODEMANAGER_SELECTOR)
+
+    def init_testcase(self, tc):
+        self.tc = tc
+        self.test_results.update_with_context_and_testcase(self.context, self.tc)
+        self.output_file_writer.update_with_context_and_testcase(self.workdir, self.context, self.tc)
+        LOG.info("[%s] [%d / %d] Running testcase: %s", self.context, self.output_file_writer.tc_no, self.no_of_testcases,
+                 self.tc)
+        PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
+
+        if self.context.patch_file:
+            self.output_file_writer.write_patch_file(self.context.patch_file)
+
+    def load_default_configs(self):
+        self.load_default_mapred_configs()
+        self.hadoop_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
+        self.output_file_writer.write_initial_config_files()
+
+    def apply_testcase_configs(self):
+        for config_key, config_val in self.tc.config_changes.items():
+            self.hadoop_config.extend_with_args({config_key: config_val})
+
+        self.cluster.update_config(NODEMANAGER_SELECTOR, self.hadoop_config, no_backup=True, workdir=self.workdir)
+
+    def set_shufflehandler_loglevel(self):
+        LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
+
+        set_log_level_cmds: List[RunnableCommand] = self.cluster.set_log_level(
+            package="org.apache.hadoop.mapred.ShuffleHandler",
+            log_level=self.config.shufflehandler_log_level)
+        LOG.debug("YARN set log level commands: %s", set_log_level_cmds)
+        for cmd in set_log_level_cmds:
+            LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
+            cmd.run()
+
+    def restart_nms_and_save_logs(self):
+        # 6. Restart NodeManagers with new config + Save NodeManager logs
+        self.nm_restart_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=NODEMANAGER_SELECTOR)
+        self.cluster_handler.restart_nms(logs_by_roles=self.nm_restart_logs)
+        self.output_file_writer.write_nm_restart_logs(self.nm_restart_logs)
+
+    def run_app_and_collect_logs_to_file(self, app: MapReduceApp):
+        app_log_lines = []
+        timed_out = False
+        with self.overwrite_config_func(cmd_prefix="sudo -u systest"):
+            app_command = self.cluster.run_app(app, selector=NODEMANAGER_SELECTOR)
+
+        LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
+        try:
+            app_command.run_async(block=True, stderr=lambda line: app_log_lines.append(line), timeout=app.get_timeout_seconds())
+        except HadesCommandTimedOutException:
+            timed_out = True
+            LOG.error("Command '%s' timed out after %d seconds", app_command, app.get_timeout_seconds())
+
+        self.output_file_writer.write_yarn_app_logs(app.name, app_command, app_log_lines)
+
+        if timed_out:
+            result = TestcaseResult(TestcaseResultType.TIMEOUT, app_command,
+                                    details=TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds()))
+        else:
+            result = TestcaseResult(TestcaseResultType.PASSED, app_command)
+
+        self.test_results.update_with_result(self.tc, result)
+
+    def start_to_collect_yarn_daemon_logs(self):
+        self.yarn_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=YARN_SELECTOR)
+        self.yarn_logs.read_logs_into_dict()
+
+    def get_application(self):
+        if self.test_results.is_current_tc_timed_out:
+            LOG.debug("[%s] Getting running app id as testcase timed out", self.context)
+            self.app_id = self.cluster_handler.get_latest_running_app()
+        else:
+            LOG.debug("[%s] Getting finished app id as testcase passed", self.context)
+            self.app_id = self.cluster_handler.get_latest_finished_app()
+
+    def ensure_if_hadoop_version_is_correct(self):
+        if self.context.log_verifications:
+            try:
+                for verification in self.context.log_verifications:
+                    self.yarn_logs.search_in_logs(verification)
+            except HadesException as e:
+                if self.context.allow_verification_failure:
+                    LOG.exception("Allowed verification failure!")
+                else:
+                    raise e
+
+    def write_result_files(self):
+        self.output_file_writer.write_yarn_logs(self.yarn_logs)
+        self.output_file_writer.save_app_logs_from_cluster(self.app_id)
+        self.output_file_writer.write_testcase_config_files()
+        self.output_file_writer.verify()
+
+    def verify_daemon_logs(self):
+        self.yarn_logs.verify_no_empty_lines()
+        self.nm_restart_logs.verify_no_empty_lines()
+
+    def finalize_testcase_data_files(self):
+        if self.config.decompress_app_container_logs:
+            self.output_file_writer.decompress_app_container_logs()
+
+        if self.config.compress_tc_result:
+            self.output_file_writer.create_compressed_testcase_data_file(using_custom_workdir=self.using_custom_workdir)
+
+    def finalize_testcase(self):
+        self.output_file_writer.print_all_generated_files_for_current_ctx()
+
+    def finalize_context(self):
+        self.output_file_writer.print_all_generated_files()
+        self.test_results.print_report()
+
+    def compare_results(self):
+        if self.config.testcase_limit < TC_LIMIT_UNLIMITED:
+            LOG.warning("Skipping comparison of testcase results as the testcase limit is set to: %s", self.config.testcase_limit)
+            return
+        self.test_results.compare(self.config.contexts[0])
+
+
+class ClusterConfigUpdater:
+    YARN_SITE_DEFAULT_CONFIGS = {
+        CONF_DEBUG_DELAY: str(UNLIMITED)
+    }
+    
+    def __init__(self, cluster, workdir):
+        self.cluster = cluster
+        self.workdir = workdir
+    
+    def load_configs(self, conf_file_type, conf_dict, selector, ):
+        default_config = HadoopConfig(conf_file_type)
+        for k, v in conf_dict.items():
+            if isinstance(v, int):
+                v = str(v)
+            default_config.extend_with_args({k: v})
+        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir)
+        
+        
+class ClusterHandler:
+    def __init__(self, cluster):
+        self.cluster = cluster
+    
+    def restart_nms(self, logs_by_roles: LogsByRoles):
+        logs_by_roles.read_logs_into_dict()
+        handlers = []
+        for cmd in self.cluster.restart_roles(NODEMANAGER_SELECTOR):
+            handlers.append(cmd.run_async())
+        for h in handlers:
+            h.wait()
+
+    def get_single_running_app(self):
+        cmd = self.cluster.get_running_apps()
+        running_apps, stderr = cmd.run()
+        if len(running_apps) > 1:
+            raise ScriptException(f"Expected 1 running application. Found more: {running_apps}")
+        elif len(running_apps) == 0:
+            raise ScriptException("Expected 1 running application. Found no application")
+        current_app_id = running_apps[0]
+        LOG.info("Found running application: %s", current_app_id)
+        return current_app_id
+
+    def get_latest_running_app(self):
+        cmd = self.cluster.get_running_apps()
+        running_apps, stderr = cmd.run()
+        if len(running_apps) == 0:
+            raise ScriptException("Expected 1 running application. Found no application")
+        current_app_id = running_apps[0]
+        LOG.info("Found running application: %s", current_app_id)
+        return current_app_id
+
+    def get_latest_finished_app(self):
+        cmd = self.cluster.get_finished_apps()
+        finished_apps, stderr = cmd.run()
+        LOG.info("Found finished applications: %s", finished_apps)
+        # Topmost row is the latest app
+        return finished_apps[0]
+
+
+class Netty4RegressionTestDriver(HadesScriptBase):
     def __init__(self, cluster: HadoopCluster, workdir: str):
         super().__init__(cluster, workdir)
         self.tc = None
         self.config = Netty4TestConfig()
         self.context = None
         self.output_file_writer = None
-
-    YARN_SITE_DEFAULT_CONFIGS = {
-        CONF_DEBUG_DELAY: str(UNLIMITED)
-    }
 
     def run(self, handler: MainCommandHandler):
         testcases = self.config.testcases
@@ -675,181 +897,26 @@ class Netty4RegressionTest(HadesScriptBase):
     def _run_testcases(self, testcases, handler):
         no_of_testcases = len(testcases)
         LOG.info("Will run %d testcases", no_of_testcases)
-
-        self.test_results = Netty4TestResults()
-        for self.context in self.config.contexts:
-            LOG.info("Starting: %s", self.context)
-
-            # Checkout branch, apply patch if required
-            hadoop_dir = HadoopDir(handler.ctx.config.hadoop_path)
-            hadoop_dir.switch_branch_to(self.context.base_branch)
-
-            if self.context.patch_file:
-                hadoop_dir.apply_patch(self.context.patch_file, force_reset=True)
-
-            LOG.info("[%s] Starting compilation...", self.context)
-            if self.context.compile:
-                handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
-
-            self._load_default_yarn_site_configs()
-            self.output_file_writer = OutputFileWriter(self.cluster)
-            for idx, self.tc in enumerate(testcases):
-                # 1. Update context, TestResults
-                self.test_results.update_with_context_and_testcase(self.context, self.tc)
-                self.output_file_writer.update_with_context_and_testcase(self.workdir, self.context, self.tc)
-                LOG.info("[%s] [%d / %d] Running testcase: %s", self.context, self.output_file_writer.tc_no, no_of_testcases, self.tc)
-                PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
-
-                if self.context.patch_file:
-                    self.output_file_writer.write_patch_file(self.context.patch_file)
-
-                # 2. Load default configs
-                self._load_default_mapred_configs()
-                config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
-
-                # 3. Write initial config files
-                self.output_file_writer.write_initial_config_files()
-
-                # 4. Apply testcase configs
-                for config_key, config_val in self.tc.config_changes.items():
-                    config.extend_with_args({config_key: config_val})
-
-                self.cluster.update_config(NODEMANAGER_SELECTOR, config, no_backup=True, workdir=self.workdir)
-
-                # 5. Set log level of ShuffleHandler to DEBUG
-                self._set_shufflehandler_loglevel()
-
-                # 6. Restart NodeManagers with new config + Save NodeManager logs
-                nm_restart_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=NODEMANAGER_SELECTOR)
-                self._restart_nms(logs_by_roles=nm_restart_logs)
-                self.output_file_writer.write_nm_restart_logs(nm_restart_logs)
-
-                yarn_logs = LogsByRoles(self.output_file_writer, self.cluster, selector="Yarn")
-                yarn_logs.read_logs_into_dict()
-
-                # 7. Run app of the testcase + Record test results
-                result = self.run_app_and_collect_logs_to_file(self.tc.app)
-                self.test_results.update_with_result(self.tc, result)
-
-                # 8. Get application according to status
-                if self.test_results.is_current_tc_timed_out:
-                    LOG.debug("[%s] Getting running app id as testcase timed out", self.context)
-                    app_id = self._get_latest_running_app()
-                else:
-                    LOG.debug("[%s] Getting finished app id as testcase passed", self.context)
-                    app_id = self._get_latest_finished_app()
-
-                # 9. Ensure if version is correct by checking certain logs
-                if self.context.log_verifications:
-                    try:
-                        for verification in self.context.log_verifications:
-                            yarn_logs.search_in_logs(verification)
-                    except HadesException as e:
-                        if self.context.allow_verification_failure:
-                            LOG.exception("Allowed verification failure!")
-                        else:
-                            raise e
-
-                # 10. Write YARN daemon logs - Now it's okay to write the YARN log files as the app is either finished or timed out
-                self.output_file_writer.write_yarn_logs(yarn_logs)
-                self.output_file_writer.save_app_logs_from_cluster(app_id)
-                self.output_file_writer.write_testcase_config_files()
-                self.output_file_writer.verify()
-                yarn_logs.verify_no_empty_lines()
-
-                if self.config.decompress_app_container_logs:
-                    self.output_file_writer.decompress_app_container_logs()
-
-                if self.config.compress_tc_result:
-                    self.output_file_writer.create_compressed_testcase_data_file(using_custom_workdir=self.using_custom_workdir)
-                self.output_file_writer.print_all_generated_files_for_current_ctx()
-            self.output_file_writer.print_all_generated_files()
-            self.test_results.print_report()
-        self._compare_results()
-
-    def _get_single_running_app(self):
-        cmd = self.cluster.get_running_apps()
-        running_apps, stderr = cmd.run()
-        if len(running_apps) > 1:
-            raise ScriptException(f"Expected 1 running application. Found more: {running_apps}")
-        elif len(running_apps) == 0:
-            raise ScriptException("Expected 1 running application. Found no application")
-        current_app_id = running_apps[0]
-        LOG.info("Found running application: %s", current_app_id)
-        return current_app_id
-
-    def _get_latest_running_app(self):
-        cmd = self.cluster.get_running_apps()
-        running_apps, stderr = cmd.run()
-        if len(running_apps) == 0:
-            raise ScriptException("Expected 1 running application. Found no application")
-        current_app_id = running_apps[0]
-        LOG.info("Found running application: %s", current_app_id)
-        return current_app_id
-
-    def _get_latest_finished_app(self):
-        cmd = self.cluster.get_finished_apps()
-        finished_apps, stderr = cmd.run()
-        LOG.info("Found finished applications: %s", finished_apps)
-        # Topmost row is the latest app
-        return finished_apps[0]
-
-    def _restart_nms(self, logs_by_roles: LogsByRoles):
-        logs_by_roles.read_logs_into_dict()
-        handlers = []
-        for cmd in self.cluster.restart_roles(NODEMANAGER_SELECTOR):
-            handlers.append(cmd.run_async())
-        for h in handlers:
-            h.wait()
-
-    def _set_shufflehandler_loglevel(self):
-        LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
-
-        set_log_level_cmds: List[RunnableCommand] = self.cluster.set_log_level(package="org.apache.hadoop.mapred.ShuffleHandler",
-                                                                               log_level=self.config.shufflehandler_log_level)
-        LOG.debug("YARN set log level commands: %s", set_log_level_cmds)
-        for cmd in set_log_level_cmds:
-            LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
-            cmd.run()
-
-    def run_app_and_collect_logs_to_file(self, app: MapReduceApp) -> TestcaseResult:
-        app_log_lines = []
-        timed_out = False
-        with self.overwrite_config(cmd_prefix="sudo -u systest"):
-            app_command = self.cluster.run_app(app, selector=NODEMANAGER_SELECTOR)
-
-        LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
-        try:
-            app_command.run_async(block=True, stderr=lambda line: app_log_lines.append(line), timeout=app.get_timeout_seconds())
-        except HadesCommandTimedOutException:
-            timed_out = True
-            LOG.error("Command '%s' timed out after %d seconds", app_command, app.get_timeout_seconds())
-
-        self.output_file_writer.write_yarn_app_logs(app.name, app_command, app_log_lines)
-
-        if timed_out:
-            return TestcaseResult(TestcaseResultType.TIMEOUT, app_command,
-                                  details=TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds()))
-        return TestcaseResult(TestcaseResultType.PASSED, app_command)
-
-    def _load_default_mapred_configs(self):
-        LOG.info("Loading default MR ShuffleHandler configs...")
-        self._load_configs(HadoopConfigFile.MAPRED_SITE, DEFAULT_CONFIGS, NODEMANAGER_SELECTOR)
-
-    def _load_default_yarn_site_configs(self):
-        LOG.info("Loading default yarn-site.xml configs...")
-        self._load_configs(HadoopConfigFile.YARN_SITE, self.YARN_SITE_DEFAULT_CONFIGS, NODEMANAGER_SELECTOR)
-
-    def _load_configs(self, conf_file_type, conf_dict, selector, ):
-        default_config = HadoopConfig(conf_file_type)
-        for k, v in conf_dict.items():
-            if isinstance(v, int):
-                v = str(v)
-            default_config.extend_with_args({k: v})
-        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir)
-
-    def _compare_results(self):
-        if self.config.testcase_limit < TC_LIMIT_UNLIMITED:
-            LOG.warning("Skipping comparison of testcase results as the testcase limit is set to: %s", self.config.testcase_limit)
-            return
-        self.test_results.compare(self.config.contexts[0])
+        self.steps = Netty4RegressionTestSteps(self, no_of_testcases, handler)
+        for context in self.config.contexts:
+            self.steps.start_context(context)
+            self.steps.setup_branch_and_patch()
+            self.steps.compile()
+            self.steps.load_default_yarn_site_configs()
+            
+            for idx, tc in enumerate(testcases):
+                self.steps.init_testcase(tc)  # 1. Update context, TestResults
+                self.steps.load_default_configs()  # 2. Load default configs / Write initial config files                
+                self.steps.apply_testcase_configs()  # 3. Apply testcase configs
+                self.steps.set_shufflehandler_loglevel()  # 4. Set log level of ShuffleHandler to DEBUG
+                self.steps.restart_nms_and_save_logs()  # 5. Restart NMs, Save logs 
+                self.steps.start_to_collect_yarn_daemon_logs()  # 6. Start to collect YARN daemon logs
+                self.steps.run_app_and_collect_logs_to_file(self.tc.app)  # 7. Run app of the testcase + Record test results
+                self.steps.get_application()  # 8. Get application according to status
+                self.steps.ensure_if_hadoop_version_is_correct()  # 9. Ensure if version is correct by checking certain logs
+                self.steps.write_result_files()  # 10. Write YARN daemon logs - Now it's okay to write the YARN log files as the app is either finished or timed out
+                self.steps.verify_daemon_logs()  # 11. Verify YARN daemon logs - Whether they are empty
+                self.steps.finalize_testcase_data_files()  # 12. Write compressed / decompressed testcase data output files 
+                self.steps.finalize_testcase()  # 13. Finalize testcase
+            self.steps.finalize_context()
+        self.steps.compare_results()
