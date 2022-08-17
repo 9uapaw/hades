@@ -508,15 +508,13 @@ class GeneratedOutputFiles:
         return self._curr_files_dict[out_type]
 
     def get_all_for_current_ctx(self):
-        res = list(itertools.chain(self._curr_files_dict.values()))
-        return res
+        return list(itertools.chain.from_iterable(self._curr_files_dict.values()))
 
     def print_all(self):
         LOG.debug("All generated files: %s", self._files)
 
     def print_all_for_current_ctx(self):
-        res = self.get_all_for_current_ctx()
-        LOG.debug("All files for context '%s' / testcase '%s': %s", self.ctx, self.tc, res)
+        LOG.debug("All files for context '%s' / testcase '%s': %s", self.ctx, self.tc, self._curr_files_dict)
 
     def verify(self):
         if not self.get(OutputFileType.TC_CONFIG):
