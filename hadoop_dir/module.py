@@ -8,7 +8,7 @@ from typing import Dict, List
 import shutil
 
 from core.cmd import RunnableCommand
-from core.error import CommandExecutionException
+from core.error import CommandExecutionException, HadesException
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ class HadoopDir:
     CHANGED_MODULES_CMD = "git status --porcelain | grep \".*hadoop.*\" | sed -E \"s/.*\\/(.*)\\/src.*/\\1/g\""
     # CHANGED_MODULES_CMD = "git status --porcelain | grep \".*hadoop.*\" | sed -E \"s/.*\\/(.*)\\/src.*/\\1/g\" | sed -E \"s/.*\\/(.*)\\/pom\\.xml/\\1/g\""
     SWITCH_BRANCH_CMD_TEMPLATE = "git checkout {}"
+    GET_BRANCH_CMD = "git rev-parse --abbrev-ref HEAD"
     RESET_HARD_CMD_TEMPLATE = "git reset {} --hard"
     APPLY_PATCH_CMD_TEMPLATE = "git apply {}"
     FIND_JAR_OF_MODULE_TEMPLATE = "find . -name \"*{module}*\" -print | grep \".*{module}/target.*-SNAPSHOT.jar\""
@@ -138,6 +139,21 @@ class HadoopDir:
         br_cmd.run()
         if not br_cmd.stdout:
             raise CommandExecutionException("\n".join(br_cmd.stdout), cmd)
+
+    def get_current_branch(self, fallback=None):
+        br_cmd = RunnableCommand(self.GET_BRANCH_CMD, work_dir=self._hadoop_dir)
+        br_cmd.run()
+        if not br_cmd.stdout:
+            raise CommandExecutionException("\n".join(br_cmd.stdout), br_cmd)
+        res = br_cmd.stdout
+        if isinstance(res, list):
+            if len(res) == 1:
+                res = res[0]
+            else:
+                raise HadesException("Cannot determine current git branch. Output of command: {}".format(res))
+        if res == "HEAD":
+            return fallback
+        return res
 
     def reset(self, branch):
         logger.info("Resetting branch to %s", branch)

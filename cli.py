@@ -258,22 +258,23 @@ def run_script(ctx, script: str, session_dir: bool = False):
     """
     handler: MainCommandHandler = ctx.obj['handler']
 
+    workdir = os.getcwd()
     if session_dir:
-        workdir = os.path.join(os.getcwd(), f"session-{DateUtils.get_current_datetime()}")
-        os.mkdir(workdir)
-        logger.debug("Session dir: %s", workdir)
+        session_dir = os.path.join(workdir, f"session-{DateUtils.get_current_datetime()}")
+        os.mkdir(session_dir)
+        logger.debug("Session dir: %s", session_dir)
 
         level = ctx.obj['loglevel']
         root_logger = logging.getLogger()
         handlers = copy(root_logger.handlers)
-        file_handler = LoggingUtils.create_file_handler(workdir, level, fname="hades-session")
+        file_handler = LoggingUtils.create_file_handler(session_dir, level, fname="hades-session")
         file_handler.formatter = None
         logger.info("Logging to file: %s", file_handler.baseFilename)
         handlers.append(file_handler)
         logging.basicConfig(force=True, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=level, handlers=handlers)
     else:
-        workdir = os.getcwd()
-    handler.run_script(script, workdir=workdir)
+        session_dir = workdir
+    handler.run_script(script, workdir=workdir, session_dir=session_dir)
 
 
 @yarn.command()

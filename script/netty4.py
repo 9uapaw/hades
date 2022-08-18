@@ -1,6 +1,7 @@
 import itertools
 import logging
 import os.path
+import pickle
 import shutil
 from dataclasses import dataclass, field
 from enum import Enum
@@ -481,6 +482,10 @@ class Netty4TestConfig:
     compress_tc_result = False
     decompress_app_container_logs = True
     shufflehandler_log_level = HadoopLogLevel.DEBUG
+    cache_built_maven_artifacts = True
+
+    # TODO
+    force_compile = True
 
     def __post_init__(self):
         sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
@@ -509,13 +514,13 @@ class Netty4TestConfig:
         self.contexts = [Netty4TestContext("without netty patch on trunk",
                                            DEFAULT_BRANCH,
                                            log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=True)],
-                                           compile=self.enable_compilation,
+                                           compile=self.enable_compilation or self.force_compile,
                                            allow_verification_failure=self.allow_verification_failure),
                          Netty4TestContext("with netty patch based on trunk",
                                            DEFAULT_BRANCH,
                                            patch_file=patch,
                                            log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=False)],
-                                           compile=self.enable_compilation,
+                                           compile=self.enable_compilation or self.force_compile,
                                            allow_verification_failure=self.allow_verification_failure
                                            )]
 
@@ -651,25 +656,35 @@ class GeneratedOutputFiles:
             raise HadesException("Expected non-empty YARN NM restart log files!")
 
 
+@dataclass
+class BuildContext:
+    patch_file_path: str
+    cache_key: str
+    built_jars: Dict[str, str]
+
+
 class Netty4RegressionTestSteps:
     def __init__(self, test, no_of_testcases, handler):
         self.overwrite_config_func = test.overwrite_config
         self.no_of_testcases = no_of_testcases
         self.handler = handler
         self.cluster_handler = ClusterHandler(test.cluster)
-        self.cluster_config_updater = ClusterConfigUpdater(test.cluster, test.workdir)
+        self.cluster_config_updater = ClusterConfigUpdater(test.cluster, test.session_dir)
         self.cluster = test.cluster
         self.config = test.config
         self.workdir = test.workdir
+        self.session_dir = test.session_dir
+        self.db_file = os.path.join(self.workdir, "db", "db.pickle")
         self.using_custom_workdir = test.using_custom_workdir
         self.test_results = Netty4TestResults()
-        self.context = None
+        self.context: Netty4TestContext = None
         self.app_id = None
         self.hadoop_config = None
         self.nm_restart_logs = None
         self.yarn_logs = None
         self.output_file_writer = None
         self.tc = None
+        self.build_contexts = {}
 
     def start_context(self, context):
         self.context = context
@@ -679,17 +694,80 @@ class Netty4RegressionTestSteps:
 
     def setup_branch_and_patch(self):
         # Checkout branch, apply patch if required
-        hadoop_dir = HadoopDir(self.handler.ctx.hadoop_config.hadoop_path)
+        hadoop_dir = HadoopDir(self.handler.ctx.config.hadoop_path)
         hadoop_dir.switch_branch_to(self.context.base_branch)
 
         if self.context.patch_file:
             hadoop_dir.apply_patch(self.context.patch_file, force_reset=True)
 
     def compile(self):
-        # TODO cache build jars into hades working dir, with dates to save compilation time? 
-        LOG.info("[%s] Starting compilation...", self.context)
         if self.context.compile:
-            self.handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
+            patch_file = self.context.patch_file
+            hadoop_dir = HadoopDir(self.handler.ctx.config.hadoop_path)
+            branch = hadoop_dir.get_current_branch(fallback="trunk")
+
+            compilation_required = True
+            if not self.config.force_compile and self.config.cache_built_maven_artifacts:
+                self.build_contexts = self.load_db()
+                hadoop_dir.extract_changed_modules()
+                changed_jars = hadoop_dir.get_changed_jar_paths()
+                all_loaded, cached_modules = self.load_from_cache(branch, patch_file, changed_jars)
+                if all_loaded:
+                    compilation_required = False
+                    LOG.info("Found all required jars in the jar cache! Jars: %s", cached_modules)
+
+            if compilation_required:
+                LOG.info("[%s] Starting compilation...", self.context)
+                changed_modules: Dict[str, str] = self.handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
+                self.save_to_cache(branch, patch_file, changed_modules)
+
+    def load_from_cache(self, branch, patch_file, changed_jars):
+        cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_jars)
+        for module_name, module_path in cached_modules.items():
+            if not os.path.exists(module_path):
+                LOG.info("Module '%s' not found in cache at location: %s", module_name, module_path)
+                return False, cached_modules
+            LOG.debug("Module '%s' found in cache at location: %s", module_name, module_path)
+        return True, cached_modules
+
+    def _build_cache_path_for_jars(self, branch, patch_file, changed_jars):
+        cache_paths = {}
+        for module_name, module_path in changed_jars.items():
+            jar_path = module_path.replace(self.handler.ctx.config.hadoop_path, "").lstrip(os.sep)
+            cache_paths[module_name] = os.path.join(self.workdir, "jarcache", self._make_key(branch, patch_file), jar_path)
+        return cache_paths
+
+    @staticmethod
+    def _make_key(branch, patch_file):
+        if not patch_file:
+            patch_file = "without_patch"
+        return f"{branch}_{patch_file}"
+
+    def save_to_cache(self, branch, patch_file, changed_modules):
+        cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_modules)
+        if self.config.cache_built_maven_artifacts:
+            modules_in_cache = {}
+            cache_key = self._make_key(branch, patch_file)
+            for module, module_path in cached_modules.items():
+                modules_in_cache[module] = module_path
+                FileUtils.ensure_dir_created(os.path.dirname(module_path))
+                shutil.copyfile(changed_modules[module], module_path)
+            build_context = BuildContext(patch_file, cache_key, modules_in_cache)
+            self.build_contexts[cache_key] = build_context
+            self.write_db()
+
+    def load_db(self):
+        LOG.debug("Loading DB from file: %s", self.db_file)
+        if os.path.exists(self.db_file):
+            with open(self.db_file, "rb") as db:
+                return pickle.load(db)
+        return {}
+
+    def write_db(self):
+        LOG.debug("Writing DB to file: %s", self.db_file)
+        FileUtils.ensure_dir_created(os.path.dirname(self.db_file))
+        with open(self.db_file, "wb") as db:
+            pickle.dump(self.build_contexts, db)
 
     def load_default_yarn_site_configs(self):
         LOG.info("Loading default yarn-site.xml configs for NodeManagers...")
@@ -706,7 +784,7 @@ class Netty4RegressionTestSteps:
     def init_testcase(self, tc):
         self.tc = tc
         self.test_results.update_with_context_and_testcase(self.context, self.tc)
-        self.output_file_writer.update_with_context_and_testcase(self.workdir, self.context, self.tc)
+        self.output_file_writer.update_with_context_and_testcase(self.session_dir, self.context, self.tc)
         LOG.info("[%s] [%d / %d] Running testcase: %s", self.context, self.output_file_writer.tc_no, self.no_of_testcases,
                  self.tc)
         PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
@@ -723,7 +801,7 @@ class Netty4RegressionTestSteps:
         for config_key, config_val in self.tc.config_changes.items():
             self.hadoop_config.extend_with_args({config_key: config_val})
 
-        self.cluster.update_config(NODEMANAGER_SELECTOR, self.hadoop_config, no_backup=True, workdir=self.workdir)
+        self.cluster.update_config(NODEMANAGER_SELECTOR, self.hadoop_config, no_backup=True, workdir=self.session_dir)
 
     def set_shufflehandler_loglevel(self):
         LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
@@ -878,9 +956,8 @@ class ClusterHandler:
 
 
 class Netty4RegressionTestDriver(HadesScriptBase):
-    def __init__(self, cluster: HadoopCluster, workdir: str):
-        super().__init__(cluster, workdir)
-        self.tc = None
+    def __init__(self, cluster: HadoopCluster, workdir: str, session_dir: str):
+        super().__init__(cluster, workdir, session_dir)
         self.config = Netty4TestConfig()
         self.context = None
         self.output_file_writer = None
@@ -911,7 +988,7 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                 self.steps.set_shufflehandler_loglevel()  # 4. Set log level of ShuffleHandler to DEBUG
                 self.steps.restart_nms_and_save_logs()  # 5. Restart NMs, Save logs 
                 self.steps.start_to_collect_yarn_daemon_logs()  # 6. Start to collect YARN daemon logs
-                self.steps.run_app_and_collect_logs_to_file(self.tc.app)  # 7. Run app of the testcase + Record test results
+                self.steps.run_app_and_collect_logs_to_file(tc.app)  # 7. Run app of the testcase + Record test results
                 self.steps.get_application()  # 8. Get application according to status
                 self.steps.ensure_if_hadoop_version_is_correct()  # 9. Ensure if version is correct by checking certain logs
                 self.steps.write_result_files()  # 10. Write YARN daemon logs - Now it's okay to write the YARN log files as the app is either finished or timed out

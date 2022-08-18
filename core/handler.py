@@ -90,6 +90,7 @@ class MainCommandHandler:
 
         if all:
             mvn.compile(modules=hadoop_modules, all=True)
+            pass
         elif single:
             mvn.compile_single_module(hadoop_modules, single)
             hadoop_modules.copy_module_to_dist(single)
@@ -113,6 +114,8 @@ class MainCommandHandler:
             hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
             hadoop_modules.extract_changed_modules()
             self._create_cluster().replace_module_jars("", hadoop_modules)
+
+        return hadoop_modules.get_changed_jar_paths()
 
     def log(self, selector: str, follow: bool, tail: int, grep: str, download: bool):
         cluster = self._create_cluster()
@@ -207,7 +210,7 @@ class MainCommandHandler:
         hadoop_dir.add_modules(*modules, with_jar=True)
         cluster.replace_module_jars(selector, hadoop_dir)
 
-    def run_script(self, name: str, workdir: str):
+    def run_script(self, name: str, workdir: str, session_dir: str):
         mod = __import__('script.{}'.format(name))
         script_module = getattr(mod, name, None)
         if not script_module:
@@ -223,7 +226,7 @@ class MainCommandHandler:
             raise HadesException(f"No subclass of HadesScriptBase found in file {name}")
 
         logger.info("Running script %s in file %s", found_cls.__name__, name)
-        script = found_cls(self._create_cluster(), workdir=workdir)
+        script = found_cls(self._create_cluster(), workdir=workdir, session_dir=session_dir)
         script.run(self)
 
     def print_scheduler_info(self):
