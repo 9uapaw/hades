@@ -663,42 +663,14 @@ class BuildContext:
     built_jars: Dict[str, str]
 
 
-class Netty4RegressionTestSteps:
-    def __init__(self, test, no_of_testcases, handler):
-        self.overwrite_config_func = test.overwrite_config
-        self.no_of_testcases = no_of_testcases
-        self.handler = handler
-        self.cluster_handler = ClusterHandler(test.cluster)
-        self.cluster_config_updater = ClusterConfigUpdater(test.cluster, test.session_dir)
-        self.cluster = test.cluster
-        self.config = test.config
-        self.workdir = test.workdir
-        self.session_dir = test.session_dir
-        self.db_file = os.path.join(self.workdir, "db", "db.pickle")
-        self.using_custom_workdir = test.using_custom_workdir
-        self.test_results = Netty4TestResults()
-        self.context: Netty4TestContext = None
-        self.app_id = None
-        self.hadoop_config = None
-        self.nm_restart_logs = None
-        self.yarn_logs = None
-        self.output_file_writer = None
-        self.tc = None
-        self.build_contexts = {}
-
-    def start_context(self, context):
+class Compiler:
+    def __init__(self, workdir, context, handler, config):
+        self.workdir = workdir
         self.context = context
-        LOG.info("Starting: %s", self.context)
-        PrintUtils.print_banner_figlet(f"STARTING CONTEXT: {self.context}")
-        self.output_file_writer = OutputFileWriter(self.cluster)
-
-    def setup_branch_and_patch(self):
-        # Checkout branch, apply patch if required
-        hadoop_dir = HadoopDir(self.handler.ctx.config.hadoop_path)
-        hadoop_dir.switch_branch_to(self.context.base_branch)
-
-        if self.context.patch_file:
-            hadoop_dir.apply_patch(self.context.patch_file, force_reset=True)
+        self.handler = handler
+        self.config = config
+        self.build_contexts = {}
+        self.db_file = os.path.join(self.workdir, "db", "db.pickle")
 
     def compile(self):
         if self.context.compile:
@@ -721,14 +693,11 @@ class Netty4RegressionTestSteps:
                 changed_modules: Dict[str, str] = self.handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
                 self.save_to_cache(branch, patch_file, changed_modules)
 
-    def load_from_cache(self, branch, patch_file, changed_jars):
-        cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_jars)
-        for module_name, module_path in cached_modules.items():
-            if not os.path.exists(module_path):
-                LOG.info("Module '%s' not found in cache at location: %s", module_name, module_path)
-                return False, cached_modules
-            LOG.debug("Module '%s' found in cache at location: %s", module_name, module_path)
-        return True, cached_modules
+    @staticmethod
+    def _make_key(branch, patch_file):
+        if not patch_file:
+            patch_file = "without_patch"
+        return f"{branch}_{patch_file}"
 
     def _build_cache_path_for_jars(self, branch, patch_file, changed_jars):
         cache_paths = {}
@@ -737,11 +706,14 @@ class Netty4RegressionTestSteps:
             cache_paths[module_name] = os.path.join(self.workdir, "jarcache", self._make_key(branch, patch_file), jar_path)
         return cache_paths
 
-    @staticmethod
-    def _make_key(branch, patch_file):
-        if not patch_file:
-            patch_file = "without_patch"
-        return f"{branch}_{patch_file}"
+    def load_from_cache(self, branch, patch_file, changed_jars):
+        cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_jars)
+        for module_name, module_path in cached_modules.items():
+            if not os.path.exists(module_path):
+                LOG.info("Module '%s' not found in cache at location: %s", module_name, module_path)
+                return False, cached_modules
+            LOG.debug("Module '%s' found in cache at location: %s", module_name, module_path)
+        return True, cached_modules
 
     def save_to_cache(self, branch, patch_file, changed_modules):
         cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_modules)
@@ -768,6 +740,44 @@ class Netty4RegressionTestSteps:
         FileUtils.ensure_dir_created(os.path.dirname(self.db_file))
         with open(self.db_file, "wb") as db:
             pickle.dump(self.build_contexts, db)
+
+
+class Netty4RegressionTestSteps:
+    def __init__(self, test, no_of_testcases, handler):
+        self.overwrite_config_func = test.overwrite_config
+        self.no_of_testcases = no_of_testcases
+        self.handler = handler
+        self.cluster_handler = ClusterHandler(test.cluster)
+        self.cluster_config_updater = ClusterConfigUpdater(test.cluster, test.session_dir)
+        self.cluster = test.cluster
+        self.config = test.config
+        self.workdir = test.workdir
+        self.session_dir = test.session_dir
+        self.using_custom_workdir = test.using_custom_workdir
+        self.test_results = Netty4TestResults()
+        self.context: Netty4TestContext = None
+        self.app_id = None
+        self.hadoop_config = None
+        self.nm_restart_logs = None
+        self.yarn_logs = None
+        self.output_file_writer = None
+        self.tc = None
+        self.compiler = None
+
+    def start_context(self, context):
+        self.context = context
+        LOG.info("Starting: %s", self.context)
+        PrintUtils.print_banner_figlet(f"STARTING CONTEXT: {self.context}")
+        self.output_file_writer = OutputFileWriter(self.cluster)
+        self.compiler = Compiler(self.workdir, self.context, self.handler, self.config)
+
+    def setup_branch_and_patch(self):
+        # Checkout branch, apply patch if required
+        hadoop_dir = HadoopDir(self.handler.ctx.config.hadoop_path)
+        hadoop_dir.switch_branch_to(self.context.base_branch)
+
+        if self.context.patch_file:
+            hadoop_dir.apply_patch(self.context.patch_file, force_reset=True)
 
     def load_default_yarn_site_configs(self):
         LOG.info("Loading default yarn-site.xml configs for NodeManagers...")
@@ -895,6 +905,9 @@ class Netty4RegressionTestSteps:
             LOG.warning("Skipping comparison of testcase results as the testcase limit is set to: %s", self.config.testcase_limit)
             return
         self.test_results.compare(self.config.contexts[0])
+
+    def compile(self):
+        self.compiler.compile()
 
 
 class ClusterConfigUpdater:
