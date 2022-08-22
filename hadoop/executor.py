@@ -28,6 +28,10 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: 'HadoopLogLevel') -> List[RunnableCommand]:
+        raise NotImplementedError()
+
+    @abstractmethod
     def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
         raise NotImplementedError()
 

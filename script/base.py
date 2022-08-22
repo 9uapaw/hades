@@ -10,12 +10,13 @@ from hadoop.cluster import HadoopCluster
 class HadesScriptBase:
     LOGGER = logging.getLogger(__name__)
 
-    def __init__(self, cluster: HadoopCluster, workdir: str):
+    def __init__(self, cluster: HadoopCluster, workdir: str, session_dir: str):
         self.cluster = cluster
         self.workdir = workdir
+        self.session_dir = session_dir
         self.using_custom_workdir = True if workdir != os.getcwd() else False
 
-    def run(self):
+    def run(self, handler):
         raise NotImplementedError()
 
     @contextmanager

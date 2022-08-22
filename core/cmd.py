@@ -31,7 +31,7 @@ class RunnableCommand:
         return NotImplemented
 
     def run(self) -> Tuple[List[str], List[str]]:
-        logger.debug("Running command {}".format(self.cmd))
+        logger.debug("Running command %s", self.cmd)
         try:
             output = self.get_sync_cmd(self.cmd, self.work_dir)
             self.stdout.extend(list(filter(bool, output.stdout.decode().split("\n"))))
@@ -43,7 +43,7 @@ class RunnableCommand:
 
     def run_async(self, stdout: Callable[[str], None] = None, stderr: Callable[[str], None] = None, block=False, timeout=-1):
         try:
-            logger.debug("Running command asynchronously {} as blocking {}".format(self.cmd, block))
+            logger.debug("Running command asynchronously %s as blocking %s", self.cmd, block)
             stdout_callback = self._stdout_callback
             stderr_callback = stdout_callback
             if stdout:
@@ -59,9 +59,9 @@ class RunnableCommand:
             return process
 
         except sh.TimeoutException as e:
-            raise HadesCommandTimedOutException("Error while executing {}".format(self.cmd), cmd=self.cmd)
+            raise HadesCommandTimedOutException(f"Error while executing {self.cmd}", cmd=self.cmd)
         except sh.ErrorReturnCode as e:
-            raise CommandExecutionException("Error while executing {}".format(self.cmd), cmd=e.stderr.decode())
+            raise CommandExecutionException(f"Error while executing {self.cmd}", cmd=e.stderr.decode())
 
     def get_sync_cmd(self, c: str, cwd: str) -> any:
         return sh.bash(_cwd=cwd, c=c)
@@ -92,12 +92,12 @@ class RemoteRunnableCommand(RunnableCommand):
         self.host = host
 
     def get_sync_cmd(self, c: str, cwd: str) -> any:
-        ssh = sh.ssh.bake("{user}@{host}".format(user=self.user, host=self.host))
-        return ssh("bash -c \'{} {}\'".format(self._cmd_prefix, self.cmd))
+        ssh = sh.ssh.bake(f"{self.user}@{self.host}")
+        return ssh(f"bash -c \'{self._cmd_prefix} {self.cmd}\'")
 
     def get_async_cmd(self, c: str, cwd: str, out: Callable[[str], None], err: Callable[[str], None]) -> any:
-        ssh = sh.ssh.bake("{user}@{host}".format(user=self.user, host=self.host))
-        return ssh("bash -c \'{} {}\'".format(self._cmd_prefix, self.cmd), _bg=True, _out=out, _err=err)
+        ssh = sh.ssh.bake(f"{self.user}@{self.host}")
+        return ssh(f"bash -c \'{self._cmd_prefix} {self.cmd}\'", _bg=True, _out=out, _err=err)
 
 
 class DownloadCommand(RunnableCommand):

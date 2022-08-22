@@ -1,5 +1,6 @@
 import logging
 import random
+from enum import Enum
 from typing import List, Callable, Dict
 
 import hadoop.selector
@@ -19,6 +20,11 @@ from hadoop.yarn.rm_api import RmApi
 from hadoop_dir.module import HadoopModule, HadoopDir
 
 logger = logging.getLogger(__name__)
+
+
+class HadoopLogLevel(Enum):
+    INFO = "INFO"
+    DEBUG = "DEBUG"
 
 
 class HadoopCluster:
@@ -65,17 +71,27 @@ class HadoopCluster:
     def read_logs(self, selector: str, follow: bool = False, tail: int or None = 10, download: bool = None) -> List[RunnableCommand]:
         roles = self.select_roles(selector)
         if not roles:
-            logger.warning("No roles found by selector '{}'".format(selector))
+            logger.warning("No roles found by selector '%s'", selector)
         logger.debug("Selected roles for read logs command: %s", roles)
 
         cmds = self._executor.read_log(*roles, follow=follow, tail=tail, download=download)
 
         return cmds
 
+    def set_log_level(self, package: str, log_level: HadoopLogLevel) -> List[RunnableCommand]:
+        selector = "ResourceManager"
+        roles = self.select_roles(selector)
+        if not roles:
+            logger.warning("No roles found by selector '%s'", selector)
+        logger.debug("Selected roles for read logs command: %s", roles)
+
+        cmds = self._executor.set_log_level(*roles, package=package, level=log_level)
+        return cmds
+
     def compress_and_download_app_logs(self, selector: str, app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
         roles = self.select_roles(selector)
         if not roles:
-            logger.warning("No roles found by selector '{}'".format(selector))
+            logger.warning("No roles found by selector '%s'", selector)
 
         cmds = self._executor.compress_app_logs(*roles, app_id=app_id, workdir=workdir, compress_dir=compress_dir)
         return cmds
@@ -84,7 +100,7 @@ class HadoopCluster:
         return self._executor.get_cluster_status(self.name)
 
     def run_app(self, application: ApplicationCommand, selector: str = "") -> RunnableCommand:
-        logger.info("Running app {}".format(application.__class__.__name__))
+        logger.info("Running app %s", application)
         random_selected = self._select_random_role(selector)
 
         return self._executor.run_app(random_selected, application)
@@ -116,7 +132,7 @@ class HadoopCluster:
     def distribute(self, selector: str, source: str, dest: str):
         selected = self.select_roles(selector)
         for role in selected:
-            logger.info("Distributing local file {} to remote host '{}' path {}".format(source, role.name, dest))
+            logger.info("Distributing local file %s to remote host '%s' path %s", source, role.name, dest)
             role.host.make_backup(dest).run()
             role.host.upload(source, dest).run()
 

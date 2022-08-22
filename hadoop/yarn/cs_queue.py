@@ -23,7 +23,7 @@ class QueueNode:
     children: List['QueueNode'] = field(default_factory=list)
 
     def __str__(self):
-        attrs = "[c: {} - used: {}%]".format(self.capacity, self.used_capacity) if self.capacity else "[w: {}]".format(self.weight)
+        attrs = f"[c: {self.capacity} - used: {self.used_capacity}%]" if self.capacity else f"[w: {self.weight}]"
         name = self.name
         if self.is_dynamic:
             name = color(fore='blue', text=self.name)
@@ -31,7 +31,7 @@ class QueueNode:
             name = color(fore='red', text=self.name + " <STOPPED>")
         elif self.state == QueueState.DRAINING:
             name = color(fore='gray', text=self.name + " <DRAINING>")
-        return "{} {}".format(name, attrs)
+        return f"{name} {attrs}"
 
     def __hash__(self):
         return hash(self.name)

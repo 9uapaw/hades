@@ -7,6 +7,7 @@ from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from core.error import CommandExecutionException, MultiCommandExecutionException, HadesException
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
+from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class StandardUpstreamExecutor(HadoopOperationExecutor):
-    JAR_DIR = "/opt/hadoop/share/"
+    JAR_DIR = "/opt/hadoop/share/hadoop/"
     LOG_DIR = "/opt/hadoop/logs"
     APP_LOG_DIR = "/tmp/hadoop-logs"
     CONFIG_FILE_PATH = "/opt/hadoop/etc/hadoop/{}"
@@ -69,7 +70,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         for role in args:
             role_type = role.role_type.value
 
-            file = "{log_dir}*/*{role_type}*log".format(log_dir=self.LOG_DIR, role_type=role_type)
+            file = f"{self.LOG_DIR}*/*{role_type}*log"
             if download:
                 cmds.append(role.host.download(file))
                 continue
@@ -78,6 +79,14 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             else:
                 cmd = "cat {file}"
             cmds.append(role.host.create_cmd(cmd.format(file=file)))
+
+        return cmds
+
+    def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: HadoopLogLevel) -> List[RunnableCommand]:
+        cmds = []
+        for role in args:
+            cmd = f"yarn daemonlog -setlevel `hostname`:8088 {package} {level.value}"
+            cmds.append(role.host.create_cmd(cmd))
 
         return cmds
 
@@ -97,7 +106,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         # /tmp/hadoop-logs/application_1657557929851_0006_DEL_1658219238731/container_1657557929851_0006_01_000003
         # OR
         # /tmp/hadoop-logs/application_1657557929851_0006/container_1657557929851_0006_01_000001/
-        find_cmd = "find {dir} -name {name} -print".format(dir=self.APP_LOG_DIR, name=app_id_spec)
+        find_cmd = f"find {self.APP_LOG_DIR} -name {app_id_spec} -print"
         cmds = []
         for role in args:
             try:
@@ -122,7 +131,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         if len(tar_files_created) == 0:
             hosts = [role.host for role in args]
-            raise HadesException("Failed to compress app logs, no tar file created on any of the hosts: {}".format(hosts))
+            raise HadesException(f"Failed to compress app logs, no tar file created on any of the hosts: {hosts}")
 
         if no_of_hosts == len(find_failed_on_hosts):
             logger.error("Command '%s' failed on all hosts: %s", find_cmd, [r.host for r in args])
@@ -144,7 +153,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             application.path += "yarn"
 
         application_command = application.build()
-        full_command = "/opt/hadoop/bin/{}".format(application_command)
+        full_command = f"/opt/hadoop/bin/{application_command}"
         cmd = random_selected.host.create_cmd(full_command)
 
         return cmd
@@ -153,9 +162,8 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         config_name, config_ext = config.file.split(".")
 
         for role in args:
-            logger.info("Setting config {} on {}".format(config.file, role.get_colorized_output()))
-            local_file = "{config}-{host}-{time}.{ext}".format(
-                host=role.host, config=config_name, time=int(time.time()), ext=config_ext)
+            logger.info(f"Setting config {config.file} on {role.get_colorized_output()}")
+            local_file = f"{config_name}-{role.host}-{int(time.time())}.{config_ext}"
             parent_dir = os.getcwd() if workdir == "." else workdir
             local_file_path = os.path.join(parent_dir, local_file)
             config_file_path = self.CONFIG_FILE_PATH.format(config.file)
@@ -168,7 +176,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             role.host.upload(config.file, config_file_path).run()
 
             if no_backup:
-                logger.info("Backup is turned off. Deleting file {}".format(local_file_path))
+                logger.info("Backup is turned off. Deleting file %s", local_file_path)
                 os.remove(local_file_path)
 
     def restart_roles(self, *args: HadoopRoleInstance) -> List[RunnableCommand]:
@@ -184,8 +192,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         for role in args:
             config_data = HadoopConfig(config)
-            local_file = "{config}-{container}-{time}.{ext}".format(
-                container=role.host, config=config_name, time=int(time.time()), ext=config_ext)
+            local_file = f"{config_name}-{role.host}-{int(time.time())}.{config_ext}"
             config_file_path = self.CONFIG_FILE_PATH.format(config.value)
             role.host.download(config_file_path, local_file).run()
 
@@ -202,9 +209,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         unique_args = {role.host.get_address(): role for role in args}
         cached_found_jar = {}
         for role in unique_args.values():
-            logger.info("Replacing jars on {}".format(role.host.get_address()))
+            logger.info("Replacing jars on %s", role.host.get_address())
             for module, jar in modules.get_jar_paths().items():
-                logger.info("Replacing jar {}".format(jar))
+                logger.info("Replacing jar %s", jar)
                 local_jar = jar
                 if module not in cached_found_jar:
                     remote_jar_dir = self.JAR_DIR
@@ -213,7 +220,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
                     elif "mapreduce" in module:
                         remote_jar_dir += "mapreduce"
 
-                    find_remote_jar = role.host.find_file(remote_jar_dir, "*{}*".format(module)).run()
+                    find_remote_jar = role.host.find_file(remote_jar_dir, f"*{module}*").run()
                     remote_jar = ""
                     if find_remote_jar[0]:
                         remote_jar = find_remote_jar[0][0]
@@ -223,6 +230,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
                 if remote_jar:
                     role.host.make_backup(remote_jar).run()
+                    logger.info("Replacing remote jar %s:%s with local jar: %s", role.host, remote_jar, local_jar)
                     role.host.upload(local_jar, remote_jar).run()
 
     def get_running_apps(self, random_selected: HadoopRoleInstance):
@@ -250,7 +258,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             # results: ['/tmp/hadoop-logs/application_1658218984267_0087']
             # tar -czvf my_directory.tar.gz -C my_directory .
             if len(files) > 1:
-                raise HadesException("Tried to compress directory with tar and assumed single result file set. Current files: {}".format(files))
+                raise HadesException(f"Tried to compress directory with tar and assumed single result file set. Current files: {files}")
 
             app_data_dir = f"{app_id}_{role.host.address}"
             target_dir = f"/tmp/{app_data_dir}"

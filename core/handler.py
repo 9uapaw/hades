@@ -79,29 +79,33 @@ class MainCommandHandler:
         with open(self.ctx.cluster_config_path, 'w') as f:
             f.write(cluster_config.to_json())
 
-        logger.info("Created cluster file {}".format(self.ctx.cluster_config_path))
+        logger.info("Created cluster file %s", self.ctx.cluster_config_path)
 
-    def compile(self, changed=False, deploy=False, modules=None, no_copy=False, single=None):
+    def compile(self, all=False, changed=False, deploy=False, modules=None, no_copy=False, single=None):
         if not self.ctx.config.hadoop_jar_path:
             raise ConfigSetupException("hadoopJarPath", "not set")
 
         mvn = MavenCompiler(self.ctx.config)
         hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
 
-        if single:
+        if all:
+            mvn.compile(modules=hadoop_modules, all=True)
+            pass
+        elif single:
             mvn.compile_single_module(hadoop_modules, single)
             hadoop_modules.copy_module_to_dist(single)
             return
-
-        if modules:
+        elif modules:
             hadoop_modules.add_modules(*modules, with_jar=True)
 
         if changed and not modules:
             hadoop_modules.add_modules(*self.ctx.config.default_modules, with_jar=True)
             hadoop_modules.extract_changed_modules()
 
-        logger.info("Found modules: {}".format(hadoop_modules.get_modules()))
-        mvn.compile(hadoop_modules)
+        logger.info(f"Found modules: %s", hadoop_modules.get_modules())
+
+        if not all:
+            mvn.compile(hadoop_modules)
 
         if not no_copy:
             hadoop_modules.copy_modules_to_dist(self.ctx.config.hadoop_jar_path)
@@ -110,6 +114,8 @@ class MainCommandHandler:
             hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
             hadoop_modules.extract_changed_modules()
             self._create_cluster().replace_module_jars("", hadoop_modules)
+
+        return hadoop_modules.get_changed_jar_paths()
 
     def log(self, selector: str, follow: bool, tail: int, grep: str, download: bool):
         cluster = self._create_cluster()
@@ -204,11 +210,11 @@ class MainCommandHandler:
         hadoop_dir.add_modules(*modules, with_jar=True)
         cluster.replace_module_jars(selector, hadoop_dir)
 
-    def run_script(self, name: str, workdir: str):
+    def run_script(self, name: str, workdir: str, session_dir: str):
         mod = __import__('script.{}'.format(name))
         script_module = getattr(mod, name, None)
         if not script_module:
-            raise HadesException("Script {} not found".format(name))
+            raise HadesException(f"Script {name} not found")
 
         cls_members = inspect.getmembers(script_module, inspect.isclass)
         found_cls = None  # type: Type[HadesScriptBase]
@@ -217,11 +223,11 @@ class MainCommandHandler:
                 found_cls = cls
 
         if not found_cls:
-            raise HadesException("No subclass of HadesScriptBase found in file {}".format(name))
+            raise HadesException(f"No subclass of HadesScriptBase found in file {name}")
 
-        logger.info("Running script {} in file {}".format(found_cls.__name__, name))
-        script = found_cls(self._create_cluster(), workdir=workdir)
-        script.run()
+        logger.info("Running script %s in file %s", found_cls.__name__, name)
+        script = found_cls(self._create_cluster(), workdir=workdir, session_dir=session_dir)
+        script.run(self)
 
     def print_scheduler_info(self):
         cluster = self._create_cluster()

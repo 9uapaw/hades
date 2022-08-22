@@ -48,7 +48,7 @@ class HadoopRoleSelector:
         if len(fragments) == 2:
             return self._extract_fragments(fragments[0]), self._extract_fragments(fragments[1])
 
-        raise SelectorException("Invalid selector expression {}".format(selector))
+        raise SelectorException(f"Invalid selector expression {selector}")
 
     def _extract_fragments(self, fragment: str) -> SelectorFragment:
         if self.INNER_DELIMITER not in fragment:

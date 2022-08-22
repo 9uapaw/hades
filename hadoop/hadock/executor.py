@@ -8,6 +8,7 @@ import yaml
 from core.cmd import RunnableCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
+from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
 from hadoop.config import HadoopConfig
 from hadoop.data.status import HadoopClusterStatusEntry
@@ -39,7 +40,7 @@ class HadockExecutor(HadoopOperationExecutor):
         yarn_roles = {}
         hdfs_roles = {}
 
-        with open("{}/{}".format(self._hadock_repository, self._hadock_compose), 'r') as f:
+        with open(f"{self._hadock_repository}/{self._hadock_compose}", 'r') as f:
             compose = yaml.safe_load(f)
             for role_name, role in compose["services"].items(): # type: str, dict
                 role_type = ''.join([i for i in role_name if not i.isdigit()])
@@ -65,10 +66,13 @@ class HadockExecutor(HadoopOperationExecutor):
         for role in args:
             cmd = "docker logs {} {} {}".format(role.host,
                                                 "-f" if follow else "",
-                                                "--tail {}".format(tail) if tail else "")
+                                                f"--tail {tail}" if tail else "")
             cmds.append(RunnableCommand(cmd, target=role))
 
         return cmds
+
+    def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: HadoopLogLevel) -> List[RunnableCommand]:
+        raise NotImplementedError()
 
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
         cmd = RunnableCommand("docker container list | grep bde2020/hadoop")
@@ -82,7 +86,7 @@ class HadockExecutor(HadoopOperationExecutor):
         return status
 
     def run_app(self, random_selected: HadoopRoleInstance, application: ApplicationCommand):
-        logger.info("Running app {}".format(application.__class__.__name__))
+        logger.info("Running app %s", application.__class__.__name__)
 
         application.path = "/opt/hadoop/share/hadoop/"
         if isinstance(application, MapReduceApp):
@@ -90,7 +94,7 @@ class HadockExecutor(HadoopOperationExecutor):
         elif isinstance(application, DistributedShellApp):
             application.path += "yarn"
 
-        cmd = RunnableCommand("docker exec {} bash -c '{}'".format(random_selected.host, application.build()))
+        cmd = RunnableCommand(f"docker exec {random_selected.host} bash -c '{application.build()}'")
 
         return cmd
 
@@ -98,12 +102,11 @@ class HadockExecutor(HadoopOperationExecutor):
         config_name, config_ext = config.file.split(".")
 
         for role in args:
-            logger.info("Setting config {} on {}".format(config.file, role.get_colorized_output()))
-            local_file = "{config}-{container}-{time}.{ext}".format(
-                container=role.host, config=config_name, time=int(time.time()), ext=config_ext)
+            logger.info("Setting config %s on %s", config.file, role.get_colorized_output())
+            local_file = f"{config_name}-{role.host}-{int(time.time())}.{config_ext}"
             parent_dir = os.getcwd() if workdir == "." else workdir
             local_file_path = os.path.join(parent_dir, local_file)
-            config_file_path = "/etc/hadoop/{}".format(config.file)
+            config_file_path = f"/etc/hadoop/{config.file}"
             role.host.download(config_file_path, local_file_path).run()
 
             config.xml = local_file_path
@@ -113,15 +116,15 @@ class HadockExecutor(HadoopOperationExecutor):
             role.host.upload(config.file, config_file_path).run()
 
             if no_backup:
-                logger.info("Backup is turned off. Deleting file {}".format(local_file_path))
+                logger.info("Backup is turned off. Deleting file %s", local_file_path)
                 os.remove(local_file_path)
 
     def restart_roles(self, *args: HadoopRoleInstance):
         cmds = []
 
         for role in args:
-            logger.info("Restarting {}".format(role.get_colorized_output()))
-            restart_cmd = RunnableCommand("docker restart {}".format(role.host))
+            logger.info(f"Restarting {role.get_colorized_output()}")
+            restart_cmd = RunnableCommand(f"docker restart {role.host}")
             cmds.append(restart_cmd)
 
         return cmds
@@ -135,9 +138,8 @@ class HadockExecutor(HadoopOperationExecutor):
 
         for role in args:
             config_data = HadoopConfig(config)
-            local_file = "{config}-{container}-{time}.{ext}".format(
-                container=role.host, config=config_name, time=int(time.time()), ext=config_ext)
-            config_file_path = "/etc/hadoop/{}".format(config.value)
+            local_file = f"{config_name}-{role.host}-{int(time.time())}.{config_ext}"
+            config_file_path = f"/etc/hadoop/{config.value}"
             role.host.download(config_file_path, local_file).run()
 
             config_data.xml = local_file

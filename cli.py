@@ -43,7 +43,7 @@ def cli(ctx, config: str, cluster: str, debug: bool, prefix: str):
     ctx.ensure_object(dict)
     ctx.obj['loglevel'] = level
 
-    logger.info("Invoked command {}".format(ctx.invoked_subcommand))
+    logger.info("Invoked command %s", ctx.invoked_subcommand)
 
     if ctx.invoked_subcommand == "init":
         hades_ctx = HadesContext(config_path=config, cluster_config_path=cluster)
@@ -258,22 +258,23 @@ def run_script(ctx, script: str, session_dir: bool = False):
     """
     handler: MainCommandHandler = ctx.obj['handler']
 
+    workdir = os.getcwd()
     if session_dir:
-        workdir = os.path.join(os.getcwd(), f"session-{DateUtils.get_current_datetime()}")
-        os.mkdir(workdir)
-        logger.debug("Session dir: %s", workdir)
+        session_dir = os.path.join(workdir, f"session-{DateUtils.get_current_datetime()}")
+        os.mkdir(session_dir)
+        logger.debug("Session dir: %s", session_dir)
 
         level = ctx.obj['loglevel']
         root_logger = logging.getLogger()
         handlers = copy(root_logger.handlers)
-        file_handler = LoggingUtils.create_file_handler(workdir, level, fname="hades-session")
+        file_handler = LoggingUtils.create_file_handler(session_dir, level, fname="hades-session")
         file_handler.formatter = None
         logger.info("Logging to file: %s", file_handler.baseFilename)
         handlers.append(file_handler)
         logging.basicConfig(force=True, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=level, handlers=handlers)
     else:
-        workdir = os.getcwd()
-    handler.run_script(script, workdir=workdir)
+        session_dir = workdir
+    handler.run_script(script, workdir=workdir, session_dir=session_dir)
 
 
 @yarn.command()
@@ -303,7 +304,7 @@ def update_config(ctx, selector: str, file: str, property: Tuple[str], value: Tu
     Update properties on a config file for selected roles
     """
     if len(property) != len(value):
-        raise CliArgException("All property must map to a value. Properties: {} Values: {}".format(len(property), len(value)))
+        raise CliArgException(f"All property must map to a value. Properties: {(property)} Values: {len(value)}")
 
     handler: MainCommandHandler = ctx.obj['handler']
     file = HadoopConfigFile(file)
@@ -427,14 +428,16 @@ def raw_mutate(ctx, xml: str):
     handler: MainCommandHandler = ctx.obj['handler']
     handler.mutate_yarn_config(xml)
 
+
 if __name__ == "__main__":
     logger.info("Started application")
     before = time.time()
     try:
         cli()
         after = time.time()
-        logger.info("Executed successfully after {}s".format(int(after - before)))
+        logger.info("Executed successfully after %d seconds", int(after - before))
     except HadesException as e:
         logger.error(str(e))
         after = time.time()
-        logger.info("Error during execution after {}s".format(int(after - before)))
+        logger.info("Error during execution after %d seconds", int(after - before))
+        exit(1)

@@ -12,7 +12,7 @@ class ConfigSetupException(HadesException):
         self._attr = attr
 
     def __str__(self):
-        return "{}: {}".format(self._attr, self._msg) if self._attr else self._msg
+        return f"{self._attr}: {self._msg}" if self._attr else self._msg
 
 
 class CliArgException(HadesException):
@@ -27,8 +27,10 @@ class CommandExecutionException(HadesException):
         self.stderr = stderr if stderr else []
 
     def __str__(self):
-        return "{}: {}\n Command: {} \n stderr: {} \n stdout: {}".format(
-            self.__class__.__name__, self._msg, self._cmd if self._cmd else "", "\n".join(self.stderr), "\n".join(self.stdout))
+        cmd = self._cmd if self._cmd else ""
+        stderr = "\n".join(self.stderr)
+        stdout = "\n".join(self.stdout)
+        return f"{self.__class__.__name__}: {self._msg}\n Command: {cmd} \n stderr: {stderr} \n stdout: {stdout}"
 
 
 class MultiCommandExecutionException(HadesException):
@@ -36,7 +38,7 @@ class MultiCommandExecutionException(HadesException):
         self._exceptions = exceptions
 
     def __str__(self):
-        return "{}: {}".format(self.__class__.__name__, self._exceptions)
+        return f"{self.__class__.__name__}: {self._exceptions}"
 
 
 class HadesCommandTimedOutException(CommandExecutionException):
