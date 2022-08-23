@@ -484,8 +484,7 @@ class Netty4TestConfig:
     shufflehandler_log_level = HadoopLogLevel.DEBUG
     cache_built_maven_artifacts = True
 
-    # TODO
-    force_compile = True
+    force_compile = False
 
     def __post_init__(self):
         sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
@@ -673,6 +672,7 @@ class Compiler:
         self.db_file = os.path.join(self.workdir, "db", "db.pickle")
 
     def compile(self):
+        LOG.info("Compile set to %s, force compile: %s", self.context.compile, self.config.force_compile)
         if self.context.compile:
             patch_file = self.context.patch_file
             hadoop_dir = HadoopDir(self.handler.ctx.config.hadoop_path)
