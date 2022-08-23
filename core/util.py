@@ -6,7 +6,7 @@ import tarfile
 import textwrap
 import zipfile
 from logging.handlers import TimedRotatingFileHandler
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 import pyfiglet
 
@@ -188,3 +188,12 @@ class DateUtils:
     @classmethod
     def now_formatted(cls, fmt):
         return DateUtils.now().strftime(fmt)
+
+
+class StringUtils:
+    @staticmethod
+    def replace_chars(s, chars: List[Tuple[str, str]]):
+        res = s
+        for c in chars:
+            res = res.replace(c[0], c[1])
+        return res

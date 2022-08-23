@@ -134,6 +134,27 @@ class HadoopCluster:
     def get_queues(self) -> CapacitySchedulerQueue:
         return CapacitySchedulerQueue.from_rm_api_data(self._rm_api.get_scheduler_info())
 
+    def get_node_statuses(self, skipped_states: List[str] = None):
+        if skipped_states is None:
+            skipped_states = ["SHUTDOWN"]
+        return list(filter(lambda n: n['state'] not in skipped_states, self._rm_api.get_nodes()))
+
+    def get_state_and_health_report(self, exceptions=None):
+        if not exceptions:
+            exceptions = ["SHUTDOWN"]
+        ns = self.get_node_statuses(skipped_states=exceptions)
+        id_key = "id"
+        fields = ["state", "healthReport"]
+
+        ret = {}
+        for n in ns:
+            id = n[id_key]
+            d = {}
+            for f in fields:
+                d[f] = n[f]
+            ret[id] = d
+        return ret
+
     def get_rm_api(self) -> RmApi:
         return self._rm_api
 

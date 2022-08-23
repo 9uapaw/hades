@@ -12,7 +12,7 @@ from tabulate import tabulate
 from core.cmd import RunnableCommand
 from core.error import ScriptException, HadesCommandTimedOutException, HadesException
 from core.handler import MainCommandHandler
-from core.util import FileUtils, CompressedFileUtils, PrintUtils
+from core.util import FileUtils, CompressedFileUtils, PrintUtils, StringUtils
 from hadoop.app.example import MapReduceApp, MapReduceAppType
 from hadoop.cluster import HadoopCluster, HadoopLogLevel
 from hadoop.config import HadoopConfig
@@ -311,37 +311,23 @@ class OutputFileWriter:
                 f.writelines(lines)
         return files_written
 
-    def _save_app_log_tar_files_from_cluster(self, app_id: str):
-        if app_id == APP_ID_NOT_AVAILABLE:
-            return [], None
+    def _write_node_health_reports(self, node_health_reports):
+        files_written = []
+        if not node_health_reports:
+            raise HadesException("YARN Node health report is empty for all nodes!")
 
-        tar_files = []
-        try:
-            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id,
-                                                               workdir=self.current_tc_dir,
-                                                               compress_dir=True)
-            for cmd in cmds:
-                cmd.run()
-                tar_files.append(cmd.dest)
-            return tar_files, OutputFileType.APP_LOG_TAR_GZ
-        except HadesException as he:
-            LOG.exception("Error while creating targz files of application logs!")
-            if "Failed to compress app logs" in str(he):
-                nm_cmds = self.cluster.compress_and_download_daemon_logs(NODEMANAGER_SELECTOR,
-                                                                         workdir=self.current_tc_dir)
+        for node_id, dict in node_health_reports.items():
+            chars = [(".", "_"), (":", "_"), ("-", "_")]
+            new_node_id = StringUtils.replace_chars(node_id, chars)
+            file_path = os.path.join(self.current_tc_dir, f"healthreport_{new_node_id}.txt")
+            files_written.append(file_path)
+            with open(file_path, 'w') as f:
+                f.writelines(dict)
+        return files_written
 
-                rm_cmds = self.cluster.compress_and_download_daemon_logs(RESOURCEMANAGER_SELECTOR,
-                                                                         workdir=self.current_tc_dir)
-
-                cmds = nm_cmds + rm_cmds
-                for cmd in cmds:
-                    cmd.run()
-                    tar_files.append(cmd.dest)
-                return tar_files, OutputFileType.YARN_DAEMON_LOGS_TAR_GZ
-            else:
-                raise he
-
-                # TODO Capture health report of all NMs --> http://ccycloud-1.snemeth-netty.root.hwx.site:8088/cluster/nodes/unhealthy
+    def write_node_health_reports(self, node_health_reports):
+        self._generated_files.register_files(OutputFileType.NODE_HEALTH_REPORTS,
+                                             self._write_node_health_reports(node_health_reports))
 
     def write_nm_restart_logs(self, nm_restart_logs):
         self._generated_files.register_files(OutputFileType.NM_RESTART_LOGS,
@@ -372,8 +358,37 @@ class OutputFileWriter:
         self._generated_files.verify()
 
     def save_app_logs_from_cluster(self, app_id):
-        files, out_type = self._save_app_log_tar_files_from_cluster(app_id)
-        self._generated_files.register_files(out_type, files)
+        if app_id == APP_ID_NOT_AVAILABLE:
+            return
+
+        tar_files = []
+        try:
+            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id,
+                                                               workdir=self.current_tc_dir,
+                                                               compress_dir=True)
+            for cmd in cmds:
+                cmd.run()
+                tar_files.append(cmd.dest)
+            self._generated_files.register_files(OutputFileType.APP_LOG_TAR_GZ, tar_files)
+        except HadesException as he:
+            LOG.exception("Error while creating targz files of application logs!")
+
+            if "Failed to compress app logs" in str(he):
+                nm_cmds = self.cluster.compress_and_download_daemon_logs(NODEMANAGER_SELECTOR,
+                                                                         workdir=self.current_tc_dir)
+
+                rm_cmds = self.cluster.compress_and_download_daemon_logs(RESOURCEMANAGER_SELECTOR,
+                                                                         workdir=self.current_tc_dir)
+
+                cmds = nm_cmds + rm_cmds
+                for cmd in cmds:
+                    cmd.run()
+                    tar_files.append(cmd.dest)
+                self._generated_files.register_files(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ, tar_files)
+            else:
+                raise he
+
+        self.write_node_health_reports(self.cluster.get_state_and_health_report())
 
     def write_yarn_app_logs(self, app_name, app_command, app_log_lines):
         app_log_file = APP_LOG_FILE_NAME_FORMAT.format(app=app_name)
@@ -642,6 +657,7 @@ class OutputFileType(Enum):
     EXTRACTED_APP_LOG_FILES = "extracted_app_log_files"
     EXTRACTED_YARN_DAEMON_LOG_FILES = "extracted_yarn_daemon_log_files"
     PATCH_FILE = "patch_file"
+    NODE_HEALTH_REPORTS = "node_health_reports"
 
 
 class GeneratedOutputFiles:
@@ -665,6 +681,8 @@ class GeneratedOutputFiles:
         self._curr_files_dict[out_type] = files
 
     def get(self, out_type):
+        if out_type not in self._curr_files_dict:
+            return []
         return self._curr_files_dict[out_type]
 
     def get_all_for_current_ctx(self):
