@@ -42,6 +42,7 @@ YARN_APP_MAPREDUCE_SHUFFLE_PREFIX = "yarn.app.mapreduce.shuffle"
 MAPREDUCE_SHUFFLE_PREFIX = MAPREDUCE_PREFIX + ".shuffle"
 
 CONF_DEBUG_DELAY = "yarn.nodemanager.delete.debug-delay-sec"
+CONF_DISK_MAX_UTILIZATION = "yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage"
 
 # START DEFAULT CONFIGS
 SHUFFLE_MANAGE_OS_CACHE = MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache"
@@ -970,7 +971,17 @@ class Netty4RegressionTestSteps:
 
 class ClusterConfigUpdater:
     YARN_SITE_DEFAULT_CONFIGS = {
-        CONF_DEBUG_DELAY: str(UNLIMITED)
+        CONF_DEBUG_DELAY: str(UNLIMITED),
+        # Other YARN configs
+
+        # To avoid unhealthy node issues
+        # Example:
+        # URL: http://ccycloud-1.snemeth-netty.root.hwx.site:8088/cluster/nodes/unhealthy
+        # 1/1 local-dirs usable space is below configured utilization percentage/no more usable space
+        # [ /tmp/hadoop-systest/nm-local-dir : used space above threshold of 90.0% ] ;
+        # 1/1 log-dirs usable space is below configured utilization percentage/no more usable space
+        # [ /tmp/hadoop-logs : used space above threshold of 90.0% ]
+        CONF_DISK_MAX_UTILIZATION: "99.5"
     }
     
     def __init__(self, cluster, workdir):
