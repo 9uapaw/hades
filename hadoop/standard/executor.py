@@ -142,6 +142,24 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             raise MultiCommandExecutionException(excs)
         return cmds
 
+    def compress_daemon_logs(self, *args: 'HadoopRoleInstance', workdir: str = '.') -> List[DownloadCommand]:
+        tar_files_created: Dict[HadoopRoleInstance, str] = {}
+
+        cmds = []
+        for role in args:
+            targz_file_path, targz_file_name = self._create_tar_gz_of_dir_on_host(self.LOG_DIR, role)
+            tar_files_created[role] = targz_file_path
+            parent_dir = os.getcwd() if workdir == '.' else workdir
+            local_file_path = os.path.join(parent_dir, targz_file_name)
+            download_command = role.host.download(source=targz_file_path, dest=local_file_path)
+            cmds.append(download_command)
+
+        if len(tar_files_created) == 0:
+            hosts = [role.host for role in args]
+            raise HadesException(f"Failed to compress daemon logs, no tar file created on any of the hosts: {hosts}")
+
+        return cmds
+
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
         raise NotImplementedError()
 
@@ -268,6 +286,29 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         else:
             tar_cmd = role.host.create_cmd(
                 "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(files)))
+        try:
+            stdout, stderr = tar_cmd.run()
+            logger.debug("stdout: %s", stdout)
+            logger.debug("stderr: %s", stderr)
+        except CommandExecutionException as e:
+            # If any of the tar commands fail, raise the Exception
+            raise e
+
+        return targz_file_path, targz_file_name
+
+    @staticmethod
+    def _create_tar_gz_of_dir_on_host(dir: str, role: HadoopRoleInstance) -> Tuple[str, str]:
+        logger.info("Creating targz of daemon logs in directory %s on host %s", dir, role.host.address)
+        targz_file_name = f"{role.role_type.name}_daemonlogs_{role.host}.tar.gz"
+        targz_file_path = f"/tmp/{targz_file_name}"
+
+        logs_dir = f"{role.role_type.name}_daemonlogs_{role.host.address}"
+        parent_dir = "/tmp"
+        target_dir = f"{parent_dir}/{logs_dir}"
+        role.host.create_cmd(f"rm -rf {target_dir}; mkdir {target_dir} && cp -R {dir}/* {target_dir}").run()
+        tar_cmd = role.host.create_cmd(
+            "tar -cvf {fname} -C {parent_dir} {dir}".format(fname=targz_file_path, parent_dir=parent_dir, dir=f"./{logs_dir}"))
+
         try:
             stdout, stderr = tar_cmd.run()
             logger.debug("stdout: %s", stdout)

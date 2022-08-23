@@ -33,6 +33,7 @@ UNLIMITED = 99999999
 TC_LIMIT_UNLIMITED = UNLIMITED
 
 NODEMANAGER_SELECTOR = "Yarn/NodeManager"
+RESOURCEMANAGER_SELECTOR = "Yarn/ResourceManager"
 YARN_SELECTOR = "Yarn"
 NODE_TO_RUN_ON = "type=Yarn/name=nodemanager2"
 MAPREDUCE_PREFIX = "mapreduce"
@@ -312,16 +313,35 @@ class OutputFileWriter:
 
     def _save_app_log_tar_files_from_cluster(self, app_id: str):
         if app_id == APP_ID_NOT_AVAILABLE:
-            return []
+            return [], None
 
-        app_log_tar_files = []
-        cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id,
-                                                           workdir=self.current_tc_dir,
-                                                           compress_dir=True)
-        for cmd in cmds:
-            cmd.run()
-            app_log_tar_files.append(cmd.dest)
-        return app_log_tar_files
+        tar_files = []
+        try:
+            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id,
+                                                               workdir=self.current_tc_dir,
+                                                               compress_dir=True)
+            for cmd in cmds:
+                cmd.run()
+                tar_files.append(cmd.dest)
+            return tar_files, OutputFileType.APP_LOG_TAR_GZ
+        except HadesException as he:
+            LOG.exception("Error while creating targz files of application logs!")
+            if "Failed to compress app logs" in str(he):
+                nm_cmds = self.cluster.compress_and_download_daemon_logs(NODEMANAGER_SELECTOR,
+                                                                         workdir=self.current_tc_dir)
+
+                rm_cmds = self.cluster.compress_and_download_daemon_logs(RESOURCEMANAGER_SELECTOR,
+                                                                         workdir=self.current_tc_dir)
+
+                cmds = nm_cmds + rm_cmds
+                for cmd in cmds:
+                    cmd.run()
+                    tar_files.append(cmd.dest)
+                return tar_files, OutputFileType.YARN_DAEMON_LOGS_TAR_GZ
+            else:
+                raise he
+
+                # TODO Capture health report of all NMs --> http://ccycloud-1.snemeth-netty.root.hwx.site:8088/cluster/nodes/unhealthy
 
     def write_nm_restart_logs(self, nm_restart_logs):
         self._generated_files.register_files(OutputFileType.NM_RESTART_LOGS,
@@ -352,8 +372,8 @@ class OutputFileWriter:
         self._generated_files.verify()
 
     def save_app_logs_from_cluster(self, app_id):
-        files = self._save_app_log_tar_files_from_cluster(app_id)
-        self._generated_files.register_files(OutputFileType.APP_LOG_TAR_GZ, files)
+        files, out_type = self._save_app_log_tar_files_from_cluster(app_id)
+        self._generated_files.register_files(out_type, files)
 
     def write_yarn_app_logs(self, app_name, app_command, app_log_lines):
         app_log_file = APP_LOG_FILE_NAME_FORMAT.format(app=app_name)
@@ -365,12 +385,18 @@ class OutputFileWriter:
         self._generated_files.register_files(OutputFileType.APP_LOG_FILE, [app_log_file])
 
     def decompress_app_container_logs(self):
-        for app_log_tar_file in self._generated_files.get(OutputFileType.APP_LOG_TAR_GZ):
+        self._decompress_logs(OutputFileType.APP_LOG_TAR_GZ, OutputFileType.EXTRACTED_APP_LOG_FILES)
+
+    def decompress_daemon_logs(self):
+        self._decompress_logs(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ, OutputFileType.EXTRACTED_YARN_DAEMON_LOG_FILES)
+
+    def _decompress_logs(self, src_type: 'OutputFileType', dst_type: 'OutputFileType'):
+        for tar_file in self._generated_files.get(src_type):
             target_dir = os.path.join(self.current_tc_dir)
-            LOG.debug("[%s] Extracting file '%s' to %s", self.context, app_log_tar_file, target_dir)
-            CompressedFileUtils.extract_targz_file(app_log_tar_file, target_dir)
-            self._generated_files.register_files(OutputFileType.EXTRACTED_APP_LOG_FILES,
-                                                 CompressedFileUtils.list_targz_file(app_log_tar_file),
+            LOG.debug("[%s] Extracting file '%s' to %s", self.context, tar_file, target_dir)
+            CompressedFileUtils.extract_targz_file(tar_file, target_dir)
+            self._generated_files.register_files(dst_type,
+                                                 CompressedFileUtils.list_targz_file(tar_file),
                                                  allow_multiple=True)
 
     def write_patch_file(self, patch_file):
@@ -406,6 +432,7 @@ class LogsByRoles:
                                         stderr=_callback(read_logs_command, self.log_lines_dict))
 
     def search_in_logs(self, verification: LogVerification):
+        LOG.info("Searching in logs, verification: %s", verification)
         filtered_roles = list(filter(lambda rc: rc.target.role_type in [verification.role_type], list(self.log_lines_dict.keys())))
 
         valid = True if verification.inverted_mode else False
@@ -414,10 +441,14 @@ class LogsByRoles:
             for line in self.log_lines_dict[role]:
                 if verification.text in line:
                     if verification.inverted_mode:
+                        LOG.info("Verification became invalid. Text: %s, Line: %s, Role: %s, Verification object: %s",
+                                  verification.text, line, role, verification)
                         valid = False
                         bad_role = role
                         break
                     else:
+                        LOG.info("Verification became valid. Text: %s, Line: %s, Role: %s, Verification object: %s",
+                                  verification.text, line, role, verification)
                         valid = True
                         break
 
@@ -481,6 +512,7 @@ class Netty4TestConfig:
     timeout = 120
     compress_tc_result = False
     decompress_app_container_logs = True
+    decompress_daemon_logs = True
     shufflehandler_log_level = HadoopLogLevel.DEBUG
     cache_built_maven_artifacts = True
 
@@ -602,11 +634,13 @@ class OutputFileType(Enum):
     INITIAL_CONFIG = "initial_config"
     TC_CONFIG = "testcase_config"
     APP_LOG_TAR_GZ = "app_log_tar_gz"
+    YARN_DAEMON_LOGS_TAR_GZ = "yarn_daemon_logs_tar_gz"
     ALL_FILES_TAR_GZ = "all_files_tar_gz"
     NM_RESTART_LOGS = "nm_restart_logs"
     YARN_DAEMON_LOGS = "yarn_daemon_logs"
     APP_LOG_FILE = "app_log_file"
     EXTRACTED_APP_LOG_FILES = "extracted_app_log_files"
+    EXTRACTED_YARN_DAEMON_LOG_FILES = "extracted_yarn_daemon_log_files"
     PATCH_FILE = "patch_file"
 
 
@@ -647,8 +681,8 @@ class GeneratedOutputFiles:
             raise HadesException("Expected non-empty testcase config files list!")
         if not self.get(OutputFileType.INITIAL_CONFIG):
             raise HadesException("Expected non-empty initial config files list!")
-        if not self.get(OutputFileType.APP_LOG_TAR_GZ):
-            raise HadesException("Expected non-empty app log tar files list!")
+        if not self.get(OutputFileType.APP_LOG_TAR_GZ) and not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ):
+            raise HadesException("Expected non-empty app log tar files list or daemon logs for YARN processes!")
         if not self.get(OutputFileType.YARN_DAEMON_LOGS):
             raise HadesException("Expected non-empty YARN log files list!")
         if not self.get(OutputFileType.NM_RESTART_LOGS):
@@ -866,15 +900,18 @@ class Netty4RegressionTestSteps:
             self.app_id = self.cluster_handler.get_latest_finished_app()
 
     def ensure_if_hadoop_version_is_correct(self):
+        LOG.info("Ensuring if cluster's Hadoop version is correct...")
         if self.context.log_verifications:
             try:
                 for verification in self.context.log_verifications:
                     self.yarn_logs.search_in_logs(verification)
             except HadesException as e:
                 if self.context.allow_verification_failure:
-                    LOG.exception("Allowed verification failure!")
+                    LOG.exception("Verification failed: %s, but allow verification failure is set to True!", verification)
                 else:
                     raise e
+        else:
+            LOG.info("No verifications are defined while checking cluster's Hadoop version")
 
     def write_result_files(self):
         self.output_file_writer.write_yarn_logs(self.yarn_logs)
@@ -889,6 +926,9 @@ class Netty4RegressionTestSteps:
     def finalize_testcase_data_files(self):
         if self.config.decompress_app_container_logs:
             self.output_file_writer.decompress_app_container_logs()
+
+        if self.config.decompress_daemon_logs:
+            self.output_file_writer.decompress_daemon_logs()
 
         if self.config.compress_tc_result:
             self.output_file_writer.create_compressed_testcase_data_file(using_custom_workdir=self.using_custom_workdir)
