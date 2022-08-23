@@ -256,8 +256,14 @@ class OutputFileWriter:
         return tc_targz_filename
 
     def _write_config_files(self, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[str]:
-        configs = self.cluster.get_config(selector, conf_type)
+        conf_type_str = ""
+        if dir == CONF_DIR_INITIAL:
+            conf_type_str = "initial"
+        elif dir == CONF_DIR_TC:
+            conf_type_str = "testcase"
+        LOG.info("Writing initial %s files for selector '%s'", conf_type_str, selector)
 
+        configs = self.cluster.get_config(selector, conf_type)
         generated_config_files = []
         for host, conf in configs.items():
             config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name)
@@ -307,6 +313,7 @@ class OutputFileWriter:
                                                                  role=cmd.target.role_type.name,
                                                                  app="YARN")
             file_path = os.path.join(self.current_tc_dir, yarn_log_file)
+            LOG.info("Writing YARN log file: %s", file_path)
             files_written.append(file_path)
             with open(file_path, 'w') as f:
                 f.writelines(lines)
@@ -359,6 +366,7 @@ class OutputFileWriter:
         self._generated_files.verify()
 
     def save_app_logs_from_cluster(self, app_id):
+        LOG.info("Saving application logs from cluster...")
         if app_id == APP_ID_NOT_AVAILABLE:
             return
 
@@ -696,6 +704,7 @@ class GeneratedOutputFiles:
         LOG.debug("All files for context '%s' / testcase '%s': %s", self.ctx, self.tc, self._curr_files_dict)
 
     def verify(self):
+        LOG.info("Verifying generated output files...")
         if not self.get(OutputFileType.TC_CONFIG):
             raise HadesException("Expected non-empty testcase config files list!")
         if not self.get(OutputFileType.INITIAL_CONFIG):
@@ -856,11 +865,13 @@ class Netty4RegressionTestSteps:
             self.output_file_writer.write_patch_file(self.context.patch_file)
 
     def load_default_configs(self):
+        LOG.info("Loading default configs...")
         self.load_default_mapred_configs()
         self.hadoop_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
         self.output_file_writer.write_initial_config_files()
 
     def apply_testcase_configs(self):
+        LOG.info("Applying testcase configs...")
         for config_key, config_val in self.tc.config_changes.items():
             self.hadoop_config.extend_with_args({config_key: config_val})
 
@@ -878,7 +889,7 @@ class Netty4RegressionTestSteps:
             cmd.run()
 
     def restart_nms_and_save_logs(self):
-        # 6. Restart NodeManagers with new config + Save NodeManager logs
+        LOG.info("Restarting NodeManagers with new configs...")
         self.nm_restart_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=NODEMANAGER_SELECTOR)
         self.cluster_handler.restart_nms(logs_by_roles=self.nm_restart_logs)
         self.output_file_writer.write_nm_restart_logs(self.nm_restart_logs)
@@ -907,6 +918,7 @@ class Netty4RegressionTestSteps:
         self.test_results.update_with_result(self.tc, result)
 
     def start_to_collect_yarn_daemon_logs(self):
+        LOG.info("Starting to collect live YARN daemon logs...")
         self.yarn_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=YARN_SELECTOR)
         self.yarn_logs.read_logs_into_dict()
 
@@ -930,9 +942,10 @@ class Netty4RegressionTestSteps:
                 else:
                     raise e
         else:
-            LOG.info("No verifications are defined while checking cluster's Hadoop version")
+            LOG.warning("No verifications are defined while checking cluster's Hadoop version")
 
     def write_result_files(self):
+        LOG.info("Writing result files...")
         self.output_file_writer.write_yarn_logs(self.yarn_logs)
         self.output_file_writer.save_app_logs_from_cluster(self.app_id)
         self.output_file_writer.write_testcase_config_files()
