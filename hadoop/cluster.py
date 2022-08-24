@@ -128,8 +128,16 @@ class HadoopCluster:
         selected = self.select_roles(selector)
         return self._executor.restart_roles(*selected) or []
 
+    def force_restart_roles(self, selector: str) -> List[RunnableCommand]:
+        selected = self.select_roles(selector)
+        return self._executor.force_restart_roles(*selected) or []
+
     def restart(self):
         self._executor.restart_cluster(self.name)
+
+    def get_role_pids(self, selector: str) -> List[RunnableCommand]:
+        selected = self.select_roles(selector)
+        return self._executor.get_role_pids(*selected) or []
 
     def get_metrics(self) -> Dict[str, str]:
         return self._rm_api.get_metrics()

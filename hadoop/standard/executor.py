@@ -201,6 +201,27 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return [role.host.create_cmd("yarn --daemon stop {role} && yarn --daemon start {role}".format(
             role=role.role_type.value)) for role in args]
 
+    def force_restart_roles(self, *args: HadoopRoleInstance) -> None:
+        for role in args:
+            pid = self._get_pid_by_role(role)
+            role.host.create_cmd(f"kill {pid} && sleep 15 && yarn --daemon start {role.role_type.value}").run()
+
+    def get_role_pids(self, *args: 'HadoopRoleInstance'):
+        result = {}
+        for role in args:
+            pid = self._get_pid_by_role(role)
+            result[role.host.address] = pid
+        return result
+
+    @staticmethod
+    def _get_pid_by_role(role):
+        out = role.host.create_cmd(f"jps | grep -i {role.role_type.value}").run()
+        first_line = out[0]
+        if len(first_line) > 1:
+            raise HadesException("Unexpected output from jps: '{}'. Full output: {}".format(first_line, out))
+        pid = first_line[0].split(" ")[0]
+        return pid
+
     def restart_cluster(self, cluster: str):
         pass
 

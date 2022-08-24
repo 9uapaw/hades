@@ -55,6 +55,13 @@ class HadoopOperationExecutor(ABC):
     def restart_roles(self, *args: 'HadoopRoleInstance'):
         raise NotImplementedError()
 
+    def force_restart_roles(self, *args: 'HadoopRoleInstance') -> None:
+        pass
+
+    @abstractmethod
+    def get_role_pids(self, *args: 'HadoopRoleInstance'):
+        raise NotImplementedError()
+
     @abstractmethod
     def restart_cluster(self, cluster: str):
         raise NotImplementedError()
