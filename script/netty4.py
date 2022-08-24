@@ -5,7 +5,7 @@ import pickle
 import shutil
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, List, Dict
+from typing import Callable, List, Dict, Tuple
 
 from tabulate import tabulate
 
@@ -43,6 +43,7 @@ MAPREDUCE_SHUFFLE_PREFIX = MAPREDUCE_PREFIX + ".shuffle"
 
 CONF_DEBUG_DELAY = "yarn.nodemanager.delete.debug-delay-sec"
 CONF_DISK_MAX_UTILIZATION = "yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage"
+CONF_DISK_MAX_UTILIZATION_VAL = "99.5"
 
 # START DEFAULT CONFIGS
 SHUFFLE_MANAGE_OS_CACHE = MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache"
@@ -282,15 +283,24 @@ class OutputFileWriter:
         return generated_config_files
 
     def write_initial_config_files(self):
-        self._generated_files.register_files(OutputFileType.INITIAL_CONFIG,
+        self._generated_files.register_files(OutputFileType.INITIAL_CONFIG_MR,
                                              self._write_config_files(NODEMANAGER_SELECTOR,
                                                                       HadoopConfigFile.MAPRED_SITE,
                                                                       dir=CONF_DIR_INITIAL))
+        self._generated_files.register_files(OutputFileType.INITIAL_CONFIG_YARN_SITE,
+                                             self._write_config_files(NODEMANAGER_SELECTOR,
+                                                                      HadoopConfigFile.YARN_SITE,
+                                                                      dir=CONF_DIR_INITIAL))
 
     def write_testcase_config_files(self):
-        self._generated_files.register_files(OutputFileType.TC_CONFIG,
+        self._generated_files.register_files(OutputFileType.TC_CONFIG_MR,
                                              self._write_config_files(NODEMANAGER_SELECTOR,
                                                                       HadoopConfigFile.MAPRED_SITE,
+                                                                      dir=CONF_DIR_TC))
+
+        self._generated_files.register_files(OutputFileType.TC_CONFIG_YARN_SITE,
+                                             self._write_config_files(NODEMANAGER_SELECTOR,
+                                                                      HadoopConfigFile.YARN_SITE,
                                                                       dir=CONF_DIR_TC))
 
     def _write_role_logs(self, logs_by_role: 'LogsByRoles', prefix: str = "", app: str = ""):
@@ -655,8 +665,10 @@ class Netty4TestResults:
 
 
 class OutputFileType(Enum):
-    INITIAL_CONFIG = "initial_config"
-    TC_CONFIG = "testcase_config"
+    INITIAL_CONFIG_MR = "initial_config_mr"
+    INITIAL_CONFIG_YARN_SITE = "initial_config_yarn_site"
+    TC_CONFIG_MR = "testcase_config_mr"
+    TC_CONFIG_YARN_SITE = "testcase_config_yarn_site"
     APP_LOG_TAR_GZ = "app_log_tar_gz"
     YARN_DAEMON_LOGS_TAR_GZ = "yarn_daemon_logs_tar_gz"
     ALL_FILES_TAR_GZ = "all_files_tar_gz"
@@ -705,9 +717,11 @@ class GeneratedOutputFiles:
 
     def verify(self):
         LOG.info("Verifying generated output files...")
-        if not self.get(OutputFileType.TC_CONFIG):
-            raise HadesException("Expected non-empty testcase config files list!")
-        if not self.get(OutputFileType.INITIAL_CONFIG):
+        if not self.get(OutputFileType.TC_CONFIG_MR):
+            raise HadesException("Expected non-empty testcase config mapred-site.xml files list!")
+        if not self.get(OutputFileType.TC_CONFIG_YARN_SITE):
+            raise HadesException("Expected non-empty testcase config yarn-site.xml files list!")
+        if not self.get(OutputFileType.INITIAL_CONFIG_MR):
             raise HadesException("Expected non-empty initial config files list!")
         if not self.get(OutputFileType.APP_LOG_TAR_GZ) and not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ):
             raise HadesException("Expected non-empty app log tar files list or daemon logs for YARN processes!")
@@ -981,6 +995,9 @@ class Netty4RegressionTestSteps:
     def compile(self):
         self.compiler.compile()
 
+    def verify_nm_configs(self, dict: Dict[HadoopConfigFile, List[Tuple[str, str]]]):
+        self.cluster_handler.verify_nm_configs(dict)
+
 
 class ClusterConfigUpdater:
     YARN_SITE_DEFAULT_CONFIGS = {
@@ -994,7 +1011,7 @@ class ClusterConfigUpdater:
         # [ /tmp/hadoop-systest/nm-local-dir : used space above threshold of 90.0% ] ;
         # 1/1 log-dirs usable space is below configured utilization percentage/no more usable space
         # [ /tmp/hadoop-logs : used space above threshold of 90.0% ]
-        CONF_DISK_MAX_UTILIZATION: "99.5"
+        CONF_DISK_MAX_UTILIZATION: CONF_DISK_MAX_UTILIZATION_VAL
     }
     
     def __init__(self, cluster, workdir):
@@ -1017,10 +1034,15 @@ class ClusterHandler:
     def restart_nms(self, logs_by_roles: LogsByRoles):
         logs_by_roles.read_logs_into_dict()
         handlers = []
+
+        # TODO Store pid of NMs and verify if it differs after restart!!
         for cmd in self.cluster.restart_roles(NODEMANAGER_SELECTOR):
             handlers.append(cmd.run_async())
         for h in handlers:
             h.wait()
+
+        # TODO Nodemanager not always stopped when command ran: 'yarn --daemon stop nodemanager'
+        # TODO verify if 'ps aux | grep NodeMan | grep -v grep' gives empty result
 
     def get_single_running_app(self):
         cmd = self.cluster.get_running_apps()
@@ -1048,6 +1070,27 @@ class ClusterHandler:
         LOG.info("Found finished applications: %s", finished_apps)
         # Topmost row is the latest app
         return finished_apps[0]
+
+    def verify_nm_configs(self, dict: Dict[HadoopConfigFile, List[Tuple[str, str]]]):
+        configs_per_nm = self.cluster.get_config_from_api(NODEMANAGER_SELECTOR)
+        for config_file, expected_conf_list in dict.items():
+            # We are not interested in the file types in this case (whether it's yarn-site.xml / mapred-site.xml or something else)
+            for expected_conf_tup in expected_conf_list:
+                for host, nm_conf in configs_per_nm.items():
+                    conf_name = expected_conf_tup[0]
+                    exp_value = expected_conf_tup[1]
+
+                    not_found = conf_name not in nm_conf
+                    values_differ = nm_conf[conf_name] != exp_value
+                    if not_found or values_differ:
+                        act_val = "XXX"
+                        if not_found:
+                            act_val = "not found"
+                        elif values_differ:
+                            act_val = nm_conf[conf_name]
+                        raise HadesException("Invalid config value found for NM on host '{}'. "
+                                             "Config name: {}, Expected value: {}, Actual value: {}"
+                                             .format(host, conf_name, exp_value, act_val))
 
 
 class Netty4RegressionTestDriver(HadesScriptBase):
@@ -1081,7 +1124,10 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                 self.steps.load_default_configs()  # 2. Load default configs / Write initial config files                
                 self.steps.apply_testcase_configs()  # 3. Apply testcase configs
                 self.steps.set_shufflehandler_loglevel()  # 4. Set log level of ShuffleHandler to DEBUG
-                self.steps.restart_nms_and_save_logs()  # 5. Restart NMs, Save logs 
+                self.steps.restart_nms_and_save_logs()  # 5. Restart NMs, Save logs
+                self.steps.verify_nm_configs({
+                    HadoopConfigFile.YARN_SITE: [(CONF_DISK_MAX_UTILIZATION, CONF_DISK_MAX_UTILIZATION_VAL)],
+                })
                 self.steps.start_to_collect_yarn_daemon_logs()  # 6. Start to collect YARN daemon logs
                 self.steps.run_app_and_collect_logs_to_file(tc.app)  # 7. Run app of the testcase + Record test results
                 self.steps.get_application()  # 8. Get application according to status

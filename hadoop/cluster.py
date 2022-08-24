@@ -16,6 +16,7 @@ from hadoop.role import HadoopRoleInstance, HadoopRoleType
 from hadoop.service import HadoopService, YarnService, HdfsService
 from hadoop.xml_config import HadoopConfigFile
 from hadoop.yarn.cs_queue import CapacitySchedulerQueue
+from hadoop.yarn.nm_api import NmApi
 from hadoop.yarn.rm_api import RmApi
 from hadoop_dir.module import HadoopModule, HadoopDir
 
@@ -35,6 +36,7 @@ class HadoopCluster:
         self._cluster_type = cluster_type
         self.name = name
         self._rm_api: RmApi = None
+        self._nm_apis: Dict[str, NmApi] = {}
         self.ctx = context
 
     @classmethod
@@ -59,6 +61,7 @@ class HadoopCluster:
             cluster.add_service(service_obj)
 
         cluster._create_rm_api()
+        cluster._create_nm_api()
         return cluster
 
     def add_service(self, service: HadoopService):
@@ -168,12 +171,25 @@ class HadoopCluster:
     def get_config(self, selector: str, config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
         return self._executor.get_config(*self.select_roles(selector), config=config)
 
+    def get_config_from_api(self, selector: str) -> Dict[str, Dict[str, str]]:
+        nm_roles = self.select_roles(selector)
+        ret = {}
+        for nm_role in nm_roles:
+            nm_api = self._nm_apis[nm_role.host.address]
+            ret[nm_role.host.address] = nm_api.get_conf()
+        return ret
+
     def replace_module_jars(self, selector: str, modules: HadoopDir):
         return self._executor.replace_module_jars(*self.select_roles(selector), modules=modules)
 
     def _create_rm_api(self):
         rm_role = self.select_roles("Yarn/ResourceManager")
         self._rm_api = RmApi(rm_role[0])
+
+    def _create_nm_api(self):
+        nm_roles = self.select_roles("Yarn/NodeManager")
+        for nm_role in nm_roles:
+            self._nm_apis[nm_role.host.address] = NmApi(nm_role)
 
     def _select_random_role(self, selector: str = "") -> HadoopRoleInstance:
         selected = self.select_roles(selector)
