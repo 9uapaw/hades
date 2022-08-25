@@ -10,7 +10,7 @@ from typing import Callable, List, Dict, Tuple
 from tabulate import tabulate
 
 from core.cmd import RunnableCommand
-from core.error import ScriptException, HadesCommandTimedOutException, HadesException
+from core.error import ScriptException, HadesCommandTimedOutException, HadesException, CommandExecutionException
 from core.handler import MainCommandHandler
 from core.util import FileUtils, CompressedFileUtils, PrintUtils, StringUtils
 from hadoop.app.example import MapReduceApp, MapReduceAppType
@@ -29,6 +29,7 @@ CONF_DIR_INITIAL = "initial_config"
 APP_ID_NOT_AVAILABLE = "N/A"
 
 TIMEOUT_MSG_TEMPLATE = "Timed out after {} seconds"
+ERROR_MSG_TEMPLATE = "Error after {} seconds"
 UNLIMITED = 99999999
 TC_LIMIT_UNLIMITED = UNLIMITED
 
@@ -204,6 +205,7 @@ class Netty4Testcase:
 
 
 class TestcaseResultType(Enum):
+    FAILED = "error"
     TIMEOUT = "timed out"
     PASSED = "passed"
 
@@ -372,42 +374,43 @@ class OutputFileWriter:
         self._generated_files.register_files(OutputFileType.ALL_FILES_TAR_GZ, [target_targz_file])
         FileUtils.rm_dir(self.current_tc_dir)
 
-    def verify(self):
-        self._generated_files.verify()
+    def verify(self, app_failed: bool = False):
+        self._generated_files.verify(app_failed=app_failed)
 
     def save_app_logs_from_cluster(self, app_id):
         LOG.info("Saving application logs from cluster...")
         if app_id == APP_ID_NOT_AVAILABLE:
             return
 
-        tar_files = []
         try:
             cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id,
                                                                workdir=self.current_tc_dir,
                                                                compress_dir=True)
+            files = []
             for cmd in cmds:
                 cmd.run()
-                tar_files.append(cmd.dest)
-            self._generated_files.register_files(OutputFileType.APP_LOG_TAR_GZ, tar_files)
+                files.append(cmd.dest)
+            self._generated_files.register_files(OutputFileType.APP_LOG_TAR_GZ, files)
         except HadesException as he:
             LOG.exception("Error while creating targz files of application logs!")
-
             if "Failed to compress app logs" in str(he):
-                nm_cmds = self.cluster.compress_and_download_daemon_logs(NODEMANAGER_SELECTOR,
-                                                                         workdir=self.current_tc_dir)
-
-                rm_cmds = self.cluster.compress_and_download_daemon_logs(RESOURCEMANAGER_SELECTOR,
-                                                                         workdir=self.current_tc_dir)
-
-                cmds = nm_cmds + rm_cmds
-                for cmd in cmds:
-                    cmd.run()
-                    tar_files.append(cmd.dest)
-                self._generated_files.register_files(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ, tar_files)
+                self.save_yarn_daemon_logs()
             else:
                 raise he
 
         self.write_node_health_reports(self.cluster.get_state_and_health_report())
+
+    def save_yarn_daemon_logs(self):
+        nm_cmds = self.cluster.compress_and_download_daemon_logs(NODEMANAGER_SELECTOR,
+                                                                 workdir=self.current_tc_dir)
+        rm_cmds = self.cluster.compress_and_download_daemon_logs(RESOURCEMANAGER_SELECTOR,
+                                                                 workdir=self.current_tc_dir)
+        cmds = nm_cmds + rm_cmds
+        files = []
+        for cmd in cmds:
+            cmd.run()
+            files.append(cmd.dest)
+        self._generated_files.register_files(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ, files)
 
     def write_yarn_app_logs(self, app_name, app_command, app_log_lines):
         app_log_file = APP_LOG_FILE_NAME_FORMAT.format(app=app_name)
@@ -549,6 +552,8 @@ class Netty4TestConfig:
     decompress_daemon_logs = True
     shufflehandler_log_level = HadoopLogLevel.DEBUG
     cache_built_maven_artifacts = True
+    halt_execution_on_failed_job = True
+    # TODO add switch that simulates a job failure?
 
     force_compile = False
 
@@ -625,13 +630,18 @@ class Netty4TestResults:
         self.tc = None
 
     @property
-    def current_result(self):
+    def current_result(self) -> TestcaseResult:
         return self.results[self.context][self.tc]
 
     @property
     def is_current_tc_timed_out(self):
         curr = self.results[self.context][self.tc]
         return curr.type == TestcaseResultType.TIMEOUT
+
+    @property
+    def is_current_tc_failed(self):
+        curr = self.results[self.context][self.tc]
+        return curr.type == TestcaseResultType.FAILED
 
     def update_with_context_and_testcase(self, context, testcase):
         self.context = context
@@ -715,7 +725,7 @@ class GeneratedOutputFiles:
     def print_all_for_current_ctx(self):
         LOG.debug("All files for context '%s' / testcase '%s': %s", self.ctx, self.tc, self._curr_files_dict)
 
-    def verify(self):
+    def verify(self, app_failed: bool = False):
         LOG.info("Verifying generated output files...")
         if not self.get(OutputFileType.TC_CONFIG_MR):
             raise HadesException("Expected non-empty testcase config mapred-site.xml files list!")
@@ -723,12 +733,16 @@ class GeneratedOutputFiles:
             raise HadesException("Expected non-empty testcase config yarn-site.xml files list!")
         if not self.get(OutputFileType.INITIAL_CONFIG_MR):
             raise HadesException("Expected non-empty initial config files list!")
-        if not self.get(OutputFileType.APP_LOG_TAR_GZ) and not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ):
-            raise HadesException("Expected non-empty app log tar files list or daemon logs for YARN processes!")
         if not self.get(OutputFileType.YARN_DAEMON_LOGS):
             raise HadesException("Expected non-empty YARN log files list!")
         if not self.get(OutputFileType.NM_RESTART_LOGS):
             raise HadesException("Expected non-empty YARN NM restart log files!")
+
+        if app_failed and not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ):
+            raise HadesException("App failed. Expected non-empty daemon logs for YARN processes!")
+
+        if not app_failed and (not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ) or not self.get(OutputFileType.APP_LOG_TAR_GZ)):
+            raise HadesException("App not failed. Expected non-empty daemon logs for YARN processes and app log tar files list!")
 
 
 @dataclass
@@ -818,6 +832,11 @@ class Compiler:
             pickle.dump(self.build_contexts, db)
 
 
+class ExecutionState(Enum):
+    RUNNING = "running"
+    HALTED = "halted"
+
+
 class Netty4RegressionTestSteps:
     def __init__(self, test, no_of_testcases, handler):
         self.overwrite_config_func = test.overwrite_config
@@ -839,13 +858,20 @@ class Netty4RegressionTestSteps:
         self.output_file_writer = None
         self.tc = None
         self.compiler = None
+        self.execution_state = ExecutionState.RUNNING
 
     def start_context(self, context):
+        if self.test_results.is_current_tc_failed and self.config.halt_execution_on_failed_job:
+            LOG.info("Execution halted as last job failed!")
+            self.execution_state = ExecutionState.HALTED
+            return self.execution_state
+
         self.context = context
         LOG.info("Starting: %s", self.context)
         PrintUtils.print_banner_figlet(f"STARTING CONTEXT: {self.context}")
         self.output_file_writer = OutputFileWriter(self.cluster)
         self.compiler = Compiler(self.workdir, self.context, self.handler, self.config)
+        return ExecutionState.RUNNING
 
     def setup_branch_and_patch(self):
         # Checkout branch, apply patch if required
@@ -868,6 +894,10 @@ class Netty4RegressionTestSteps:
                                                  NODEMANAGER_SELECTOR)
 
     def init_testcase(self, tc):
+        if self.test_results.is_current_tc_failed and self.config.halt_execution_on_failed_job:
+            self.execution_state = ExecutionState.HALTED
+            return self.execution_state
+
         self.tc = tc
         self.test_results.update_with_context_and_testcase(self.context, self.tc)
         self.output_file_writer.update_with_context_and_testcase(self.session_dir, self.context, self.tc)
@@ -877,6 +907,7 @@ class Netty4RegressionTestSteps:
 
         if self.context.patch_file:
             self.output_file_writer.write_patch_file(self.context.patch_file)
+        return ExecutionState.RUNNING
 
     def load_default_configs(self):
         LOG.info("Loading default configs...")
@@ -910,7 +941,7 @@ class Netty4RegressionTestSteps:
 
     def run_app_and_collect_logs_to_file(self, app: MapReduceApp):
         app_log_lines = []
-        timed_out = False
+        result_type = TestcaseResultType.PASSED
         with self.overwrite_config_func(cmd_prefix="sudo -u systest"):
             app_command = self.cluster.run_app(app, selector=NODEMANAGER_SELECTOR)
 
@@ -918,17 +949,23 @@ class Netty4RegressionTestSteps:
         try:
             app_command.run_async(block=True, stderr=lambda line: app_log_lines.append(line), timeout=app.get_timeout_seconds())
         except HadesCommandTimedOutException:
-            timed_out = True
-            LOG.error("Command '%s' timed out after %d seconds", app_command, app.get_timeout_seconds())
+            LOG.exception("Failed to run app command '%s'. Command '%s' timed out after %d seconds",
+                          app_command.cmd, app_command, app.get_timeout_seconds())
+            result_type = TestcaseResultType.TIMEOUT
+        except CommandExecutionException as e:
+            LOG.exception("Failed to run app command '%s'. Command '%s' failed.", app_command.cmd, app_command)
+            result_type = TestcaseResultType.FAILED
 
         self.output_file_writer.write_yarn_app_logs(app.name, app_command, app_log_lines)
 
-        if timed_out:
-            result = TestcaseResult(TestcaseResultType.TIMEOUT, app_command,
-                                    details=TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds()))
+        if result_type == TestcaseResultType.TIMEOUT:
+            details_msg = TIMEOUT_MSG_TEMPLATE.format(app.get_timeout_seconds())
+        elif result_type == TestcaseResultType.FAILED:
+            details_msg = ERROR_MSG_TEMPLATE.format(app.get_timeout_seconds())
         else:
-            result = TestcaseResult(TestcaseResultType.PASSED, app_command)
+            details_msg = ""
 
+        result = TestcaseResult(result_type, app_command, details=details_msg)
         self.test_results.update_with_result(self.tc, result)
 
     def start_to_collect_yarn_daemon_logs(self):
@@ -940,6 +977,8 @@ class Netty4RegressionTestSteps:
         if self.test_results.is_current_tc_timed_out:
             LOG.debug("[%s] Getting running app id as testcase timed out", self.context)
             self.app_id = self.cluster_handler.get_latest_running_app()
+        elif self.test_results.is_current_tc_failed:
+            LOG.debug("[%s] Not getting any apps as testcase failed", self.context)
         else:
             LOG.debug("[%s] Getting finished app id as testcase passed", self.context)
             self.app_id = self.cluster_handler.get_latest_finished_app()
@@ -961,9 +1000,15 @@ class Netty4RegressionTestSteps:
     def write_result_files(self):
         LOG.info("Writing result files...")
         self.output_file_writer.write_yarn_logs(self.yarn_logs)
-        self.output_file_writer.save_app_logs_from_cluster(self.app_id)
+
+        app_failed = self.test_results.is_current_tc_failed
+        if not app_failed:
+            self.output_file_writer.save_app_logs_from_cluster(self.app_id)
+        else:
+            LOG.warning("Not saving app logs as last app failed, but saving YARN daemon logs!")
+        self.output_file_writer.save_yarn_daemon_logs()
         self.output_file_writer.write_testcase_config_files()
-        self.output_file_writer.verify()
+        self.output_file_writer.verify(app_failed=app_failed)
 
     def verify_daemon_logs(self):
         self.yarn_logs.verify_no_empty_lines()
@@ -1136,13 +1181,20 @@ class Netty4RegressionTestDriver(HadesScriptBase):
         LOG.info("Will run %d testcases", no_of_testcases)
         self.steps = Netty4RegressionTestSteps(self, no_of_testcases, handler)
         for context in self.config.contexts:
-            self.steps.start_context(context)
+            exec_state = self.steps.start_context(context)
+            if exec_state == ExecutionState.HALTED:
+                LOG.warning("Stopping test driver execution as execution state is HALTED!")
+                break
             self.steps.setup_branch_and_patch()
             self.steps.compile()
             self.steps.load_default_yarn_site_configs()
             
             for idx, tc in enumerate(testcases):
-                self.steps.init_testcase(tc)  # 1. Update context, TestResults
+                exec_state = self.steps.init_testcase(tc)  # 1. Update context, TestResults
+                if exec_state == ExecutionState.HALTED:
+                    LOG.warning("Stopping test driver execution as execution state is HALTED!")
+                    break
+
                 self.steps.load_default_configs()  # 2. Load default configs / Write initial config files                
                 self.steps.apply_testcase_configs()  # 3. Apply testcase configs
                 self.steps.set_shufflehandler_loglevel()  # 4. Set log level of ShuffleHandler to DEBUG
