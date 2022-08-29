@@ -137,8 +137,11 @@ class HadoopDir:
         br_cmd = RunnableCommand(cmd, work_dir=self._hadoop_dir)
 
         br_cmd.run()
-        if not br_cmd.stdout:
-            raise CommandExecutionException("\n".join(br_cmd.stdout), cmd)
+        if not br_cmd.stdout and not br_cmd.stderr:
+            out = "\n".join(br_cmd.stdout)
+            err = "\n".join(br_cmd.stderr)
+            msg = f"stdout: {out}\nstderr: {err}"
+            raise CommandExecutionException(msg, cmd)
 
     def get_current_branch(self, fallback=None):
         br_cmd = RunnableCommand(self.GET_BRANCH_CMD, work_dir=self._hadoop_dir)
