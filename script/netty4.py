@@ -773,7 +773,7 @@ class Compiler:
             compilation_required = True
             if not self.config.force_compile and self.config.cache_built_maven_artifacts:
                 self.build_contexts = self.load_db()
-                hadoop_dir.extract_changed_modules()
+                hadoop_dir.extract_changed_modules(allow_empty=True)
                 changed_jars = hadoop_dir.get_changed_jar_paths()
                 all_loaded, cached_modules = self.load_from_cache(branch, patch_file, changed_jars)
                 if all_loaded:
