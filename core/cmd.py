@@ -91,13 +91,25 @@ class RemoteRunnableCommand(RunnableCommand):
         self.user = user
         self.host = host
 
-    def get_sync_cmd(self, c: str, cwd: str) -> any:
+    def get_sync_cmd(self, c: str, cwd: str, login_shell=True) -> any:
         ssh = sh.ssh.bake(f"{self.user}@{self.host}")
-        return ssh(f"bash -c \'{self._cmd_prefix} {self.cmd}\'")
 
-    def get_async_cmd(self, c: str, cwd: str, out: Callable[[str], None], err: Callable[[str], None]) -> any:
+        switches = self._prepare_switches(login_shell)
+        cmd = f"bash {switches} \'{self._cmd_prefix} {self.cmd}\'"
+        return ssh(cmd)
+
+    def get_async_cmd(self, c: str, cwd: str, out: Callable[[str], None], err: Callable[[str], None], login_shell=True) -> any:
         ssh = sh.ssh.bake(f"{self.user}@{self.host}")
-        return ssh(f"bash -c \'{self._cmd_prefix} {self.cmd}\'", _bg=True, _out=out, _err=err)
+
+        switches = self._prepare_switches(login_shell)
+        cmd = f"bash {switches} \'{self._cmd_prefix} {self.cmd}\'"
+        return ssh(cmd, _bg=True, _out=out, _err=err)
+
+    @staticmethod
+    def _prepare_switches(login_shell):
+        switches = "-l " if login_shell else ""
+        switches += "-c "
+        return switches
 
 
 class DownloadCommand(RunnableCommand):
