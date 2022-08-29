@@ -42,13 +42,13 @@ class HadoopDir:
         self._changed: Dict[str, str] = {}
         self._hadoop_dir = hadoop_dir
 
-    def extract_changed_modules(self):
+    def extract_changed_modules(self, allow_empty: bool = False):
         logger.info("Searching modules in hadoop dir %s", self._hadoop_dir)
         module_cmd = RunnableCommand(self.CHANGED_MODULES_CMD, work_dir=self._hadoop_dir)
 
         module_cmd.run()
         stdout = module_cmd.stdout
-        if not stdout:
+        if not allow_empty and not stdout:
             raise CommandExecutionException("\n".join(stdout), self.CHANGED_MODULES_CMD)
 
         modules = set(stdout)
