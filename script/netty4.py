@@ -1047,6 +1047,16 @@ class Netty4RegressionTestSteps:
     def verify_nm_configs(self, dict: Dict[HadoopConfigFile, List[Tuple[str, str]]]):
         self.cluster_handler.verify_nm_configs(dict)
 
+    def restart_services(self):
+        handlers = []
+
+        cmds = self.cluster.restart_roles(YARN_SELECTOR)
+        for cmd in cmds:
+            handlers.append(cmd.run_async())
+
+        for h in handlers:
+            h.wait()
+
 
 class ClusterConfigUpdater:
     YARN_SITE_DEFAULT_CONFIGS = {
@@ -1199,6 +1209,7 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                     LOG.warning("Stopping test driver execution as execution state is HALTED!")
                     break
 
+                self.steps.restart_services()
                 self.steps.load_default_configs()  # 2. Load default configs / Write initial config files                
                 self.steps.apply_testcase_configs()  # 3. Apply testcase configs
                 self.steps.set_shufflehandler_loglevel()  # 4. Set log level of ShuffleHandler to DEBUG
