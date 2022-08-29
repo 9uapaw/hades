@@ -15,7 +15,8 @@ from hadoop.executor import HadoopOperationExecutor
 from hadoop.host import HadoopHostInstance, RemoteHostInstance
 from hadoop.role import HadoopRoleType, HadoopRoleInstance
 from hadoop.xml_config import HadoopConfigFile
-from hadoop.yarn.rm_api import RmApi
+from hadoop.yarn.nm_api import DEFAULT_NM_PORT
+from hadoop.yarn.rm_api import RmApi, DEFAULT_RM_PORT
 from hadoop_dir.module import HadoopDir
 
 
@@ -36,6 +37,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return RemoteHostInstance
 
     def discover(self) -> ClusterConfig:
+        # TODO Discover HDFS daemons
         cluster = ClusterConfig(ClusterType.STANDARD.value)
         yarn_roles = {}
         hdfs_roles = {}
