@@ -85,7 +85,13 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
     def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: HadoopLogLevel) -> List[RunnableCommand]:
         cmds = []
         for role in args:
-            cmd = f"yarn daemonlog -setlevel `hostname`:8088 {package} {level.value}"
+            if role.role_type == HadoopRoleType.RM:
+                port = int(DEFAULT_RM_PORT)
+            elif role.role_type == HadoopRoleType.NM:
+                port = int(DEFAULT_NM_PORT)
+            else:
+                raise HadesException("Unexpected role type: {}".format(role.role_type))
+            cmd = f"yarn daemonlog -setlevel `hostname`:{port} {package} {level.value}"
             cmds.append(role.host.create_cmd(cmd))
 
         return cmds

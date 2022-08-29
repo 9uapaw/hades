@@ -926,9 +926,13 @@ class Netty4RegressionTestSteps:
         LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
 
         set_log_level_cmds: List[RunnableCommand] = self.cluster.set_log_level(
+            selector=YARN_SELECTOR,
             package="org.apache.hadoop.mapred.ShuffleHandler",
             log_level=self.config.shufflehandler_log_level)
         LOG.debug("YARN set log level commands: %s", set_log_level_cmds)
+        if not set_log_level_cmds:
+            raise HadesException("No 'set ShuffleHandler loglevel' commands were created!")
+
         for cmd in set_log_level_cmds:
             LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
             cmd.run()
