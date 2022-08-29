@@ -33,9 +33,9 @@ ERROR_MSG_TEMPLATE = "Error after {} seconds"
 UNLIMITED = 99999999
 TC_LIMIT_UNLIMITED = UNLIMITED
 
+YARN_SELECTOR = "Yarn"
 NODEMANAGER_SELECTOR = "Yarn/NodeManager"
 RESOURCEMANAGER_SELECTOR = "Yarn/ResourceManager"
-YARN_SELECTOR = "Yarn"
 NODE_TO_RUN_ON = "type=Yarn/name=nodemanager2"
 MAPREDUCE_PREFIX = "mapreduce"
 YARN_APP_MAPREDUCE_PREFIX = "yarn.app.mapreduce"
@@ -640,6 +640,8 @@ class Netty4TestResults:
 
     @property
     def is_current_tc_failed(self):
+        if not self.context or not self.tc:
+            return False
         curr = self.results[self.context][self.tc]
         return curr.type == TestcaseResultType.FAILED
 
