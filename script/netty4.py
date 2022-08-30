@@ -553,7 +553,11 @@ class Netty4TestConfig:
     shufflehandler_log_level = HadoopLogLevel.DEBUG
     cache_built_maven_artifacts = True
     halt_execution_on_failed_job = True
-    # TODO add switch that simulates a job failure?
+    halt_execution_on_job_timeout = True  # TODO
+    loadgen_no_mappers = 4
+    loadgen_no_reducers = 3
+    loadgen_timeout = 1000
+    # TODO add switch that simulates an intentional job failure?
 
     force_compile = False
 
@@ -561,14 +565,18 @@ class Netty4TestConfig:
         sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
         pi_job = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000', timeout=self.timeout)
         loadgen_job = MapReduceApp(MapReduceAppType.LOADGEN,
-                                   cmd=f"loadgen -m 200 -r 150 -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text",
-                                   timeout=300)
+                                   cmd=f"loadgen -m {self.loadgen_no_mappers} -r {self.loadgen_no_reducers} "
+                                       f"-outKey org.apache.hadoop.io.Text "
+                                       f"-outValue org.apache.hadoop.io.Text",
+                                   timeout=self.loadgen_timeout)
 
         sort_input_dir = "/user/systest/sortInputDir"
         sort_output_dir = "/user/systest/sortOutputDir"
         random_writer_job = MapReduceApp(MapReduceAppType.RANDOM_WRITER, cmd=f"randomwriter {sort_input_dir}")
         mapred_sort_job = MapReduceApp(MapReduceAppType.TEST_MAPRED_SORT,
-                                       cmd=f"testmapredsort -sortInput {sort_input_dir} -sortOutput {sort_output_dir}")
+                                       cmd=f"testmapredsort "
+                                           f"-sortInput {sort_input_dir} "
+                                           f"-sortOutput {sort_output_dir}")
 
         self.mr_apps: Dict[MapReduceAppType, MapReduceApp] = {
             MapReduceAppType.SLEEP: sleep_job,
