@@ -136,11 +136,15 @@ class HadoopDir:
         cmd = self.SWITCH_BRANCH_CMD_TEMPLATE.format(branch)
         br_cmd = RunnableCommand(cmd, work_dir=self._hadoop_dir)
 
-        br_cmd.run()
+        try:
+            br_cmd.run()
+        except CommandExecutionException as e:
+            logger.exception("Failed to run switch branch command! Current working directory: %s", self._hadoop_dir)
+            raise e
         if not br_cmd.stdout and not br_cmd.stderr:
             out = "\n".join(br_cmd.stdout)
             err = "\n".join(br_cmd.stderr)
-            msg = f"stdout: {out}\nstderr: {err}"
+            msg = f"stdout: {out}\nstderr: {err}\ncurrent working directory: {self._hadoop_dir}"
             raise CommandExecutionException(msg, cmd)
 
     def get_current_branch(self, fallback=None):
