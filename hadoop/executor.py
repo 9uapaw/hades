@@ -41,7 +41,7 @@ class HadoopOperationExecutor(ABC):
 
     @abstractmethod
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
-        # TODO Implement
+        # TODO Implement + Check if RM, NMs, JHS and all HDFS daemons are running!
         raise NotImplementedError()
 
     @abstractmethod

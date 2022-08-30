@@ -873,7 +873,7 @@ class Netty4RegressionTestSteps:
         self.execution_state = ExecutionState.RUNNING
 
     def start_context(self, context):
-        if self.test_results.is_current_tc_failed and self.config.halt_execution_on_failed_job:
+        if self._should_halt():
             LOG.info("Execution halted as last job failed!")
             self.execution_state = ExecutionState.HALTED
             return self.execution_state
@@ -884,6 +884,10 @@ class Netty4RegressionTestSteps:
         self.output_file_writer = OutputFileWriter(self.cluster)
         self.compiler = Compiler(self.workdir, self.context, self.handler, self.config)
         return ExecutionState.RUNNING
+
+    def _should_halt(self):
+        return self.test_results.is_current_tc_failed and self.config.halt_execution_on_failed_job or \
+               (self.test_results.is_current_tc_timed_out and self.config.halt_execution_on_job_timeout)
 
     def setup_branch_and_patch(self):
         # Checkout branch, apply patch if required
@@ -906,7 +910,7 @@ class Netty4RegressionTestSteps:
                                                  NODEMANAGER_SELECTOR)
 
     def init_testcase(self, tc):
-        if self.test_results.is_current_tc_failed and self.config.halt_execution_on_failed_job:
+        if self._should_halt():
             self.execution_state = ExecutionState.HALTED
             return self.execution_state
 
@@ -1068,6 +1072,8 @@ class Netty4RegressionTestSteps:
 
         for h in handlers:
             h.wait()
+
+        # TODO Ensure that services are actually running!
 
 
 class ClusterConfigUpdater:
