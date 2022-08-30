@@ -643,6 +643,8 @@ class Netty4TestResults:
 
     @property
     def is_current_tc_timed_out(self):
+        if not self.context or not self.tc:
+            return False
         curr = self.results[self.context][self.tc]
         return curr.type == TestcaseResultType.TIMEOUT
 
