@@ -260,7 +260,10 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
     @staticmethod
     def _get_pid_by_role(role):
-        out = role.host.create_cmd(f"jps | grep -i {role.role_type.value}").run()
+        try:
+            out = role.host.create_cmd(f"jps | grep -i {role.role_type.value}").run()
+        except CommandExecutionException as e:
+            logger.exception("No '%s' process is running!")
         first_line = out[0]
         if len(first_line) > 1:
             raise HadesException("Unexpected output from jps: '{}'. Full output: {}".format(first_line, out))
