@@ -7,9 +7,10 @@ import hadoop.selector
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from core.context import HadesContext
+from core.error import HadesException
 from hadoop.app.example import ApplicationCommand
 from hadoop.cluster_type import ClusterType
-from hadoop.config import HadoopConfig
+from hadoop.config import HadoopConfig, HadoopConfigBase
 from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
 from hadoop.executor import HadoopOperationExecutor
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
@@ -19,6 +20,7 @@ from hadoop.yarn.cs_queue import CapacitySchedulerQueue
 from hadoop.yarn.nm_api import NmApi
 from hadoop.yarn.rm_api import RmApi
 from hadoop_dir.module import HadoopModule, HadoopDir
+from local_dir.local_files import LocalFiles
 
 logger = logging.getLogger(__name__)
 
@@ -218,3 +220,33 @@ class HadoopCluster:
     def get_finished_apps(self, selector: str = "") -> RunnableCommand:
         random_selected = self._select_random_role(selector)
         return self._executor.get_finished_apps(random_selected)
+
+    def generate_keystore(self, selector: str):
+        java_key_store = LocalFiles.get_unique_file("JavaKeyStore.java")
+        java_key_store_cluster_path = "/home/systest/JavaKeyStore.java"
+        self.upload_file(selector, java_key_store, java_key_store_cluster_path)
+        self.compile_java_file(selector, java_key_store_cluster_path, "~systest/compiled_java/")
+        keystore_files = self.execute_java(selector,
+                          classpath=".",
+                          working_dir="~systest/compiled_java",
+                          main_class="com.hades.keystore.JavaKeyStore")
+
+        def all_same(items):
+            return all(x == items[0] for x in items)
+
+        values = list(keystore_files.values())
+        if not all_same(values):
+            raise HadesException("Not all keystore file locations are the same for NodeManagers! Values are: {}".format(keystore_files))
+        return values[0]
+
+    def upload_file(self, selector: str, local_file: str, target_path: str) -> None:
+        roles = self.select_roles(selector)
+        return self._executor.upload_file(*roles, local_file=local_file, target_path=target_path)
+
+    def compile_java_file(self, selector: str, file_path: str, target_dir: str) -> None:
+        roles = self.select_roles(selector)
+        return self._executor.compile_java(*roles, file_path=file_path, target_dir=target_dir)
+
+    def execute_java(self, selector: str, classpath: str, working_dir: str, main_class: str):
+        roles = self.select_roles(selector)
+        return self._executor.execute_java(*roles, classpath=classpath, working_dir=working_dir, main_class=main_class)

@@ -6,10 +6,12 @@ from typing import List, Type, Dict, Tuple
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from core.error import CommandExecutionException, MultiCommandExecutionException, HadesException
+from pythoncommons.file_utils import FileUtils as CommonFileUtils
+from core.util import FileUtils
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
 from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
-from hadoop.config import HadoopConfig
+from hadoop.config import HadoopConfig, HadoopConfigBase
 from hadoop.data.status import HadoopClusterStatusEntry
 from hadoop.executor import HadoopOperationExecutor
 from hadoop.host import HadoopHostInstance, RemoteHostInstance
@@ -309,6 +311,30 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         # We don't want core.cmd.RunnableCommand.run to fail if grep's exit code is 1 when no result is found
         cmd = random_selected.host.create_cmd("yarn application -list -appStates FINISHED 2>/dev/null | grep -oe application_[0-9]*_[0-9]* | sort -r || true")
         return cmd
+
+    def upload_file(self, *args: 'HadoopRoleInstance', local_file, target_path) -> None:
+        for role in args:
+            logger.info("Uploading local file '%s' on host '%s' to path '%s'", local_file, role.host, target_path)
+            role.host.upload(local_file, target_path).run()
+
+    def compile_java(self, *args: 'HadoopRoleInstance', file_path, target_dir):
+        for role in args:
+            logger.info("Compiling Java file '%s' on host '%s' to target dir '%s'", file_path, role.host, target_dir)
+            copy_to_target_dir = f"mkdir -p {target_dir} && cp {file_path} {target_dir}"
+            compile = f"cd {target_dir} && javac -d . *.java"
+            role.host.create_cmd(f"{copy_to_target_dir} && {compile}").run()
+
+    def execute_java(self, *args: 'HadoopRoleInstance', classpath: str, working_dir: str, main_class: str):
+        outputs = {}
+        for role in args:
+            logger.info("Executing Java main class '%s' (classpath: %s, working dir: %s) on host '%s'", main_class, classpath, working_dir, role.host)
+            cmd = f"cd {working_dir} && java -classpath {classpath} {main_class}"
+            cmd_obj = role.host.create_cmd(cmd)
+            cmd_obj.run()
+            if len(cmd_obj.stdout) > 1:
+                raise HadesException("Expected a one-line stdout from command '{}'. Output was: {}".format(cmd, cmd_obj.stdout))
+            outputs[role.host] = cmd_obj.stdout[0]
+        return outputs
 
     @staticmethod
     def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files,

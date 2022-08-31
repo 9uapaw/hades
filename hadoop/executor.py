@@ -4,7 +4,7 @@ from typing import List, Type, Dict
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from hadoop.app.example import ApplicationCommand
-from hadoop.config import HadoopConfig
+from hadoop.config import HadoopConfig, HadoopConfigBase
 from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
 from hadoop.host import HadoopHostInstance
 from hadoop.xml_config import HadoopConfigFile
@@ -82,3 +82,12 @@ class HadoopOperationExecutor(ABC):
 
     def get_finished_apps(self, random_selected: 'HadoopRoleInstance'):
         raise NotImplementedError()
+
+    def upload_file(self, *args: 'HadoopRoleInstance', local_file, target_path):
+        pass
+
+    def compile_java(self, *args: 'HadoopRoleInstance', file_path, target_dir):
+        pass
+
+    def execute_java(self, *args: 'HadoopRoleInstance', selector: str, classpath: str, working_dir: str, main_class: str):
+        pass
