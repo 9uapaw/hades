@@ -19,6 +19,7 @@ tabulate = "*"
 pptree = "*"
 rich = "*"
 pyfiglet = "*"
+python-commons = {editable = true, ref = "master", git = "https://github.com/szilard-nemeth/python-commons.git"}
 
 [requires]
 python_version = "3.9"
