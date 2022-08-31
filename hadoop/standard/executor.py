@@ -218,7 +218,19 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             parent_dir = os.getcwd() if workdir == "." else workdir
             local_file_path = os.path.join(parent_dir, local_file)
             config_file_path = self.CONFIG_FILE_PATH.format(config.file)
-            role.host.download(config_file_path, local_file_path).run()
+            try:
+                cmd = role.host.download(config_file_path, local_file_path)
+                cmd.run()
+            except CommandExecutionException as e:
+                # TODO Decide if config is XML based
+                exc_stderr = "\n".join(e.stderr)
+                no_such_file_marker = "No such file or directory"
+                if (no_such_file_marker in cmd.stderr or no_such_file_marker in exc_stderr) and allow_empty:
+                    logger.warning("Config file '%s' not found on host '%s'", config_file_path, role.host.address)
+                    CommonFileUtils.create_new_empty_file(local_file_path)
+                    CommonFileUtils.write_to_file(local_file_path, "<configuration>\n</configuration>")
+                else:
+                    raise e
 
             config.set_base_config(local_file_path)
             config.merge()
