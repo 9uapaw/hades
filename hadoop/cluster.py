@@ -90,6 +90,15 @@ class HadoopCluster:
         cmds = self._executor.set_log_level(*roles, package=package, level=log_level)
         return cmds
 
+    def get_log_levels(self, selector: str, packages: List[str]) -> Dict[str, List[RunnableCommand]]:
+        roles = self.select_roles(selector)
+        if not roles:
+            logger.warning("No roles found by selector '%s'", selector)
+        logger.debug("Selected roles for setting log level: %s", roles)
+
+        cmds = self._executor.get_log_levels(*roles, packages=packages)
+        return cmds
+
     def compress_and_download_app_logs(self, selector: str, app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
         roles = self.select_roles(selector)
         if not roles:

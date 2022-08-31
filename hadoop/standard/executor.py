@@ -98,6 +98,24 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         return cmds
 
+    def get_log_levels(self, *args: 'HadoopRoleInstance', packages: List[str]) -> Dict[str, List[RunnableCommand]]:
+        cmds = {}
+        for role in args:
+            if role.role_type == HadoopRoleType.RM:
+                port = int(DEFAULT_RM_PORT)
+            elif role.role_type == HadoopRoleType.NM:
+                port = int(DEFAULT_NM_PORT)
+            else:
+                raise HadesException("Unexpected role type: {}".format(role.role_type))
+
+            for package in packages:
+                cmd = f"yarn daemonlog -getlevel `hostname`:{port} {package}"
+                if package not in cmds:
+                    cmds[package] = []
+                cmds[package].append(role.host.create_cmd(cmd))
+
+        return cmds
+
     def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
         if app_id.startswith("application_"):
             app_id_no = app_id.split("application_")[1]
