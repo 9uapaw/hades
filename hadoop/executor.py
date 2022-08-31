@@ -53,7 +53,7 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def update_config(self, *args: 'HadoopRoleInstance', config: HadoopConfig, no_backup: bool, workdir: str = "."):
+    def update_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigBase, no_backup: bool, workdir: str = ".", allow_empty: bool = False):
         raise NotImplementedError()
 
     @abstractmethod

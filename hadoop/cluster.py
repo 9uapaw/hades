@@ -130,9 +130,9 @@ class HadoopCluster:
         selector_expr = hadoop.selector.HadoopRoleSelector(self.get_services())
         return selector_expr.select(selector)
 
-    def update_config(self, selector: str, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
+    def update_config(self, selector: str, config: HadoopConfigBase, no_backup: bool = False, workdir: str = ".", allow_empty: bool = False):
         selected = self.select_roles(selector)
-        self._executor.update_config(*selected, config=config, no_backup=no_backup, workdir=workdir)
+        self._executor.update_config(*selected, config=config, no_backup=no_backup, workdir=workdir, allow_empty=allow_empty)
 
     def restart_roles(self, selector: str) -> List[RunnableCommand]:
         selected = self.select_roles(selector)

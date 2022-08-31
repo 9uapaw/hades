@@ -109,7 +109,7 @@ class HadockExecutor(HadoopOperationExecutor):
             config_file_path = f"/etc/hadoop/{config.file}"
             role.host.download(config_file_path, local_file_path).run()
 
-            config.xml = local_file_path
+            config.set_base_config(local_file)
             config.merge()
             config.commit()
 
@@ -142,7 +142,7 @@ class HadockExecutor(HadoopOperationExecutor):
             config_file_path = f"/etc/hadoop/{config.value}"
             role.host.download(config_file_path, local_file).run()
 
-            config_data.xml = local_file
+            config_data.set_base_config(local_file)
             config_data.merge()
             config_data.commit()
 

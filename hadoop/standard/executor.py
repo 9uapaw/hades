@@ -204,7 +204,12 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         return cmd
 
-    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
+    def update_config(self,
+                      *args: HadoopRoleInstance,
+                      config: HadoopConfigBase,
+                      no_backup: bool = False,
+                      workdir: str = ".",
+                      allow_empty: bool = False):
         config_name, config_ext = config.file.split(".")
 
         for role in args:
@@ -215,7 +220,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             config_file_path = self.CONFIG_FILE_PATH.format(config.file)
             role.host.download(config_file_path, local_file_path).run()
 
-            config.xml = local_file_path
+            config.set_base_config(local_file_path)
             config.merge()
             config.commit()
 
@@ -263,7 +268,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             config_file_path = self.CONFIG_FILE_PATH.format(config.value)
             role.host.download(config_file_path, local_file).run()
 
-            config_data.xml = local_file
+            config_data.set_base_config(local_file)
             config_data.merge()
             config_data.commit()
 
