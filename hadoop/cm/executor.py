@@ -1,10 +1,9 @@
 import logging
-from pathlib import PurePath
 from typing import List, Type, Dict
 
 from cm_client.rest import ApiException
 
-from core.cmd import RunnableCommand, RemoteRunnableCommand
+from core.cmd import RunnableCommand
 from core.config import ClusterConfig, ClusterContextConfig, ClusterRoleConfig
 from core.context import HadesContext
 from core.error import HadesException, CommandExecutionException
@@ -12,14 +11,13 @@ from hadoop.app.example import ApplicationCommand
 from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
 from hadoop.cm.cm_api import CmApi
-from hadoop.config import HadoopConfig
-from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
+from hadoop.config import HadoopConfigBase
+from hadoop.data.status import HadoopClusterStatusEntry
 from hadoop.executor import HadoopOperationExecutor
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.host import HadoopHostInstance, RemoteHostInstance
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
-from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopModule, HadoopDir
-
+from hadoop_dir.module import HadoopDir
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +110,7 @@ class CmExecutor(HadoopOperationExecutor):
 
         return cmd
 
-    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool, workdir: str = "."):
+    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfigBase, no_backup: bool, workdir: str = "."):
         for role in args:
             existing_conf = self._cm_api.get_config(role.service.cluster.name, role.name, role.service.name)
             safety_valve = ""
@@ -127,8 +125,8 @@ class CmExecutor(HadoopOperationExecutor):
 
             self._cm_api.update_config(role.service.cluster.name, role.name, role.service.name, c)
 
-    def get_config(self, *args: HadoopRoleInstance, config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
-        find_config = f"find {self.PROCESS_DIR} -name \"*{config.value}*\" -print"
+    def get_config(self, *args: HadoopRoleInstance, config: HadoopConfigFile) -> Dict[str, HadoopConfigBase]:
+        find_config = f"find {self.PROCESS_DIR} -name \"*{config.val}*\" -print"
         configs = {}
         for role in args:
             try:
@@ -144,7 +142,7 @@ class CmExecutor(HadoopOperationExecutor):
             else:
                 continue
             xml = role.host.create_cmd(f"cat {recent_process}").run()
-            config = HadoopConfig(config)
+            config = HadoopConfigBase.create(config)
             config.set_xml_str("\n".join(xml[0]))
             configs[role.name] = config
 

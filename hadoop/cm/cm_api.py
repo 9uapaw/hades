@@ -1,9 +1,7 @@
-from typing import List, Iterable, Dict
+from typing import List, Dict
 
 import cm_client
 from cm_client import ApiRoleNameList, ApiConfigList, ApiCluster, ApiService, ApiRole, ApiConfig
-
-from hadoop.config import HadoopConfig
 
 
 class CmApi:

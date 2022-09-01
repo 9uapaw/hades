@@ -1,7 +1,9 @@
 import logging
-import time
 import os
+import time
 from typing import List, Type, Dict, Tuple
+
+from pythoncommons.file_utils import FileUtils as CommonFileUtils
 
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
@@ -9,15 +11,15 @@ from core.error import CommandExecutionException, MultiCommandExecutionException
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
 from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
-from hadoop.config import HadoopConfig
+from hadoop.config import HadoopConfigBase
 from hadoop.data.status import HadoopClusterStatusEntry
 from hadoop.executor import HadoopOperationExecutor
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.host import HadoopHostInstance, RemoteHostInstance
 from hadoop.role import HadoopRoleType, HadoopRoleInstance
-from hadoop.xml_config import HadoopConfigFile
-from hadoop.yarn.rm_api import RmApi
+from hadoop.yarn.nm_api import DEFAULT_NM_PORT
+from hadoop.yarn.rm_api import RmApi, DEFAULT_RM_PORT
 from hadoop_dir.module import HadoopDir
-
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,7 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return RemoteHostInstance
 
     def discover(self) -> ClusterConfig:
+        # TODO Discover HDFS daemons
         cluster = ClusterConfig(ClusterType.STANDARD.value)
         yarn_roles = {}
         hdfs_roles = {}
@@ -85,8 +88,32 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
     def set_log_level(self, *args: 'HadoopRoleInstance', package: str, level: HadoopLogLevel) -> List[RunnableCommand]:
         cmds = []
         for role in args:
-            cmd = f"yarn daemonlog -setlevel `hostname`:8088 {package} {level.value}"
+            if role.role_type == HadoopRoleType.RM:
+                port = int(DEFAULT_RM_PORT)
+            elif role.role_type == HadoopRoleType.NM:
+                port = int(DEFAULT_NM_PORT)
+            else:
+                raise HadesException("Unexpected role type: {}".format(role.role_type))
+            cmd = f"yarn daemonlog -setlevel `hostname`:{port} {package} {level.value}"
             cmds.append(role.host.create_cmd(cmd))
+
+        return cmds
+
+    def get_log_levels(self, *args: 'HadoopRoleInstance', packages: List[str]) -> Dict[str, List[RunnableCommand]]:
+        cmds = {}
+        for role in args:
+            if role.role_type == HadoopRoleType.RM:
+                port = int(DEFAULT_RM_PORT)
+            elif role.role_type == HadoopRoleType.NM:
+                port = int(DEFAULT_NM_PORT)
+            else:
+                raise HadesException("Unexpected role type: {}".format(role.role_type))
+
+            for package in packages:
+                cmd = f"yarn daemonlog -getlevel `hostname`:{port} {package}"
+                if package not in cmds:
+                    cmds[package] = []
+                cmds[package].append(role.host.create_cmd(cmd))
 
         return cmds
 
@@ -142,6 +169,24 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             raise MultiCommandExecutionException(excs)
         return cmds
 
+    def compress_daemon_logs(self, *args: 'HadoopRoleInstance', workdir: str = '.') -> List[DownloadCommand]:
+        tar_files_created: Dict[HadoopRoleInstance, str] = {}
+
+        cmds = []
+        for role in args:
+            targz_file_path, targz_file_name = self._create_tar_gz_of_dir_on_host(self.LOG_DIR, role)
+            tar_files_created[role] = targz_file_path
+            parent_dir = os.getcwd() if workdir == '.' else workdir
+            local_file_path = os.path.join(parent_dir, targz_file_name)
+            download_command = role.host.download(source=targz_file_path, dest=local_file_path)
+            cmds.append(download_command)
+
+        if len(tar_files_created) == 0:
+            hosts = [role.host for role in args]
+            raise HadesException(f"Failed to compress daemon logs, no tar file created on any of the hosts: {hosts}")
+
+        return cmds
+
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
         raise NotImplementedError()
 
@@ -158,7 +203,12 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
         return cmd
 
-    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
+    def update_config(self,
+                      *args: HadoopRoleInstance,
+                      config: HadoopConfigBase,
+                      no_backup: bool = False,
+                      workdir: str = ".",
+                      allow_empty: bool = False):
         config_name, config_ext = config.file.split(".")
 
         for role in args:
@@ -167,9 +217,21 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             parent_dir = os.getcwd() if workdir == "." else workdir
             local_file_path = os.path.join(parent_dir, local_file)
             config_file_path = self.CONFIG_FILE_PATH.format(config.file)
-            role.host.download(config_file_path, local_file_path).run()
+            try:
+                cmd = role.host.download(config_file_path, local_file_path)
+                cmd.run()
+            except CommandExecutionException as e:
+                # TODO Decide if config is XML based
+                exc_stderr = "\n".join(e.stderr)
+                no_such_file_marker = "No such file or directory"
+                if (no_such_file_marker in cmd.stderr or no_such_file_marker in exc_stderr) and allow_empty:
+                    logger.warning("Config file '%s' not found on host '%s'", config_file_path, role.host.address)
+                    CommonFileUtils.create_new_empty_file(local_file_path)
+                    CommonFileUtils.write_to_file(local_file_path, "<configuration>\n</configuration>")
+                else:
+                    raise e
 
-            config.xml = local_file_path
+            config.set_base_config(local_file_path)
             config.merge()
             config.commit()
 
@@ -183,20 +245,44 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return [role.host.create_cmd("yarn --daemon stop {role} && yarn --daemon start {role}".format(
             role=role.role_type.value)) for role in args]
 
+    def force_restart_roles(self, *args: HadoopRoleInstance) -> None:
+        for role in args:
+            pid = self._get_pid_by_role(role)
+            role.host.create_cmd(f"kill {pid} && sleep 15 && yarn --daemon start {role.role_type.value}").run()
+
+    def get_role_pids(self, *args: 'HadoopRoleInstance'):
+        result = {}
+        for role in args:
+            pid = self._get_pid_by_role(role)
+            result[role.host.address] = pid
+        return result
+
+    @staticmethod
+    def _get_pid_by_role(role):
+        try:
+            out = role.host.create_cmd(f"jps | grep -i {role.role_type.value}").run()
+        except CommandExecutionException as e:
+            logger.exception("No '%s' process is running!")
+        first_line = out[0]
+        if len(first_line) > 1:
+            raise HadesException("Unexpected output from jps: '{}'. Full output: {}".format(first_line, out))
+        pid = first_line[0].split(" ")[0]
+        return pid
+
     def restart_cluster(self, cluster: str):
         pass
 
-    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfigBase]:
         configs = {}
-        config_name, config_ext = config.value.split(".")
+        config_name, config_ext = config.val.split(".")
 
         for role in args:
-            config_data = HadoopConfig(config)
+            config_data = HadoopConfigBase.create(config)
             local_file = f"{config_name}-{role.host}-{int(time.time())}.{config_ext}"
-            config_file_path = self.CONFIG_FILE_PATH.format(config.value)
+            config_file_path = self.CONFIG_FILE_PATH.format(config.val)
             role.host.download(config_file_path, local_file).run()
 
-            config_data.xml = local_file
+            config_data.set_base_config(local_file)
             config_data.merge()
             config_data.commit()
 
@@ -245,6 +331,30 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         cmd = random_selected.host.create_cmd("yarn application -list -appStates FINISHED 2>/dev/null | grep -oe application_[0-9]*_[0-9]* | sort -r || true")
         return cmd
 
+    def upload_file(self, *args: 'HadoopRoleInstance', local_file, target_path) -> None:
+        for role in args:
+            logger.info("Uploading local file '%s' on host '%s' to path '%s'", local_file, role.host, target_path)
+            role.host.upload(local_file, target_path).run()
+
+    def compile_java(self, *args: 'HadoopRoleInstance', file_path, target_dir):
+        for role in args:
+            logger.info("Compiling Java file '%s' on host '%s' to target dir '%s'", file_path, role.host, target_dir)
+            copy_to_target_dir = f"mkdir -p {target_dir} && cp {file_path} {target_dir}"
+            compile = f"cd {target_dir} && javac -d . *.java"
+            role.host.create_cmd(f"{copy_to_target_dir} && {compile}").run()
+
+    def execute_java(self, *args: 'HadoopRoleInstance', classpath: str, working_dir: str, main_class: str):
+        outputs = {}
+        for role in args:
+            logger.info("Executing Java main class '%s' (classpath: %s, working dir: %s) on host '%s'", main_class, classpath, working_dir, role.host)
+            cmd = f"cd {working_dir} && java -classpath {classpath} {main_class}"
+            cmd_obj = role.host.create_cmd(cmd)
+            cmd_obj.run()
+            if len(cmd_obj.stdout) > 1:
+                raise HadesException("Expected a one-line stdout from command '{}'. Output was: {}".format(cmd, cmd_obj.stdout))
+            outputs[role.host] = cmd_obj.stdout[0]
+        return outputs
+
     @staticmethod
     def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files,
                                compress_dir: bool = False) -> Tuple[str, str]:
@@ -268,6 +378,29 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         else:
             tar_cmd = role.host.create_cmd(
                 "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(files)))
+        try:
+            stdout, stderr = tar_cmd.run()
+            logger.debug("stdout: %s", stdout)
+            logger.debug("stderr: %s", stderr)
+        except CommandExecutionException as e:
+            # If any of the tar commands fail, raise the Exception
+            raise e
+
+        return targz_file_path, targz_file_name
+
+    @staticmethod
+    def _create_tar_gz_of_dir_on_host(dir: str, role: HadoopRoleInstance) -> Tuple[str, str]:
+        logger.info("Creating targz of daemon logs in directory %s on host %s", dir, role.host.address)
+        targz_file_name = f"{role.role_type.name}_daemonlogs_{role.host}.tar.gz"
+        targz_file_path = f"/tmp/{targz_file_name}"
+
+        logs_dir = f"{role.role_type.name}_daemonlogs_{role.host.address}"
+        parent_dir = "/tmp"
+        target_dir = f"{parent_dir}/{logs_dir}"
+        role.host.create_cmd(f"rm -rf {target_dir}; mkdir {target_dir} && cp -R {dir}/* {target_dir}").run()
+        tar_cmd = role.host.create_cmd(
+            "tar -cvf {fname} -C {parent_dir} {dir}".format(fname=targz_file_path, parent_dir=parent_dir, dir=f"./{logs_dir}"))
+
         try:
             stdout, stderr = tar_cmd.run()
             logger.debug("stdout: %s", stdout)

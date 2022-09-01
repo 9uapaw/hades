@@ -1,6 +1,6 @@
 import logging
-import time
 import os
+import time
 from typing import List, Type, Dict
 
 import yaml
@@ -10,13 +10,13 @@ from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
 from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
-from hadoop.config import HadoopConfig
+from hadoop.config import HadoopConfigBase
 from hadoop.data.status import HadoopClusterStatusEntry
 from hadoop.executor import HadoopOperationExecutor
-from hadoop.host import HadoopHostInstance
 from hadoop.hadock.docker_host import DockerContainerInstance
+from hadoop.hadoop_config import HadoopConfigFile
+from hadoop.host import HadoopHostInstance
 from hadoop.role import HadoopRoleType, HadoopRoleInstance
-from hadoop.xml_config import HadoopConfigFile
 from hadoop_dir.module import HadoopDir
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ class HadockExecutor(HadoopOperationExecutor):
 
         return cmd
 
-    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfig, no_backup: bool = False, workdir: str = "."):
+    def update_config(self, *args: HadoopRoleInstance, config: HadoopConfigBase, no_backup: bool = False, workdir: str = "."):
         config_name, config_ext = config.file.split(".")
 
         for role in args:
@@ -109,7 +109,7 @@ class HadockExecutor(HadoopOperationExecutor):
             config_file_path = f"/etc/hadoop/{config.file}"
             role.host.download(config_file_path, local_file_path).run()
 
-            config.xml = local_file_path
+            config.set_base_config(local_file)
             config.merge()
             config.commit()
 
@@ -132,17 +132,17 @@ class HadockExecutor(HadoopOperationExecutor):
     def restart_cluster(self, cluster: str):
         pass
 
-    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfigBase]:
         configs = {}
-        config_name, config_ext = config.value.split(".")
+        config_name, config_ext = config.val.split(".")
 
         for role in args:
-            config_data = HadoopConfig(config)
+            config_data = HadoopConfigBase.create(config)
             local_file = f"{config_name}-{role.host}-{int(time.time())}.{config_ext}"
-            config_file_path = f"/etc/hadoop/{config.value}"
+            config_file_path = f"/etc/hadoop/{config.val}"
             role.host.download(config_file_path, local_file).run()
 
-            config_data.xml = local_file
+            config_data.set_base_config(local_file)
             config_data.merge()
             config_data.commit()
 

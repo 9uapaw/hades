@@ -42,13 +42,13 @@ class HadoopDir:
         self._changed: Dict[str, str] = {}
         self._hadoop_dir = hadoop_dir
 
-    def extract_changed_modules(self):
+    def extract_changed_modules(self, allow_empty: bool = False):
         logger.info("Searching modules in hadoop dir %s", self._hadoop_dir)
         module_cmd = RunnableCommand(self.CHANGED_MODULES_CMD, work_dir=self._hadoop_dir)
 
         module_cmd.run()
         stdout = module_cmd.stdout
-        if not stdout:
+        if not allow_empty and not stdout:
             raise CommandExecutionException("\n".join(stdout), self.CHANGED_MODULES_CMD)
 
         modules = set(stdout)
@@ -136,9 +136,16 @@ class HadoopDir:
         cmd = self.SWITCH_BRANCH_CMD_TEMPLATE.format(branch)
         br_cmd = RunnableCommand(cmd, work_dir=self._hadoop_dir)
 
-        br_cmd.run()
-        if not br_cmd.stdout:
-            raise CommandExecutionException("\n".join(br_cmd.stdout), cmd)
+        try:
+            br_cmd.run()
+        except CommandExecutionException as e:
+            logger.exception("Failed to run switch branch command! Current working directory: %s", self._hadoop_dir)
+            raise e
+        if not br_cmd.stdout and not br_cmd.stderr:
+            out = "\n".join(br_cmd.stdout)
+            err = "\n".join(br_cmd.stderr)
+            msg = f"stdout: {out}\nstderr: {err}\ncurrent working directory: {self._hadoop_dir}"
+            raise CommandExecutionException(msg, cmd)
 
     def get_current_branch(self, fallback=None):
         br_cmd = RunnableCommand(self.GET_BRANCH_CMD, work_dir=self._hadoop_dir)

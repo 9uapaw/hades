@@ -4,11 +4,11 @@ from typing import List, Type, Dict
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from hadoop.app.example import ApplicationCommand
-from hadoop.config import HadoopConfig
-from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
+from hadoop.config import HadoopConfigBase
+from hadoop.data.status import HadoopClusterStatusEntry
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.host import HadoopHostInstance
-from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopModule, HadoopDir
+from hadoop_dir.module import HadoopDir
 
 
 class HadoopOperationExecutor(ABC):
@@ -32,11 +32,20 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def get_log_levels(self, *args: 'HadoopRoleInstance', packages: List[str]) -> Dict[str, List[RunnableCommand]]:
+        raise NotImplementedError()
+
+    @abstractmethod
     def compress_app_logs(self, *args: 'HadoopRoleInstance', app_id: str, workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
         raise NotImplementedError()
 
     @abstractmethod
+    def compress_daemon_logs(self, *args: 'HadoopRoleInstance', workdir: str = '.', compress_dir: bool = False) -> List[DownloadCommand]:
+        raise NotImplementedError()
+
+    @abstractmethod
     def get_cluster_status(self, cluster_name: str = None) -> List[HadoopClusterStatusEntry]:
+        # TODO Implement + Check if RM, NMs, JHS and all HDFS daemons are running!
         raise NotImplementedError()
 
     @abstractmethod
@@ -44,18 +53,25 @@ class HadoopOperationExecutor(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def update_config(self, *args: 'HadoopRoleInstance', config: HadoopConfig, no_backup: bool, workdir: str = "."):
+    def update_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigBase, no_backup: bool, workdir: str = ".", allow_empty: bool = False):
         raise NotImplementedError()
 
     @abstractmethod
     def restart_roles(self, *args: 'HadoopRoleInstance'):
         raise NotImplementedError()
 
+    def force_restart_roles(self, *args: 'HadoopRoleInstance') -> None:
+        pass
+
+    @abstractmethod
+    def get_role_pids(self, *args: 'HadoopRoleInstance'):
+        raise NotImplementedError()
+
     @abstractmethod
     def restart_cluster(self, cluster: str):
         raise NotImplementedError()
 
-    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfigBase]:
         raise NotImplementedError()
 
     def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):
@@ -66,3 +82,12 @@ class HadoopOperationExecutor(ABC):
 
     def get_finished_apps(self, random_selected: 'HadoopRoleInstance'):
         raise NotImplementedError()
+
+    def upload_file(self, *args: 'HadoopRoleInstance', local_file, target_path):
+        pass
+
+    def compile_java(self, *args: 'HadoopRoleInstance', file_path, target_dir):
+        pass
+
+    def execute_java(self, *args: 'HadoopRoleInstance', selector: str, classpath: str, working_dir: str, main_class: str):
+        pass

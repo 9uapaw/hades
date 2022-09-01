@@ -1,22 +1,13 @@
-import enum
 from typing import Dict, List
 
-import pptree as pptree
-
-from core.error import HadesException
-from hadoop.hadock.docker_host import DockerContainerInstance
-from hadoop.host import RemoteHostInstance
-from hadoop.role import HadoopRoleInstance, HadoopRoleType
 import requests
 
-from hadoop.yarn.cs_queue import CapacitySchedulerQueue
+from core.error import HadesException
+from hadoop.host import RemoteHostInstance
+from hadoop.role import HadoopRoleInstance
+from hadoop.yarn.api_common import HadoopAuthentication
 
 DEFAULT_RM_PORT = "8088"
-
-
-class HadoopAuthentication(enum.Enum):
-    SIMPLE = "SIMPLE"
-    SECURE = "KERBEROS"
 
 
 class RmApi:
