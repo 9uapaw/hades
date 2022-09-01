@@ -2,11 +2,11 @@ import itertools
 import logging
 import os.path
 import pickle
+import re
 import shutil
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, List, Dict, Tuple
-import re
 
 from tabulate import tabulate
 
@@ -19,7 +19,6 @@ from hadoop.cluster import HadoopCluster, HadoopLogLevel
 from hadoop.config import HadoopPropertiesConfig, HadoopConfigBase
 from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.role import HadoopRoleType
-from hadoop.xml_config import HadoopConfigFile
 from hadoop_dir.module import HadoopDir
 from script.base import HadesScriptBase
 
@@ -1018,13 +1017,11 @@ class Netty4RegressionTestSteps:
                        f"log4j.logger.{PACKAGE_SECURITY_SSL}": HadoopLogLevel.DEBUG.value}
             self.cluster_config_updater.load_properties_configs(HadoopConfigFile.LOG4J_PROPERTIES,
                                                                 configs,
-                                                                NODEMANAGER_SELECTOR,
+                                                                YARN_SELECTOR,
                                                                 allow_empty=False)
         else:
             self._set_log_levels_via_daemonlog()
 
-        self.verify_log_levels([(PACKAGE_SHUFFLEHANDLER, self.config.shufflehandler_log_level),
-                                (PACKAGE_SECURITY_SSL, HadoopLogLevel.DEBUG)])
 
     def _set_log_levels_via_daemonlog(self):
         cmds1: List[RunnableCommand] = self.cluster.set_log_level(
@@ -1078,11 +1075,13 @@ class Netty4RegressionTestSteps:
         if bad_log_levels:
             raise HadesException("Unexpected log levels: {}".format(bad_log_levels))
 
-    def restart_nms_and_save_logs(self):
+    def restart_services_and_save_logs(self):
         LOG.info("Restarting NodeManagers with new configs...")
         self.nm_restart_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=NODEMANAGER_SELECTOR)
         self.cluster_handler.restart_nms(logs_by_roles=self.nm_restart_logs)
         self.output_file_writer.write_nm_restart_logs(self.nm_restart_logs)
+        LOG.info("Restarting ResourceManager...")
+        self.cluster_handler.restart_rm()
 
     def run_app_and_collect_logs_to_file(self, app: MapReduceApp):
         app_log_lines = []
@@ -1248,7 +1247,10 @@ class ClusterConfigUpdater:
 class ClusterHandler:
     def __init__(self, cluster):
         self.cluster = cluster
-    
+
+    def restart_rm(self):
+        self.cluster.force_restart_roles(RESOURCEMANAGER_SELECTOR)
+
     def restart_nms(self, logs_by_roles: LogsByRoles):
         logs_by_roles.read_logs_into_dict()
         handlers = []
@@ -1376,7 +1378,9 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                 self.steps.load_default_configs()  # 2. Load default configs / Write initial config files
                 self.steps.apply_testcase_configs()  # 3. Apply testcase configs
                 self.steps.set_log_levels(permanent=True)  # 5. Set log level of ShuffleHandler to DEBUG
-                self.steps.restart_nms_and_save_logs()  # 4. Restart NMs, Save logs
+                self.steps.restart_services_and_save_logs()  # 4. Restart NMs, Save logs
+                self.steps.verify_log_levels([(PACKAGE_SHUFFLEHANDLER, self.config.shufflehandler_log_level),
+                                        (PACKAGE_SECURITY_SSL, HadoopLogLevel.DEBUG)])
                 self.steps.verify_nm_configs({
                     HadoopConfigFile.YARN_SITE: [(CONF_DISK_MAX_UTILIZATION, CONF_DISK_MAX_UTILIZATION_VAL)],
                 })
