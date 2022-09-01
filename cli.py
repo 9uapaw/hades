@@ -19,7 +19,7 @@ from core.util import FileUtils, LoggingUtils, DateUtils
 from hadoop.action import RoleAction
 from hadoop.app.example import Application
 from hadoop.cluster_type import ClusterType
-from hadoop.xml_config import HadoopConfigFile
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.yarn.yarn_mutation import MutationRequest
 from hadoop_dir.module import HadoopModule
 

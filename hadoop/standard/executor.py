@@ -1,26 +1,25 @@
 import logging
-import time
 import os
+import time
 from typing import List, Type, Dict, Tuple
+
+from pythoncommons.file_utils import FileUtils as CommonFileUtils
 
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig, ClusterRoleConfig, ClusterContextConfig
 from core.error import CommandExecutionException, MultiCommandExecutionException, HadesException
-from pythoncommons.file_utils import FileUtils as CommonFileUtils
-from core.util import FileUtils
 from hadoop.app.example import ApplicationCommand, MapReduceApp, DistributedShellApp
 from hadoop.cluster import HadoopLogLevel
 from hadoop.cluster_type import ClusterType
-from hadoop.config import HadoopConfig, HadoopConfigBase
+from hadoop.config import HadoopConfigBase
 from hadoop.data.status import HadoopClusterStatusEntry
 from hadoop.executor import HadoopOperationExecutor
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.host import HadoopHostInstance, RemoteHostInstance
 from hadoop.role import HadoopRoleType, HadoopRoleInstance
-from hadoop.xml_config import HadoopConfigFile
 from hadoop.yarn.nm_api import DEFAULT_NM_PORT
 from hadoop.yarn.rm_api import RmApi, DEFAULT_RM_PORT
 from hadoop_dir.module import HadoopDir
-
 
 logger = logging.getLogger(__name__)
 
@@ -273,14 +272,14 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
     def restart_cluster(self, cluster: str):
         pass
 
-    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfigBase]:
         configs = {}
-        config_name, config_ext = config.value.split(".")
+        config_name, config_ext = config.val.split(".")
 
         for role in args:
-            config_data = HadoopConfig(config)
+            config_data = HadoopConfigBase.create(config)
             local_file = f"{config_name}-{role.host}-{int(time.time())}.{config_ext}"
-            config_file_path = self.CONFIG_FILE_PATH.format(config.value)
+            config_file_path = self.CONFIG_FILE_PATH.format(config.val)
             role.host.download(config_file_path, local_file).run()
 
             config_data.set_base_config(local_file)

@@ -1,18 +1,13 @@
-import enum
-from typing import Dict, List
+from typing import Dict
 
-import pptree as pptree
-
-from core.error import HadesException
-from hadoop.config import HadoopConfig
-from hadoop.hadock.docker_host import DockerContainerInstance
-from hadoop.host import RemoteHostInstance
-from hadoop.role import HadoopRoleInstance, HadoopRoleType
 import requests
 
-from hadoop.xml_config import HadoopConfigFile
+from core.error import HadesException
+from hadoop.config import HadoopConfigBase
+from hadoop.hadoop_config import HadoopConfigFile
+from hadoop.host import RemoteHostInstance
+from hadoop.role import HadoopRoleInstance
 from hadoop.yarn.api_common import HadoopAuthentication, HadoopResponseFormat
-from hadoop.yarn.cs_queue import CapacitySchedulerQueue
 
 DEFAULT_NM_PORT = "8042"
 
@@ -40,7 +35,7 @@ class NmApi:
         elif resp_format == HadoopResponseFormat.TEXT:
             return resp.text
         elif resp_format == HadoopResponseFormat.XML:
-            hadoop_conf = HadoopConfig(HadoopConfigFile.YARN_SITE, None)
+            hadoop_conf = HadoopConfigBase.create(HadoopConfigFile.YARN_SITE, None)
             hadoop_conf.set_xml_str(resp.text)
             return hadoop_conf.to_dict()
 

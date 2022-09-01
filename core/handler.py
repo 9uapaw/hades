@@ -1,7 +1,7 @@
 import inspect
 import logging
 from os import path
-from typing import Dict, List, Tuple, Type, Callable
+from typing import Dict, List, Type
 
 from tabulate import tabulate
 
@@ -17,11 +17,11 @@ from hadoop.cluster import HadoopCluster
 from hadoop.cluster_type import ClusterType
 from hadoop.cm.cm_api import CmApi
 from hadoop.cm.executor import CmExecutor
-from hadoop.config import HadoopConfig
+from hadoop.config import HadoopConfigBase
 from hadoop.hadock.executor import HadockExecutor
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.standard.executor import StandardUpstreamExecutor
-from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopDir, HadoopModule
+from hadoop_dir.module import HadoopDir
 from hadoop_dir.mvn import MavenCompiler
 from script.base import HadesScriptBase
 
@@ -180,7 +180,7 @@ class MainCommandHandler:
     def update_config(self, selector: str, file: HadoopConfigFile, properties: List[str], values: List[str],
                       no_backup: bool = False, source: str = None):
         cluster = self._create_cluster()
-        config = HadoopConfig(file)
+        config = HadoopConfigBase.create(file)
         config.extend_with_args({k: v for k, v in zip(properties, values)})
         if source:
             config.extend_with_xml(source)

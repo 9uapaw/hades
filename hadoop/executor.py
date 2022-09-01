@@ -4,11 +4,11 @@ from typing import List, Type, Dict
 from core.cmd import RunnableCommand, DownloadCommand
 from core.config import ClusterConfig
 from hadoop.app.example import ApplicationCommand
-from hadoop.config import HadoopConfig, HadoopConfigBase
-from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
+from hadoop.config import HadoopConfigBase
+from hadoop.data.status import HadoopClusterStatusEntry
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.host import HadoopHostInstance
-from hadoop.xml_config import HadoopConfigFile
-from hadoop_dir.module import HadoopModule, HadoopDir
+from hadoop_dir.module import HadoopDir
 
 
 class HadoopOperationExecutor(ABC):
@@ -71,7 +71,7 @@ class HadoopOperationExecutor(ABC):
     def restart_cluster(self, cluster: str):
         raise NotImplementedError()
 
-    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+    def get_config(self, *args: 'HadoopRoleInstance', config: HadoopConfigFile) -> Dict[str, HadoopConfigBase]:
         raise NotImplementedError()
 
     def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):

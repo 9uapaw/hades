@@ -1,7 +1,7 @@
 import logging
 import random
 from enum import Enum
-from typing import List, Callable, Dict
+from typing import List, Dict
 
 import hadoop.selector
 from core.cmd import RunnableCommand, DownloadCommand
@@ -10,16 +10,16 @@ from core.context import HadesContext
 from core.error import HadesException
 from hadoop.app.example import ApplicationCommand
 from hadoop.cluster_type import ClusterType
-from hadoop.config import HadoopConfig, HadoopConfigBase
-from hadoop.data.status import HadoopClusterStatusEntry, HadoopConfigEntry
+from hadoop.config import HadoopConfigBase
+from hadoop.data.status import HadoopClusterStatusEntry
 from hadoop.executor import HadoopOperationExecutor
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.role import HadoopRoleInstance, HadoopRoleType
 from hadoop.service import HadoopService, YarnService, HdfsService
-from hadoop.xml_config import HadoopConfigFile
 from hadoop.yarn.cs_queue import CapacitySchedulerQueue
 from hadoop.yarn.nm_api import NmApi
 from hadoop.yarn.rm_api import RmApi
-from hadoop_dir.module import HadoopModule, HadoopDir
+from hadoop_dir.module import HadoopDir
 from local_dir.local_files import LocalFiles
 
 logger = logging.getLogger(__name__)
@@ -186,7 +186,7 @@ class HadoopCluster:
             role.host.make_backup(dest).run()
             role.host.upload(source, dest).run()
 
-    def get_config(self, selector: str, config: HadoopConfigFile) -> Dict[str, HadoopConfig]:
+    def get_config(self, selector: str, config: HadoopConfigFile) -> Dict[str, HadoopConfigBase]:
         return self._executor.get_config(*self.select_roles(selector), config=config)
 
     def get_config_from_api(self, selector: str) -> Dict[str, Dict[str, str]]:

@@ -6,7 +6,7 @@ from collections import Iterable
 from typing import Dict, Iterator, Tuple, List
 
 from core.error import HadesException
-from hadoop.xml_config import HadoopConfigFile
+from hadoop.hadoop_config import HadoopConfigFile, HadoopConfigFileType
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ElementTree, Element
 
@@ -45,8 +45,15 @@ class HadoopConfigBase(ABC, Iterable):
     def file(self):
         pass
 
+    @classmethod
+    def create(cls, config: HadoopConfigFile, base_path: str = None):
+        if config.config_type == HadoopConfigFileType.XML:
+            return HadoopXMLConfig(config, base_path)
+        elif config.config_type == HadoopConfigFileType.PROPERTIES:
+            return HadoopPropertiesConfig(config, base_path)
 
-class HadoopConfig(HadoopConfigBase):
+
+class HadoopXMLConfig(HadoopConfigBase):
     def __init__(self, file: HadoopConfigFile, base_path: str = None):
         self._file = file
         self._extension: Dict[str, str] = {}
@@ -63,7 +70,7 @@ class HadoopConfig(HadoopConfigBase):
 
     @property
     def file(self) -> str:
-        return str(self._file.value)
+        return str(self._file.val)
 
     @property
     def xml(self) -> ElementTree:
@@ -120,7 +127,7 @@ class HadoopConfig(HadoopConfigBase):
             root.append(new_config_prop)
 
     def commit(self):
-        self._base_xml.write(self._file.value)
+        self._base_xml.write(self._file.val)
 
     def to_str(self) -> str:
         root = self._get_root()
@@ -163,7 +170,7 @@ class HadoopPropertiesConfig(HadoopConfigBase):
 
     @property
     def file(self) -> str:
-        return str(self._file.value)
+        return str(self._file.val)
 
     @property
     def properties(self) -> ElementTree:
@@ -197,7 +204,7 @@ class HadoopPropertiesConfig(HadoopConfigBase):
                 ext_section[prop_name] = prop_value
 
     def commit(self):
-        with open(self._file.value, 'w') as configfile:
+        with open(self._file.val, 'w') as configfile:
             self._base_conf.write(configfile)
 
     def to_str(self) -> str:

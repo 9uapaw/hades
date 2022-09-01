@@ -16,7 +16,8 @@ from core.handler import MainCommandHandler
 from core.util import FileUtils, CompressedFileUtils, PrintUtils, StringUtils
 from hadoop.app.example import MapReduceApp, MapReduceAppType
 from hadoop.cluster import HadoopCluster, HadoopLogLevel
-from hadoop.config import HadoopConfig, HadoopPropertiesConfig
+from hadoop.config import HadoopPropertiesConfig, HadoopConfigBase
+from hadoop.hadoop_config import HadoopConfigFile
 from hadoop.role import HadoopRoleType
 from hadoop.xml_config import HadoopConfigFile
 from hadoop_dir.module import HadoopDir
@@ -999,7 +1000,7 @@ class Netty4RegressionTestSteps:
         self.load_default_mapred_configs()
         self.load_default_core_site_configs()
         self.load_default_ssl_server_configs()
-        self.hadoop_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
+        self.hadoop_config = HadoopConfigBase.create(HadoopConfigFile.MAPRED_SITE)
         self.output_file_writer.write_initial_config_files()
 
     def apply_testcase_configs(self):
@@ -1223,7 +1224,7 @@ class ClusterConfigUpdater:
         self.workdir = workdir
     
     def load_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False):
-        default_config = HadoopConfig(conf_file_type)
+        default_config = HadoopConfigBase.create(conf_file_type)
         for k, v in conf_dict.items():
             if isinstance(v, int):
                 v = str(v)
