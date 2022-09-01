@@ -584,6 +584,9 @@ class Netty4TestConfig:
     loadgen_no_mappers = 4
     loadgen_no_reducers = 3
     loadgen_timeout = 1000
+    run_without_patch = True
+    run_with_patch = True
+
     # TODO add switch that simulates an intentional job failure?
 
     force_compile = False
@@ -616,18 +619,22 @@ class Netty4TestConfig:
 
         patch = "~/googledrive/development_drive/_upstream/HADOOP-15327/patches/backup-patch-test-changes-20220815.patch"
         netty_log_message = "*** HADOOP-15327: netty upgrade"
-        self.contexts = [Netty4TestContext("without netty patch on trunk",
+
+        self.contexts = []
+        if self.run_without_patch:
+            self.contexts.append(Netty4TestContext("without netty patch on trunk",
                                            DEFAULT_BRANCH,
                                            log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=True)],
                                            compile=self.enable_compilation or self.force_compile,
-                                           allow_verification_failure=self.allow_verification_failure),
-                         Netty4TestContext("with netty patch based on trunk",
+                                           allow_verification_failure=self.allow_verification_failure))
+        if self.run_with_patch:
+            self.contexts.append(Netty4TestContext("with netty patch based on trunk",
                                            DEFAULT_BRANCH,
                                            patch_file=patch,
                                            log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=False)],
                                            compile=self.enable_compilation or self.force_compile,
                                            allow_verification_failure=self.allow_verification_failure
-                                           )]
+                                           ))
 
         self.testcases = [
             *Netty4TestcasesBuilder("shuffle_max_connections")
