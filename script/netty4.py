@@ -22,6 +22,9 @@ from hadoop.xml_config import HadoopConfigFile
 from hadoop_dir.module import HadoopDir
 from script.base import HadesScriptBase
 
+PACKAGE_SECURITY_SSL = "org.apache.hadoop.security.ssl"
+PACKAGE_SHUFFLEHANDLER = "org.apache.hadoop.mapred.ShuffleHandler"
+
 DEFAULT_BRANCH = "origin/trunk"
 LOG = logging.getLogger(__name__)
 
@@ -998,17 +1001,38 @@ class Netty4RegressionTestSteps:
 
         self.cluster.update_config(NODEMANAGER_SELECTOR, self.hadoop_config, no_backup=True, workdir=self.session_dir)
 
-    def set_shufflehandler_loglevel(self):
+    def set_log_levels(self, permanent=True):
         LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
+        if permanent:
+            LOG.info("Loading default log4j.properties configs for NodeManagers...")
+            configs = {f"log4j.logger.{PACKAGE_SHUFFLEHANDLER}": HadoopLogLevel.DEBUG.value,
+                       f"log4j.logger.{PACKAGE_SECURITY_SSL}": HadoopLogLevel.DEBUG.value}
+            self.cluster_config_updater.load_properties_configs(HadoopConfigFile.LOG4J_PROPERTIES,
+                                                                configs,
+                                                                NODEMANAGER_SELECTOR,
+                                                                allow_empty=False)
+        else:
+            self._set_log_levels_via_daemonlog()
 
-        set_log_level_cmds: List[RunnableCommand] = self.cluster.set_log_level(
+        self.verify_log_levels([(PACKAGE_SHUFFLEHANDLER, self.config.shufflehandler_log_level),
+                                (PACKAGE_SECURITY_SSL, HadoopLogLevel.DEBUG)])
+
+    def _set_log_levels_via_daemonlog(self):
+        cmds1: List[RunnableCommand] = self.cluster.set_log_level(
             selector=YARN_SELECTOR,
-            package="org.apache.hadoop.mapred.ShuffleHandler",
+            package=PACKAGE_SHUFFLEHANDLER,
             log_level=self.config.shufflehandler_log_level)
+        # TODO Move this elsewhere
+        cmds2: List[RunnableCommand] = self.cluster.set_log_level(
+            selector=YARN_SELECTOR,
+            package=PACKAGE_SECURITY_SSL,
+            log_level=HadoopLogLevel.DEBUG)
+        set_log_level_cmds = cmds1 + cmds2
         LOG.debug("YARN set log level commands: %s", set_log_level_cmds)
-        if not set_log_level_cmds:
+        if not cmds1:
             raise HadesException("No 'set ShuffleHandler loglevel' commands were created!")
-
+        if not cmds2:
+            raise HadesException("No 'set org.apache.hadoop.security.ssl loglevel' commands were created!")
         for cmd in set_log_level_cmds:
             LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
             cmd.run()
@@ -1301,10 +1325,10 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                     break
 
                 self.steps.restart_services()
-                self.steps.load_default_configs()  # 2. Load default configs / Write initial config files                
+                self.steps.load_default_configs()  # 2. Load default configs / Write initial config files
                 self.steps.apply_testcase_configs()  # 3. Apply testcase configs
-                self.steps.set_shufflehandler_loglevel()  # 4. Set log level of ShuffleHandler to DEBUG
-                self.steps.restart_nms_and_save_logs()  # 5. Restart NMs, Save logs
+                self.steps.set_log_levels(permanent=True)  # 5. Set log level of ShuffleHandler to DEBUG
+                self.steps.restart_nms_and_save_logs()  # 4. Restart NMs, Save logs
                 self.steps.verify_nm_configs({
                     HadoopConfigFile.YARN_SITE: [(CONF_DISK_MAX_UTILIZATION, CONF_DISK_MAX_UTILIZATION_VAL)],
                 })
