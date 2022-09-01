@@ -6,6 +6,7 @@ import shutil
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, List, Dict, Tuple
+import re
 
 from tabulate import tabulate
 
@@ -15,7 +16,7 @@ from core.handler import MainCommandHandler
 from core.util import FileUtils, CompressedFileUtils, PrintUtils, StringUtils
 from hadoop.app.example import MapReduceApp, MapReduceAppType
 from hadoop.cluster import HadoopCluster, HadoopLogLevel
-from hadoop.config import HadoopConfig
+from hadoop.config import HadoopConfig, HadoopPropertiesConfig
 from hadoop.role import HadoopRoleType
 from hadoop.xml_config import HadoopConfigFile
 from hadoop_dir.module import HadoopDir
@@ -130,6 +131,18 @@ DEFAULT_CONFIGS = {
     SHUFFLE_LOG_SEPARATE: SHUFFLE_LOG_SEPARATE_DEFAULT,
     SHUFFLE_LOG_LIMIT_KB: SHUFFLE_LOG_LIMIT_KB_DEFAULT,
     SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT,
+}
+
+DEFAULT_CORE_SITE_CONFIGS = {
+    "hadoop.ssl.require.client.cert": "false",
+    "hadoop.ssl.keystores.factory.class": "org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory",
+    "hadoop.ssl.server.conf": "ssl-server.xml"
+}
+
+DEFAULT_SSL_SERVER_CONFIGS = {
+    "ssl.server.keystore.type": "jks",
+    "ssl.server.keystore.password": "abc123",
+    "ssl.server.keystore.location": "REPLACETHIS"
 }
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
@@ -286,25 +299,34 @@ class OutputFileWriter:
         return generated_config_files
 
     def write_initial_config_files(self):
-        self._generated_files.register_files(OutputFileType.INITIAL_CONFIG_MR,
-                                             self._write_config_files(NODEMANAGER_SELECTOR,
-                                                                      HadoopConfigFile.MAPRED_SITE,
-                                                                      dir=CONF_DIR_INITIAL))
-        self._generated_files.register_files(OutputFileType.INITIAL_CONFIG_YARN_SITE,
-                                             self._write_config_files(NODEMANAGER_SELECTOR,
-                                                                      HadoopConfigFile.YARN_SITE,
-                                                                      dir=CONF_DIR_INITIAL))
+        configs: List[Tuple[OutputFileType, HadoopConfigFile]] = [
+            (OutputFileType.INITIAL_CONFIG_MR, HadoopConfigFile.MAPRED_SITE),
+            (OutputFileType.INITIAL_CONFIG_YARN_SITE, HadoopConfigFile.YARN_SITE),
+            (OutputFileType.INITIAL_CONFIG_CORE_SITE, HadoopConfigFile.CORE_SITE),
+            (OutputFileType.INITIAL_CONFIG_SSL_SERVER, HadoopConfigFile.SSL_SERVER),
+            (OutputFileType.INITIAL_CONFIG_LOG4J_PROPERTIES, HadoopConfigFile.LOG4J_PROPERTIES),
+        ]
+
+        for config_tup in configs:
+            self._generated_files.register_files(config_tup[0],
+                                                 self._write_config_files(NODEMANAGER_SELECTOR,
+                                                                          config_tup[1],
+                                                                          dir=CONF_DIR_INITIAL))
 
     def write_testcase_config_files(self):
-        self._generated_files.register_files(OutputFileType.TC_CONFIG_MR,
-                                             self._write_config_files(NODEMANAGER_SELECTOR,
-                                                                      HadoopConfigFile.MAPRED_SITE,
-                                                                      dir=CONF_DIR_TC))
+        configs: List[Tuple[OutputFileType, HadoopConfigFile]] = [
+            (OutputFileType.TC_CONFIG_MR, HadoopConfigFile.MAPRED_SITE),
+            (OutputFileType.TC_CONFIG_YARN_SITE, HadoopConfigFile.YARN_SITE),
+            (OutputFileType.TC_CONFIG_CORE_SITE, HadoopConfigFile.CORE_SITE),
+            (OutputFileType.TC_CONFIG_SSL_SERVER, HadoopConfigFile.SSL_SERVER),
+            (OutputFileType.TC_CONFIG_LOG4J_PROPERTIES, HadoopConfigFile.LOG4J_PROPERTIES),
+        ]
 
-        self._generated_files.register_files(OutputFileType.TC_CONFIG_YARN_SITE,
-                                             self._write_config_files(NODEMANAGER_SELECTOR,
-                                                                      HadoopConfigFile.YARN_SITE,
-                                                                      dir=CONF_DIR_TC))
+        for config_tup in configs:
+            self._generated_files.register_files(config_tup[0],
+                                                 self._write_config_files(NODEMANAGER_SELECTOR,
+                                                                          config_tup[1],
+                                                                          dir=CONF_DIR_TC))
 
     def _write_role_logs(self, logs_by_role: 'LogsByRoles', prefix: str = "", app: str = ""):
         return self._write_yarn_log_file(logs_by_role.log_lines_dict, prefix=prefix, app=app)
@@ -702,8 +724,16 @@ class Netty4TestResults:
 class OutputFileType(Enum):
     INITIAL_CONFIG_MR = "initial_config_mr"
     INITIAL_CONFIG_YARN_SITE = "initial_config_yarn_site"
+    INITIAL_CONFIG_CORE_SITE = "initial_config_core_site"
+    INITIAL_CONFIG_SSL_SERVER = "initial_config_ssl_server"
+    INITIAL_CONFIG_LOG4J_PROPERTIES = "initial_config_log4j_properties"
+
     TC_CONFIG_MR = "testcase_config_mr"
     TC_CONFIG_YARN_SITE = "testcase_config_yarn_site"
+    TC_CONFIG_CORE_SITE = "testcase_config_core_site"
+    TC_CONFIG_SSL_SERVER = "testcase_config_ssl_server"
+    TC_CONFIG_LOG4J_PROPERTIES = "testcase_config_log4j_properties"
+
     APP_LOG_TAR_GZ = "app_log_tar_gz"
     YARN_DAEMON_LOGS_TAR_GZ = "yarn_daemon_logs_tar_gz"
     ALL_FILES_TAR_GZ = "all_files_tar_gz"
@@ -922,6 +952,21 @@ class Netty4RegressionTestSteps:
                                                  DEFAULT_CONFIGS,
                                                  NODEMANAGER_SELECTOR)
 
+    def load_default_core_site_configs(self):
+        LOG.info("Loading default core-site.xml configs for NodeManagers...")
+        self.cluster_config_updater.load_configs(HadoopConfigFile.CORE_SITE,
+                                                 DEFAULT_CORE_SITE_CONFIGS,
+                                                 NODEMANAGER_SELECTOR)
+
+    def load_default_ssl_server_configs(self):
+        LOG.info("Loading default ssl-server.xml configs for NodeManagers...")
+        configs = DEFAULT_SSL_SERVER_CONFIGS
+        configs["ssl.server.keystore.location"] = self.keystore_file_location
+        self.cluster_config_updater.load_configs(HadoopConfigFile.SSL_SERVER,
+                                                 configs,
+                                                 NODEMANAGER_SELECTOR,
+                                                 allow_empty=True)
+
     def init_testcase(self, tc):
         if self._should_halt():
             self.execution_state = ExecutionState.HALTED
@@ -941,6 +986,8 @@ class Netty4RegressionTestSteps:
     def load_default_configs(self):
         LOG.info("Loading default configs...")
         self.load_default_mapred_configs()
+        self.load_default_core_site_configs()
+        self.load_default_ssl_server_configs()
         self.hadoop_config = HadoopConfig(HadoopConfigFile.MAPRED_SITE)
         self.output_file_writer.write_initial_config_files()
 
@@ -1108,14 +1155,27 @@ class ClusterConfigUpdater:
         self.cluster = cluster
         self.workdir = workdir
     
-    def load_configs(self, conf_file_type, conf_dict, selector, ):
+    def load_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False):
         default_config = HadoopConfig(conf_file_type)
         for k, v in conf_dict.items():
             if isinstance(v, int):
                 v = str(v)
             default_config.extend_with_args({k: v})
-        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir)
-        
+        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir, allow_empty=allow_empty)
+
+    def load_properties_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False):
+        allowed_config_file_types = [HadoopConfigFile.LOG4J_PROPERTIES]
+        if conf_file_type not in allowed_config_file_types:
+            raise HadesException("Config file type '{}' is not in allowed types: {}".format(conf_file_type, allowed_config_file_types))
+
+        default_config = HadoopPropertiesConfig(conf_file_type)
+        for k, v in conf_dict.items():
+            if isinstance(v, int):
+                v = str(v)
+            default_config.extend_with_args({k: v})
+        # TODO
+        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir, allow_empty=allow_empty)
+
         
 class ClusterHandler:
     def __init__(self, cluster):
