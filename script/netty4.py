@@ -1045,6 +1045,38 @@ class Netty4RegressionTestSteps:
             LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
             cmd.run()
 
+    def verify_log_levels(self, levels: List[Tuple[str, HadoopLogLevel]]):
+        levels_dict = {l[0]: l[1] for l in levels}
+        LOG.debug("Verifying expected log levels: %s", levels_dict)
+
+        cmd_dict: Dict[str, List[RunnableCommand]] = self.cluster.get_log_levels(
+            selector=YARN_SELECTOR,
+            packages=list(levels_dict.keys())
+        )
+
+        LOG.debug("YARN get log level commands: %s", cmd_dict)
+        if not cmd_dict:
+            raise HadesException("No 'get log levels' commands were created!")
+
+        bad_log_levels: Dict[str, List[Tuple[str, str]]] = {}
+        for package, cmds in cmd_dict.items():
+            for cmd in cmds:
+                LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
+                cmd.run()
+
+                stdout = "\n".join(cmd.stdout)
+                regex = "Effective Level: (.*)"
+                result = re.findall(f".*{regex}", stdout)
+                if len(result) != 1:
+                    raise HadesException(f"Unexpected loglevel output, cannot find regex \"{regex}\"! Command: {cmd.cmd}, Output: {stdout}, Host: {cmd.target.host}")
+                effective_level = result[0]
+                if effective_level != levels_dict[package].value:
+                    if cmd.target.host not in bad_log_levels:
+                        bad_log_levels[cmd.target.host] = []
+                    bad_log_levels[cmd.target.host].append((package, effective_level))
+        if bad_log_levels:
+            raise HadesException("Unexpected log levels: {}".format(bad_log_levels))
+
     def restart_nms_and_save_logs(self):
         LOG.info("Restarting NodeManagers with new configs...")
         self.nm_restart_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=NODEMANAGER_SELECTOR)
