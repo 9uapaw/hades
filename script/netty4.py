@@ -917,6 +917,7 @@ class Netty4RegressionTestSteps:
         self.tc = None
         self.compiler = None
         self.execution_state = ExecutionState.RUNNING
+        self.keystore_file_location = None
 
     def start_context(self, context):
         if self._should_halt():
@@ -1159,6 +1160,9 @@ class Netty4RegressionTestSteps:
 
         # TODO Ensure that services are actually running!
 
+    def setup_ssl_and_keystore(self):
+        self.keystore_file_location = self.cluster.generate_keystore(NODEMANAGER_SELECTOR)
+
 
 class ClusterConfigUpdater:
     YARN_SITE_DEFAULT_CONFIGS = {
@@ -1309,6 +1313,10 @@ class Netty4RegressionTestDriver(HadesScriptBase):
         no_of_testcases = len(testcases)
         LOG.info("Will run %d testcases", no_of_testcases)
         self.steps = Netty4RegressionTestSteps(self, no_of_testcases, handler)
+
+        # As a first step, set up SSL + Keystore - Required for testcase 'shuffle_ssl_enabled'
+        self.steps.setup_ssl_and_keystore()
+
         for context in self.config.contexts:
             exec_state = self.steps.start_context(context)
             if exec_state == ExecutionState.HALTED:
