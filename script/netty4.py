@@ -187,7 +187,7 @@ class Netty4TestcasesBuilder:
                 conf_changes[conf_name] = conf_value
                 tc_counter += 1
             for app_type in self.apps:
-                testcases.append(Netty4Testcase(self._generate_tc_name(tc_counter, app_type), conf_changes, config.mr_apps[app_type]))
+                testcases.append(Netty4Testcase(self.name, self._generate_tc_name(tc_counter, app_type), conf_changes, config.mr_apps[app_type]))
         return testcases
 
     def _generate_tc_name(self, tc_counter, app_type: MapReduceAppType):
@@ -196,6 +196,7 @@ class Netty4TestcasesBuilder:
 
 @dataclass
 class Netty4Testcase:
+    simple_name: str
     name: str
     config_changes: Dict[str, str]
     app: MapReduceApp
@@ -539,6 +540,7 @@ class Netty4TestContext:
 
 @dataclass
 class Netty4TestConfig:
+    only_run_testcase = "shuffle_ssl_enabled"  # TODO
     LIMIT_TESTCASES = False
     QUICK_MODE = False
     testcase_limit = 1 if QUICK_MODE or LIMIT_TESTCASES else TC_LIMIT_UNLIMITED
@@ -629,6 +631,17 @@ class Netty4TestConfig:
             .with_apps(self.default_apps)
             .generate_testcases(self)
         ]
+
+        if self.only_run_testcase:
+            tmp = []
+            for tc in self.testcases:
+                if tc.simple_name == self.only_run_testcase:
+                    tmp.append(tc)
+            if not tmp:
+                raise HadesException("Cannot find any testcase matching name '{}'".format(self.only_run_testcase))
+
+            self.testcases = tmp
+            LOG.info("Found testcases matching for name '%s': %s", self.only_run_testcase, self.testcases)
 
 
 class Netty4TestResults:
