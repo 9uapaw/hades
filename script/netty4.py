@@ -812,12 +812,14 @@ class OutputFileType(Enum):
     INITIAL_CONFIG_YARN_SITE = "initial_config_yarn_site"
     INITIAL_CONFIG_CORE_SITE = "initial_config_core_site"
     INITIAL_CONFIG_SSL_SERVER = "initial_config_ssl_server"
+    INITIAL_CONFIG_SSL_CLIENT = "initial_config_ssl_client"
     INITIAL_CONFIG_LOG4J_PROPERTIES = "initial_config_log4j_properties"
 
     TC_CONFIG_MR = "testcase_config_mr"
     TC_CONFIG_YARN_SITE = "testcase_config_yarn_site"
     TC_CONFIG_CORE_SITE = "testcase_config_core_site"
     TC_CONFIG_SSL_SERVER = "testcase_config_ssl_server"
+    TC_CONFIG_SSL_CLIENT = "testcase_config_ssl_client"
     TC_CONFIG_LOG4J_PROPERTIES = "testcase_config_log4j_properties"
 
     APP_LOG_TAR_GZ = "app_log_tar_gz"
@@ -1071,6 +1073,23 @@ class Netty4RegressionTestSteps:
                            selector=YARN_SELECTOR,
                            allow_empty_configs=True)
 
+    def load_default_mapred_configs(self, config: Netty4TestConfig):
+        configs = dict(DEFAULT_MAPRED_SITE_CONFIGS)
+        if config.enable_ssl_debugging:
+            configs["mapred.reduce.child.java.opts"] = "-Djavax.net.debug=all"
+
+        self._load_configs(log_msg="Loading default MR ShuffleHandler configs for NodeManagers...",
+                           configs=configs,
+                           config_file=HadoopConfigFile.MAPRED_SITE,
+                           selector=NODEMANAGER_SELECTOR)
+
+    def load_default_ssl_client_configs(self):
+        self._load_configs(log_msg="Loading default ssl-client.xml configs for ResourceManager and NodeManagers...",
+                           configs=DEFAULT_SSL_CLIENT_CONFIGS,
+                           config_file=HadoopConfigFile.SSL_CLIENT,
+                           selector=YARN_SELECTOR,
+                           allow_empty_configs=True)
+
     def init_testcase(self, tc):
         if self._should_halt():
             self.execution_state = ExecutionState.HALTED
@@ -1092,6 +1111,7 @@ class Netty4RegressionTestSteps:
         self.load_default_mapred_configs()
         self.load_default_core_site_configs()
         self.load_default_ssl_server_configs()
+        self.load_default_ssl_client_configs()
         self.hadoop_config = HadoopConfigBase.create(HadoopConfigFile.MAPRED_SITE)
         self.output_file_writer.write_initial_config_files()
 
@@ -1114,7 +1134,6 @@ class Netty4RegressionTestSteps:
                                                                 allow_empty=False)
         else:
             self._set_log_levels_via_daemonlog()
-
 
     def _set_log_levels_via_daemonlog(self):
         cmds1: List[RunnableCommand] = self.cluster.set_log_level(
@@ -1292,8 +1311,23 @@ class Netty4RegressionTestSteps:
 
         # TODO Ensure that services are actually running!
 
-    def setup_ssl_and_keystore(self):
-        self.keystore_file_location = self.cluster.generate_keystore(NODEMANAGER_SELECTOR)
+    def setup_keystores_and_truststores(self):
+        # https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/EncryptedShuffle.html
+
+        # Use same truststore file for server and client
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSL_CLIENT_TRUSTSTORE_LOCATION_KEY, "truststore")
+
+        # Create separate keystore files for server and client
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSL_CLIENT_KEYSTORE_LOCATION_KEY, "keystore")
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSL_SERVER_KEYSTORE_LOCATION_KEY, "keystore")
+
+    def _create_keystore_or_truststore(self, selector: str, key: str, type: str):
+        self.cluster.generate_keystore(selector,
+                                       type,
+                                       password=store_passwords(key),
+                                       target_path=store_locations(key),
+                                       type=store_types(key)
+                                       )
 
 
 class ClusterConfigUpdater:
@@ -1450,7 +1484,7 @@ class Netty4RegressionTestDriver(HadesScriptBase):
         self.steps = Netty4RegressionTestSteps(self, no_of_testcases, handler)
 
         # As a first step, set up SSL + Keystore - Required for testcase 'shuffle_ssl_enabled'
-        self.steps.setup_ssl_and_keystore()
+        self.steps.setup_keystores_and_truststores()
 
         for context in self.config.contexts:
             exec_state = self.steps.start_context(context)
