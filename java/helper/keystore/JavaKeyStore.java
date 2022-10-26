@@ -45,6 +45,9 @@ public class JavaKeyStore {
 
         // Save the keyStore
         File file = new File(keyStoreName);
+        File parentDir = new File(file.getParent());
+        parentDir.mkdirs();
+        file.createNewFile();
         this.absolutePath = file.getAbsolutePath();
         FileOutputStream fos = new FileOutputStream(file);
         keyStore.store(fos, pwdArray);
