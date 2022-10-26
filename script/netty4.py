@@ -616,7 +616,7 @@ class Netty4TestConfig:
     shufflehandler_log_level = HadoopLogLevel.DEBUG
     cache_built_maven_artifacts = True
     halt_execution_on_failed_job = True
-    halt_execution_on_job_timeout = True  # TODO
+    halt_execution_on_job_timeout = True  # TODO Remove later?
     loadgen_no_mappers = 4
     loadgen_no_reducers = 3
     loadgen_timeout = 1000
@@ -1401,6 +1401,9 @@ class ClusterHandler:
         selector = NODEMANAGER_SELECTOR
         self.cluster.restart_with_guarantee(selector)
 
+    def restart_roles(self):
+        self.cluster.restart_with_guarantee(YARN_SELECTOR)
+
     def get_single_running_app(self):
         cmd = self.cluster.get_running_apps()
         running_apps, stderr = cmd.run()
@@ -1467,15 +1470,6 @@ class ClusterHandler:
             LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
             cmd.run()
 
-    def restart_roles(self):
-        handlers = []
-        cmds = self.cluster.restart_roles(YARN_SELECTOR)
-        for cmd in cmds:
-            handlers.append(cmd.run_async())
-
-        for h in handlers:
-            h.wait()
-        # TODO Ensure that *ALL* services are actually running!
 
 class Netty4RegressionTestDriver(HadesScriptBase):
     def __init__(self, cluster: HadoopCluster, workdir: str, session_dir: str):
