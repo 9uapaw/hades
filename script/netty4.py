@@ -955,7 +955,7 @@ class Netty4RegressionTestSteps:
         self.no_of_testcases = no_of_testcases
         self.handler = handler
         self.cluster_handler = ClusterHandler(test.cluster)
-        self.cluster_config_updater = ClusterConfigUpdater(test.cluster, test.session_dir)
+        self.cluster_config_updater = ClusterConfigUpdater(self.cluster_handler, test.session_dir)
         # TODO Move all logic to ClusterHandler --> Remove field cluster
         self.cluster = test.cluster
         self.config = test.config
@@ -1300,9 +1300,8 @@ class ClusterConfigUpdater:
         CONF_DISK_MAX_UTILIZATION: CONF_DISK_MAX_UTILIZATION_VAL
     }
 
-    def __init__(self, cluster, workdir):
-        # TODO Move all logic to ClusterHandler --> Remove field cluster
-        self.cluster = cluster
+    def __init__(self, cluster_handler, workdir):
+        self.cluster_handler = cluster_handler
         self.workdir = workdir
 
     def load_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False):
@@ -1311,8 +1310,8 @@ class ClusterConfigUpdater:
             if isinstance(v, int):
                 v = str(v)
             default_config.extend_with_args({k: v})
-        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir,
-                                   allow_empty=allow_empty)
+        self.cluster_handler.update_config(selector, default_config, no_backup=True, workdir=self.workdir,
+                                           allow_empty=allow_empty)
 
     def load_properties_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False):
         allowed_config_file_types = [HadoopConfigFile.LOG4J_PROPERTIES]
@@ -1326,13 +1325,17 @@ class ClusterConfigUpdater:
                 v = str(v)
             default_config.extend_with_args({k: v})
         # TODO ???
-        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir,
-                                   allow_empty=allow_empty)
+        self.cluster_handler.update_config(selector, default_config, no_backup=True, workdir=self.workdir,
+                                           allow_empty=allow_empty)
 
 
 class ClusterHandler:
     def __init__(self, cluster):
         self.cluster = cluster
+
+    def update_config(self, selector: str, config: HadoopConfigBase, no_backup: bool = False, workdir: str = ".",
+                      allow_empty: bool = False):
+        self.cluster.update_config(selector, config, no_backup, workdir, allow_empty)
 
     def get_state_and_health_report(self):
         return self.cluster.get_state_and_health_report()
