@@ -81,9 +81,46 @@ class ConfigWithDefault(enum.Enum):
         self.default_val = default_val
 
 
+# KEYSTORE / TRUSTSTORE CONFIG KEYS WITH DEFAULTS
+
+STORE_TYPE_JKS = "jks"
+KEYSTORES_DIR = "/home/systest/keystores"
+COMMON_TRUSTSTORE_LOCATION = f"{KEYSTORES_DIR}/truststore.jks"
+
+
+class SSLConfigWithDefault(enum.Enum):
+    CLIENT_TRUSTSTORE_TYPE = ("ssl.client.truststore.type", STORE_TYPE_JKS)
+    CLIENT_TRUSTSTORE_LOCATION = ("ssl.client.truststore.location", COMMON_TRUSTSTORE_LOCATION)
+    CLIENT_TRUSTSTORE_PASSWORD = ("ssl.client.truststore.password", "ssl_client_ts_pass")
+    CLIENT_KEYSTORE_TYPE = ("ssl.client.keystore.type", STORE_TYPE_JKS)
+    CLIENT_KEYSTORE_LOCATION = ("ssl.client.keystore.location", f"{KEYSTORES_DIR}/client-keystore.jks")
+    CLIENT_KEYSTORE_PASSWORD = ("ssl.client.keystore.password", "ssl_client_ks_pass")
+
+    SERVER_TRUSTSTORE_TYPE = ("ssl.server.truststore.type", STORE_TYPE_JKS)
+    SERVER_TRUSTSTORE_LOCATION = ("ssl.server.truststore.location", COMMON_TRUSTSTORE_LOCATION)
+    SERVER_TRUSTSTORE_PASSWORD = ("ssl.server.truststore.password", "ssl_server_ts_pass")
+    SERVER_KEYSTORE_TYPE = ("ssl.server.keystore.type", STORE_TYPE_JKS)
+    SERVER_KEYSTORE_LOCATION = ("ssl.server.keystore.location", f"{KEYSTORES_DIR}/server-keystore.jks")
+    SERVER_KEYSTORE_PASSWORD = ("ssl.server.keystore.password", "ssl_server_ks_pass")
+
+    HADOOP_REQUIRE_CLIENT_CERT = ("hadoop.ssl.require.client.cert", "false"),
+    HADOOP_HOSTNAME_VERIFIER = ("hadoop.ssl.hostname.verifier", "DEFAULT"),
+    HADOOP_SSL_KEYSTORES_FACTORY_CLASS = ("hadoop.ssl.keystores.factory.class", "org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory")
+    HADOOP_SSL_SERVER_CONF = ("hadoop.ssl.server.conf", "ssl-server.xml")
+    HADOOP_SSL_CLIENT_CONF = ("hadoop.ssl.client.conf", "ssl-client.xml")
+
+    def __init__(self, conf_key, default_val):
+        self.conf_key = conf_key
+        self.default_val = default_val
+
+# KEYSTORE / TRUSTSTORE CONFIG KEYS WITH DEFAULTS
+
+
+
+
+# GENERATED CONFIG DICT: MAPRED
 def make_conf_dict(confs_with_default_vals: List[ConfigWithDefault]):
     return {c.conf_key: c.default_val for c in confs_with_default_vals}
-
 
 DEFAULT_MAPRED_SITE_CONFIGS: Dict[str, str] = make_conf_dict(
     [ConfigWithDefault.SHUFFLE_MANAGE_OS_CACHE,
@@ -111,85 +148,67 @@ DEFAULT_MAPRED_SITE_CONFIGS: Dict[str, str] = make_conf_dict(
 )
 
 
-# KEYSTORE / TRUSTSTORE SETTINGS
-KEYSTORES_DIR = "/home/systest/keystores"
+######
+def get_store_type(conf: SSLConfigWithDefault):
+    return STORE_SETTINGS["types"][conf.conf_key]
 
-SSL_CLIENT_TRUSTSTORE_TYPE_KEY = "ssl.client.truststore.type"
-SSL_CLIENT_TRUSTSTORE_LOCATION_KEY = "ssl.client.truststore.location"
-SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY = "ssl.client.truststore.password"
-SSL_CLIENT_KEYSTORE_TYPE_KEY = "ssl.client.keystore.type"
-SSL_CLIENT_KEYSTORE_LOCATION_KEY = "ssl.client.keystore.location"
-SSL_CLIENT_KEYSTORE_PASSWORD_KEY = "ssl.client.keystore.password"
 
-SSL_SERVER_TRUSTSTORE_TYPE_KEY = "ssl.server.truststore.type"
-SSL_SERVER_TRUSTSTORE_LOCATION_KEY = "ssl.server.truststore.location"
-SSL_SERVER_TRUSTSTORE_PASSWORD_KEY = "ssl.server.truststore.password"
-SSL_SERVER_KEYSTORE_TYPE_KEY = "ssl.server.keystore.type"
-SSL_SERVER_KEYSTORE_LOCATION_KEY = "ssl.server.keystore.location"
-SSL_SERVER_KEYSTORE_PASSWORD_KEY = "ssl.server.keystore.password"
+def get_store_password(conf: SSLConfigWithDefault):
+    return STORE_SETTINGS["passwords"][conf.conf_key]
 
-STORE_TYPE_JKS = "jks"
-COMMON_TRUSTSTORE_LOCATION = f"{KEYSTORES_DIR}/truststore.jks"
+
+def get_store_location(conf: SSLConfigWithDefault):
+    return STORE_SETTINGS["locations"][conf.conf_key]
+
+
+def make_ssl_conf_dict(confs: List[SSLConfigWithDefault]):
+    return {c.conf_key: c.default_val for c in confs}
 
 STORE_SETTINGS = {
-    "passwords": {
-        SSL_SERVER_KEYSTORE_PASSWORD_KEY: "ssl_server_ks_pass",
-        SSL_SERVER_TRUSTSTORE_PASSWORD_KEY: "ssl_server_ts_pass",
-        SSL_CLIENT_KEYSTORE_PASSWORD_KEY: "ssl_client_ks_pass",
-        SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY: "ssl_client_ts_pass",
-    },
-    "locations": {
-        SSL_SERVER_KEYSTORE_LOCATION_KEY: f"{KEYSTORES_DIR}/server-keystore.jks",
-        SSL_SERVER_TRUSTSTORE_LOCATION_KEY: COMMON_TRUSTSTORE_LOCATION,
-        SSL_CLIENT_KEYSTORE_LOCATION_KEY: f"{KEYSTORES_DIR}/client-keystore.jks",
-        SSL_CLIENT_TRUSTSTORE_LOCATION_KEY: COMMON_TRUSTSTORE_LOCATION
-    },
-    "types": {
-        SSL_SERVER_KEYSTORE_TYPE_KEY: STORE_TYPE_JKS,
-        SSL_SERVER_TRUSTSTORE_TYPE_KEY: STORE_TYPE_JKS,
-        SSL_CLIENT_KEYSTORE_TYPE_KEY: STORE_TYPE_JKS,
-        SSL_CLIENT_TRUSTSTORE_TYPE_KEY: STORE_TYPE_JKS
-    }
+    "passwords": make_ssl_conf_dict([SSLConfigWithDefault.SERVER_KEYSTORE_PASSWORD,
+                                     SSLConfigWithDefault.SERVER_TRUSTSTORE_PASSWORD,
+                                     SSLConfigWithDefault.CLIENT_KEYSTORE_PASSWORD,
+                                     SSLConfigWithDefault.CLIENT_TRUSTSTORE_PASSWORD
+                                     ]),
+    "locations": make_ssl_conf_dict([
+        SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION,
+        SSLConfigWithDefault.SERVER_TRUSTSTORE_LOCATION,
+        SSLConfigWithDefault.CLIENT_KEYSTORE_LOCATION,
+        SSLConfigWithDefault.CLIENT_TRUSTSTORE_LOCATION
+    ]),
+    "types": make_ssl_conf_dict([
+        SSLConfigWithDefault.SERVER_KEYSTORE_TYPE,
+        SSLConfigWithDefault.SERVER_TRUSTSTORE_TYPE,
+        SSLConfigWithDefault.CLIENT_KEYSTORE_TYPE,
+        SSLConfigWithDefault.CLIENT_TRUSTSTORE_TYPE,
+    ])
 }
 
-
-def store_types(key):
-    return STORE_SETTINGS["types"][key]
-
-
-def store_passwords(key):
-    return STORE_SETTINGS["passwords"][key]
-
-
-def store_locations(key):
-    return STORE_SETTINGS["locations"][key]
-
-
-DEFAULT_CORE_SITE_CONFIGS = {
-    "hadoop.ssl.require.client.cert": "false",
-    "hadoop.ssl.hostname.verifier": "DEFAULT",
-    "hadoop.ssl.keystores.factory.class": "org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory",
-    "hadoop.ssl.server.conf": "ssl-server.xml",
-    "hadoop.ssl.client.conf": "ssl-client.xml"
-}
+DEFAULT_CORE_SITE_CONFIGS = make_ssl_conf_dict([
+    SSLConfigWithDefault.HADOOP_REQUIRE_CLIENT_CERT,
+    SSLConfigWithDefault.HADOOP_HOSTNAME_VERIFIER,
+    SSLConfigWithDefault.HADOOP_SSL_KEYSTORES_FACTORY_CLASS,
+    SSLConfigWithDefault.HADOOP_SSL_SERVER_CONF,
+    SSLConfigWithDefault.HADOOP_SSL_CLIENT_CONF
+])
 
 DEFAULT_SSL_SERVER_CONFIGS = {
-    SSL_SERVER_KEYSTORE_TYPE_KEY: store_types(SSL_SERVER_KEYSTORE_TYPE_KEY),
-    SSL_SERVER_KEYSTORE_LOCATION_KEY: store_locations(SSL_SERVER_KEYSTORE_LOCATION_KEY),
-    SSL_SERVER_KEYSTORE_PASSWORD_KEY: store_passwords(SSL_SERVER_KEYSTORE_PASSWORD_KEY),
-    SSL_SERVER_TRUSTSTORE_TYPE_KEY: store_types(SSL_SERVER_TRUSTSTORE_TYPE_KEY),
-    SSL_SERVER_TRUSTSTORE_LOCATION_KEY: store_locations(SSL_SERVER_TRUSTSTORE_LOCATION_KEY),
-    SSL_SERVER_TRUSTSTORE_PASSWORD_KEY: store_passwords(SSL_SERVER_TRUSTSTORE_PASSWORD_KEY),
+    SSLConfigWithDefault.SERVER_KEYSTORE_TYPE: get_store_type(SSLConfigWithDefault.SERVER_KEYSTORE_TYPE),
+    SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION: get_store_location(SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION),
+    SSLConfigWithDefault.SERVER_KEYSTORE_PASSWORD: get_store_password(SSLConfigWithDefault.SERVER_KEYSTORE_PASSWORD),
+    SSLConfigWithDefault.SERVER_TRUSTSTORE_TYPE: get_store_type(SSLConfigWithDefault.SERVER_TRUSTSTORE_TYPE),
+    SSLConfigWithDefault.SERVER_TRUSTSTORE_LOCATION: get_store_location(SSLConfigWithDefault.SERVER_TRUSTSTORE_LOCATION),
+    SSLConfigWithDefault.SERVER_TRUSTSTORE_PASSWORD: get_store_password(SSLConfigWithDefault.SERVER_TRUSTSTORE_PASSWORD),
     "ssl.server.truststore.reload.interval": "10000"
 }
 
 DEFAULT_SSL_CLIENT_CONFIGS = {
-    SSL_CLIENT_KEYSTORE_TYPE_KEY: store_types(SSL_CLIENT_KEYSTORE_TYPE_KEY),
-    SSL_CLIENT_KEYSTORE_LOCATION_KEY: store_locations(SSL_CLIENT_KEYSTORE_LOCATION_KEY),
-    SSL_CLIENT_KEYSTORE_PASSWORD_KEY: store_passwords(SSL_CLIENT_KEYSTORE_PASSWORD_KEY),
-    SSL_CLIENT_TRUSTSTORE_TYPE_KEY: store_types(SSL_CLIENT_TRUSTSTORE_TYPE_KEY),
-    SSL_CLIENT_TRUSTSTORE_LOCATION_KEY: store_locations(SSL_CLIENT_TRUSTSTORE_LOCATION_KEY),
-    SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY: store_passwords(SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY),
+    SSLConfigWithDefault.CLIENT_KEYSTORE_TYPE: get_store_type(SSLConfigWithDefault.CLIENT_KEYSTORE_TYPE),
+    SSLConfigWithDefault.CLIENT_KEYSTORE_LOCATION: get_store_location(SSLConfigWithDefault.CLIENT_KEYSTORE_LOCATION),
+    SSLConfigWithDefault.CLIENT_KEYSTORE_PASSWORD: get_store_password(SSLConfigWithDefault.CLIENT_KEYSTORE_PASSWORD),
+    SSLConfigWithDefault.CLIENT_TRUSTSTORE_TYPE: get_store_type(SSLConfigWithDefault.CLIENT_TRUSTSTORE_TYPE),
+    SSLConfigWithDefault.CLIENT_TRUSTSTORE_LOCATION: get_store_location(SSLConfigWithDefault.CLIENT_TRUSTSTORE_LOCATION),
+    SSLConfigWithDefault.CLIENT_TRUSTSTORE_PASSWORD: get_store_password(SSLConfigWithDefault.CLIENT_TRUSTSTORE_PASSWORD),
     "ssl.client.truststore.reload.interval": "10000"
 }
 # END OF KEYSTORE / TRUSTSTORE SETTINGS
@@ -1298,18 +1317,18 @@ class Netty4RegressionTestSteps:
         # https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/EncryptedShuffle.html
 
         # Use same truststore file for server and client
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSL_CLIENT_TRUSTSTORE_LOCATION_KEY, "truststore")
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigWithDefault.CLIENT_TRUSTSTORE_LOCATION, "truststore")
 
         # Create separate keystore files for server and client
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSL_CLIENT_KEYSTORE_LOCATION_KEY, "keystore")
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSL_SERVER_KEYSTORE_LOCATION_KEY, "keystore")
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigWithDefault.CLIENT_KEYSTORE_LOCATION, "keystore")
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION, "keystore")
 
-    def _create_keystore_or_truststore(self, selector: str, key: str, store_type: str):
+    def _create_keystore_or_truststore(self, selector: str, conf: SSLConfigWithDefault, store_type: str):
         self.cluster.generate_keystore(selector,
                                        store_type,
-                                       password=store_passwords(key),
-                                       target_path=store_locations(key),
-                                       type=store_types(key)
+                                       password=get_store_password(conf.conf_key),
+                                       target_path=get_store_location(conf.conf_key),
+                                       type=get_store_type(conf.conf_key)
                                        )
 
 
