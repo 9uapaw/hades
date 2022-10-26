@@ -22,6 +22,8 @@ from hadoop.role import HadoopRoleType
 from hadoop_dir.module import HadoopDir
 from script.base import HadesScriptBase
 
+INVALID_CONFIG_VALUE = "INVALID"
+
 PACKAGE_SECURITY_SSL = "org.apache.hadoop.security.ssl"
 PACKAGE_SHUFFLEHANDLER = "org.apache.hadoop.mapred.ShuffleHandler"
 
@@ -953,32 +955,49 @@ class Netty4RegressionTestSteps:
         if self.context.patch_file:
             hadoop_dir.apply_patch(self.context.patch_file, force_reset=True)
 
+    @staticmethod
+    def _validate_config_values(config_file: HadoopConfigFile, configs: Dict[str, str]):
+        invalid = {}
+        for k, v in configs.items():
+            if v == INVALID_CONFIG_VALUE:
+                invalid[k] = v
+
+        if invalid:
+            raise HadesException("Invalid configuration entries found for '{}'. Entries: {}".format(config_file.config_type, invalid))
+
+    def _load_configs(self, log_msg, configs: Dict[str, str], config_file: HadoopConfigFile, selector: str,
+                      allow_empty_configs: bool = False):
+        LOG.info(log_msg)
+        self._validate_config_values(config_file, configs)
+        self.cluster_config_updater.load_configs(config_file,
+                                                 configs,
+                                                 selector,
+                                                 allow_empty=allow_empty_configs)
+
     def load_default_yarn_site_configs(self):
-        LOG.info("Loading default yarn-site.xml configs for NodeManagers...")
-        self.cluster_config_updater.load_configs(HadoopConfigFile.YARN_SITE,
-                                                 ClusterConfigUpdater.YARN_SITE_DEFAULT_CONFIGS,
-                                                 NODEMANAGER_SELECTOR)
+        self._load_configs(log_msg="Loading default yarn-site.xml configs for NodeManagers...",
+                           configs=ClusterConfigUpdater.YARN_SITE_DEFAULT_CONFIGS,
+                           config_file=HadoopConfigFile.YARN_SITE,
+                           selector=NODEMANAGER_SELECTOR)
 
     def load_default_mapred_configs(self):
-        LOG.info("Loading default MR ShuffleHandler configs for NodeManagers...")
-        self.cluster_config_updater.load_configs(HadoopConfigFile.MAPRED_SITE,
-                                                 DEFAULT_CONFIGS,
-                                                 NODEMANAGER_SELECTOR)
+        self._load_configs(log_msg="Loading default MR ShuffleHandler configs for NodeManagers...",
+                           configs=DEFAULT_MAPRED_SITE_CONFIGS,
+                           config_file=HadoopConfigFile.MAPRED_SITE,
+                           selector=NODEMANAGER_SELECTOR)
 
     def load_default_core_site_configs(self):
-        LOG.info("Loading default core-site.xml configs for NodeManagers...")
-        self.cluster_config_updater.load_configs(HadoopConfigFile.CORE_SITE,
-                                                 DEFAULT_CORE_SITE_CONFIGS,
-                                                 NODEMANAGER_SELECTOR)
+        self._load_configs(log_msg="Loading default core-site.xml configs for ResourceManager and NodeManagers...",
+                           configs=DEFAULT_CORE_SITE_CONFIGS,
+                           config_file=HadoopConfigFile.CORE_SITE,
+                           selector=YARN_SELECTOR)
 
     def load_default_ssl_server_configs(self):
-        LOG.info("Loading default ssl-server.xml configs for NodeManagers...")
-        configs = DEFAULT_SSL_SERVER_CONFIGS
-        configs["ssl.server.keystore.location"] = self.keystore_file_location
-        self.cluster_config_updater.load_configs(HadoopConfigFile.SSL_SERVER,
-                                                 configs,
-                                                 NODEMANAGER_SELECTOR,
-                                                 allow_empty=True)
+        self._load_configs(log_msg="Loading default ssl-server.xml configs for ResourceManager and NodeManagers...",
+                           configs=DEFAULT_SSL_SERVER_CONFIGS,
+                           config_file=HadoopConfigFile.SSL_SERVER,
+                           selector=YARN_SELECTOR,
+                           allow_empty_configs=True)
 
     def init_testcase(self, tc):
         if self._should_halt():
