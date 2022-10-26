@@ -1,3 +1,4 @@
+import enum
 import itertools
 import logging
 import os.path
@@ -52,91 +53,63 @@ CONF_DEBUG_DELAY = "yarn.nodemanager.delete.debug-delay-sec"
 CONF_DISK_MAX_UTILIZATION = "yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage"
 CONF_DISK_MAX_UTILIZATION_VAL = "99.5"
 
-# START DEFAULT CONFIGS
-SHUFFLE_MANAGE_OS_CACHE = MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache"
-SHUFFLE_MANAGE_OS_CACHE_DEFAULT = "true"
 
-SHUFFLE_READAHEAD_BYTES = MAPREDUCE_SHUFFLE_PREFIX + ".readahead.bytes"
-SHUFFLE_READAHEAD_BYTES_DEFAULT = 4 * 1024 * 1024
+class ConfigWithDefault(enum.Enum):
+    SHUFFLE_MANAGE_OS_CACHE = (MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache", "true")
+    SHUFFLE_READAHEAD_BYTES = (MAPREDUCE_SHUFFLE_PREFIX + ".readahead.bytes", 4 * 1024 * 1024)
+    SHUFFLE_MAX_CONNECTIONS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.connections", 0)
+    SHUFFLE_MAX_THREADS = (MAPREDUCE_SHUFFLE_PREFIX + "max.threads", 0)
+    SHUFFLE_TRANSFER_BUFFER_SIZE = (MAPREDUCE_SHUFFLE_PREFIX + ".transfer.buffer.size", 128 * 1024)
+    SHUFFLE_TRANSFERTO_ALLOWED = (MAPREDUCE_SHUFFLE_PREFIX + ".transferTo.allowed", "true")
+    SHUFFLE_MAX_SESSION_OPEN_FILES = (MAPREDUCE_SHUFFLE_PREFIX + ".max.session-open-files", 3)
+    SHUFFLE_LISTEN_QUEUE_SIZE = (MAPREDUCE_SHUFFLE_PREFIX + ".listen.queue.size", 128)
+    SHUFFLE_PORT = (MAPREDUCE_PREFIX + ".port", 13562)
+    SHUFFLE_SSL_FILE_BUFFER_SIZE = (MAPREDUCE_SHUFFLE_PREFIX + ".ssl.file.buffer.size", 60 * 1024)
+    SHUFFLE_CONNECTION_KEEPALIVE_ENABLE = (MAPREDUCE_SHUFFLE_PREFIX + ".connection-keep-alive.enable", "false")
+    SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT = (MAPREDUCE_SHUFFLE_PREFIX + ".connection-keep-alive.timeout", 5)
+    SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE = (MAPREDUCE_SHUFFLE_PREFIX + ".mapoutput-info.meta.cache.size", 1000)
+    SHUFFLE_SSL_ENABLED = (MAPREDUCE_SHUFFLE_PREFIX + ".ssl.enabled", "false")
+    SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES = (MAPREDUCE_SHUFFLE_PREFIX + ".pathcache.expire-after-access-minutes", 5)
+    SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL = (MAPREDUCE_SHUFFLE_PREFIX + ".pathcache.concurrency-level", 16)
+    SHUFFLE_PATHCACHE_MAX_WEIGHT = (MAPREDUCE_SHUFFLE_PREFIX + ".pathcache.max-weight", 10 * 1024 * 1024)
+    SHUFFLE_LOG_SEPARATE = (YARN_APP_MAPREDUCE_SHUFFLE_PREFIX + ".log.separate", "true")
+    SHUFFLE_LOG_LIMIT_KB = (YARN_APP_MAPREDUCE_SHUFFLE_PREFIX + ".log.limit.kb", 0)
+    SHUFFLE_LOG_BACKUPS = (YARN_APP_MAPREDUCE_SHUFFLE_PREFIX + ".log.backups", 0)
 
-SHUFFLE_MAX_CONNECTIONS = MAPREDUCE_SHUFFLE_PREFIX + ".max.connections"
-SHUFFLE_MAX_CONNECTIONS_DEFAULT = 0
+    def __init__(self, conf_key, default_val):
+        self.conf_key = conf_key
+        self.default_val = default_val
 
-SHUFFLE_MAX_THREADS = MAPREDUCE_SHUFFLE_PREFIX + "max.threads"
-SHUFFLE_MAX_THREADS_DEFAULT = 0
 
-SHUFFLE_TRANSFER_BUFFER_SIZE = MAPREDUCE_SHUFFLE_PREFIX + ".transfer.buffer.size"
-SHUFFLE_TRANSFER_BUFFER_SIZE_DEFAULT = 128 * 1024
+def make_conf_dict(confs_with_default_vals: List[ConfigWithDefault]):
+    return {c.conf_key: c.default_val for c in confs_with_default_vals}
 
-SHUFFLE_TRANSFERTO_ALLOWED = MAPREDUCE_SHUFFLE_PREFIX + ".transferTo.allowed"
-SHUFFLE_TRANSFERTO_ALLOWED_DEFAULT = "true"
 
-SHUFFLE_MAX_SESSION_OPEN_FILES = MAPREDUCE_SHUFFLE_PREFIX + ".max.session-open-files"
-SHUFFLE_MAX_SESSION_OPEN_FILES_DEFAULT = 3
+DEFAULT_MAPRED_SITE_CONFIGS: Dict[str, str] = make_conf_dict(
+    [ConfigWithDefault.SHUFFLE_MANAGE_OS_CACHE,
+     ConfigWithDefault.SHUFFLE_READAHEAD_BYTES,
+     ConfigWithDefault.SHUFFLE_MAX_CONNECTIONS,
+     ConfigWithDefault.SHUFFLE_MAX_THREADS,
+     ConfigWithDefault.SHUFFLE_TRANSFER_BUFFER_SIZE,
+     ConfigWithDefault.SHUFFLE_TRANSFERTO_ALLOWED,
+     ConfigWithDefault.SHUFFLE_MAX_SESSION_OPEN_FILES,
+     ConfigWithDefault.SHUFFLE_LISTEN_QUEUE_SIZE,
+     ConfigWithDefault.SHUFFLE_PORT,
+     ConfigWithDefault.SHUFFLE_SSL_FILE_BUFFER_SIZE,
+     ConfigWithDefault.SHUFFLE_CONNECTION_KEEPALIVE_ENABLE,
+     ConfigWithDefault.SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT,
+     ConfigWithDefault.SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE,
+     ConfigWithDefault.SHUFFLE_SSL_ENABLED,
+     ConfigWithDefault.SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES,
+     ConfigWithDefault.SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL,
+     ConfigWithDefault.SHUFFLE_PATHCACHE_MAX_WEIGHT,
+     ConfigWithDefault.SHUFFLE_LOG_SEPARATE,
+     ConfigWithDefault.SHUFFLE_LOG_LIMIT_KB,
+     ConfigWithDefault.SHUFFLE_PATHCACHE_MAX_WEIGHT,
+     ConfigWithDefault.SHUFFLE_LOG_BACKUPS,
+     ]
+)
 
-SHUFFLE_LISTEN_QUEUE_SIZE = MAPREDUCE_SHUFFLE_PREFIX + ".listen.queue.size"
-SHUFFLE_LISTEN_QUEUE_SIZE_DEFAULT = 128
-
-SHUFFLE_PORT = MAPREDUCE_PREFIX + ".port"
-SHUFFLE_PORT_DEFAULT = 13562
-
-SHUFFLE_SSL_FILE_BUFFER_SIZE = MAPREDUCE_SHUFFLE_PREFIX + ".ssl.file.buffer.size"
-SHUFFLE_SSL_FILE_BUFFER_SIZE_DEFAULT = 60 * 1024
-
-SHUFFLE_CONNECTION_KEEPALIVE_ENABLE = MAPREDUCE_SHUFFLE_PREFIX + ".connection-keep-alive.enable"
-SHUFFLE_CONNECTION_KEEPALIVE_ENABLE_DEFAULT = "false"
-
-SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT = MAPREDUCE_SHUFFLE_PREFIX + ".connection-keep-alive.timeout"
-SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT_DEFAULT = 5
-
-SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE = MAPREDUCE_SHUFFLE_PREFIX + ".mapoutput-info.meta.cache.size"
-SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE_DEFAULT = 1000
-
-SHUFFLE_SSL_ENABLED = MAPREDUCE_SHUFFLE_PREFIX + ".ssl.enabled"
-SHUFFLE_SSL_ENABLED_DEFAULT = "false"
-
-SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES = MAPREDUCE_SHUFFLE_PREFIX + ".pathcache.expire-after-access-minutes"
-SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES_DEFAULT = 5
-
-SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL = MAPREDUCE_SHUFFLE_PREFIX + ".pathcache.concurrency-level"
-SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL_DEFAULT = 16
-
-SHUFFLE_PATHCACHE_MAX_WEIGHT = MAPREDUCE_SHUFFLE_PREFIX + ".pathcache.max-weight"
-SHUFFLE_PATHCACHE_MAX_WEIGHT_DEFAULT = 10 * 1024 * 1024
-
-SHUFFLE_LOG_SEPARATE = YARN_APP_MAPREDUCE_SHUFFLE_PREFIX + ".log.separate"
-SHUFFLE_LOG_SEPARATE_DEFAULT = "true"
-
-SHUFFLE_LOG_LIMIT_KB = YARN_APP_MAPREDUCE_SHUFFLE_PREFIX + ".log.limit.kb"
-SHUFFLE_LOG_LIMIT_KB_DEFAULT = 0
-
-SHUFFLE_LOG_BACKUPS = YARN_APP_MAPREDUCE_SHUFFLE_PREFIX + ".log.backups"
-SHUFFLE_LOG_BACKUPS_DEFAULT = 0
-
-# END OF DEFAULT CONFIGS
-
-DEFAULT_MAPRED_SITE_CONFIGS = {
-    SHUFFLE_MANAGE_OS_CACHE: SHUFFLE_MANAGE_OS_CACHE_DEFAULT,
-    SHUFFLE_READAHEAD_BYTES: SHUFFLE_READAHEAD_BYTES_DEFAULT,
-    SHUFFLE_MAX_CONNECTIONS: SHUFFLE_MAX_CONNECTIONS_DEFAULT,
-    SHUFFLE_MAX_THREADS: SHUFFLE_MAX_THREADS_DEFAULT,
-    SHUFFLE_TRANSFER_BUFFER_SIZE: SHUFFLE_TRANSFER_BUFFER_SIZE_DEFAULT,
-    SHUFFLE_TRANSFERTO_ALLOWED: SHUFFLE_TRANSFERTO_ALLOWED_DEFAULT,
-    SHUFFLE_MAX_SESSION_OPEN_FILES: SHUFFLE_MAX_SESSION_OPEN_FILES_DEFAULT,
-    SHUFFLE_LISTEN_QUEUE_SIZE: SHUFFLE_LISTEN_QUEUE_SIZE_DEFAULT,
-    SHUFFLE_PORT: SHUFFLE_PORT_DEFAULT,
-    SHUFFLE_SSL_FILE_BUFFER_SIZE: SHUFFLE_SSL_FILE_BUFFER_SIZE_DEFAULT,
-    SHUFFLE_CONNECTION_KEEPALIVE_ENABLE: SHUFFLE_CONNECTION_KEEPALIVE_ENABLE_DEFAULT,
-    SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT: SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT_DEFAULT,
-    SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE: SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE_DEFAULT,
-    SHUFFLE_SSL_ENABLED: SHUFFLE_SSL_ENABLED_DEFAULT,
-    SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES: SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES_DEFAULT,
-    SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL: SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL_DEFAULT,
-    SHUFFLE_PATHCACHE_MAX_WEIGHT: SHUFFLE_PATHCACHE_MAX_WEIGHT_DEFAULT,
-    SHUFFLE_LOG_SEPARATE: SHUFFLE_LOG_SEPARATE_DEFAULT,
-    SHUFFLE_LOG_LIMIT_KB: SHUFFLE_LOG_LIMIT_KB_DEFAULT,
-    SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT,
-}
 
 # KEYSTORE / TRUSTSTORE SETTINGS
 KEYSTORES_DIR = "/home/systest/keystores"
@@ -720,28 +693,28 @@ class Netty4TestConfig:
 
         self.testcases = [
             *Netty4TestcasesBuilder("shuffle_max_connections")
-            .with_configs(SHUFFLE_MAX_CONNECTIONS, ["5", "10"])
+            .with_configs(ConfigWithDefault.SHUFFLE_MAX_CONNECTIONS.conf_key, ["5", "10"])
             .with_apps(self.default_apps)
             .generate_testcases(self),
             *Netty4TestcasesBuilder("shuffle_max_threads")
-            .with_configs(SHUFFLE_MAX_THREADS, ["3", "6"])
+            .with_configs(ConfigWithDefault.SHUFFLE_MAX_THREADS.conf_key, ["3", "6"])
             .with_apps(self.default_apps)
             .generate_testcases(self),
             *Netty4TestcasesBuilder("shuffle_max_open_files")
-            .with_configs(SHUFFLE_MAX_SESSION_OPEN_FILES, ["2", "5"])
+            .with_configs(ConfigWithDefault.SHUFFLE_MAX_SESSION_OPEN_FILES.conf_key, ["2", "5"])
             .with_apps(self.default_apps)
             .generate_testcases(self),
             *Netty4TestcasesBuilder("shuffle_listen_queue_size")
-            .with_configs(SHUFFLE_LISTEN_QUEUE_SIZE, ["10", "50"])
+            .with_configs(ConfigWithDefault.SHUFFLE_LISTEN_QUEUE_SIZE.conf_key, ["10", "50"])
             .with_apps(self.default_apps)
             .generate_testcases(self),
             *Netty4TestcasesBuilder("shuffle_ssl_enabled")
-            .with_configs(SHUFFLE_SSL_ENABLED, ["true"])
+            .with_configs(ConfigWithDefault.SHUFFLE_SSL_ENABLED.conf_key, ["true"])
             .with_apps(self.default_apps)
             .generate_testcases(self),
             *Netty4TestcasesBuilder("keepalive")
-            .with_config(SHUFFLE_CONNECTION_KEEPALIVE_ENABLE, "true")
-            .with_configs(SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT, ["15", "25"])
+            .with_config(ConfigWithDefault.SHUFFLE_CONNECTION_KEEPALIVE_ENABLE.conf_key, "true")
+            .with_configs(ConfigWithDefault.SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT.conf_key, ["15", "25"])
             .with_apps(self.default_apps)
             .generate_testcases(self)
         ]
