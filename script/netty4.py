@@ -1380,43 +1380,8 @@ class ClusterHandler:
 
     def restart_nms(self, logs_by_roles: LogsByRoles):
         logs_by_roles.read_logs_into_dict()
-        handlers = []
-        # TODO Move this restart logic to Cluster or Executor?
         selector = NODEMANAGER_SELECTOR
-        role_pids_before = self.cluster.get_role_pids(selector)
-        for cmd in self.cluster.restart_roles(selector):
-            handlers.append(cmd.run_async())
-        for h in handlers:
-            h.wait()
-
-        # Under some circumstances, Nodemanager not always stopped when command ran: 'yarn --daemon stop nodemanager'
-        # Verify that pids of NM processes are different after restart
-        role_pids_after = self.cluster.get_role_pids(selector)
-
-        same_pids = self._verify_if_pids_are_different(role_pids_after, role_pids_before)
-
-        if same_pids:
-            LOG.warning(
-                "pids of NodeManagers are the same before and after restart: %s. Trying to kill the processes and start NodeManagers.",
-                same_pids)
-        self.cluster.force_restart_roles(selector)
-
-        # Check pids again
-        role_pids_after = self.cluster.get_role_pids(selector)
-        same_pids = self._verify_if_pids_are_different(role_pids_after, role_pids_before)
-        if same_pids:
-            raise HadesException(
-                "pids of NodeManagers are the same before and after restart (even after tried to kill them manually): {}".format(
-                    same_pids))
-
-    @staticmethod
-    def _verify_if_pids_are_different(role_pids_after, role_pids_before):
-        nm_hostnames = role_pids_before.keys()
-        same_pids = {}
-        for host in nm_hostnames:
-            if role_pids_before[host] == role_pids_after[host]:
-                same_pids[host] = role_pids_after[host]
-        return same_pids
+        self.cluster.restart_with_guarantee(selector)
 
     def get_single_running_app(self):
         cmd = self.cluster.get_running_apps()

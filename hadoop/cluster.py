@@ -148,7 +148,54 @@ class HadoopCluster:
     def restart(self):
         self._executor.restart_cluster(self.name)
 
-    def get_role_pids(self, selector: str) -> List[RunnableCommand]:
+    def restart_with_guarantee(self, selector: str):
+        """
+        Under some circumstances, Nodemanager not always stopped when command ran: 'yarn --daemon stop nodemanager'
+        Verify that pids of NM processes are different after restart
+        :param selector:
+        :return:
+        """
+
+        handlers = []
+        # Get pids before restart
+        role_pids_before = self.get_role_pids(selector)
+
+        # Do restart
+        for cmd in self.restart_roles(selector):
+            handlers.append(cmd.run_async())
+        for h in handlers:
+            h.wait()
+
+        # Get pids after restart
+        role_pids_after = self.get_role_pids(selector)
+
+        # Compare pids
+        same_pids = self._verify_if_pids_are_different(role_pids_after, role_pids_before)
+
+        if same_pids:
+            logger.warning(
+                "pids of NodeManagers are the same before and after restart: %s. Trying to kill the processes and start NodeManagers.",
+                same_pids)
+        self.force_restart_roles(selector)
+
+        # Check pids once again (after force restart)
+        role_pids_after = self.get_role_pids(selector)
+        same_pids = self._verify_if_pids_are_different(role_pids_after, role_pids_before)
+        if same_pids:
+            raise HadesException(
+                "pids of NodeManagers are the same before and after restart (even after tried to kill them manually): {}".format(
+                    same_pids))
+
+    @staticmethod
+    def _verify_if_pids_are_different(role_pids_after, role_pids_before):
+        nm_hostnames = role_pids_before.keys()
+        same_pids = {}
+        for host in nm_hostnames:
+            if role_pids_before[host] == role_pids_after[host]:
+                same_pids[host] = role_pids_after[host]
+        return same_pids
+
+    def get_role_pids(self, selector: str):
         selected = self.select_roles(selector)
         return self._executor.get_role_pids(*selected) or []
 
