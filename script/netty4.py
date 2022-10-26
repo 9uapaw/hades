@@ -1065,9 +1065,9 @@ class Netty4RegressionTestSteps:
                            config_file=HadoopConfigFile.YARN_SITE,
                            selector=NODEMANAGER_SELECTOR)
 
-    def load_default_mapred_configs(self, config: Netty4TestConfig):
+    def load_default_mapred_configs(self):
         configs = dict(DEFAULT_MAPRED_SITE_CONFIGS)
-        if config.enable_ssl_debugging:
+        if self.config.enable_ssl_debugging:
             configs["mapred.reduce.child.java.opts"] = "-Djavax.net.debug=all"
 
         self._load_configs(log_msg="Loading default MR ShuffleHandler configs for NodeManagers...",
