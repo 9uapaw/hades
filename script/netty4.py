@@ -631,7 +631,7 @@ class Netty4TestContext:
 
 @dataclass
 class Netty4TestConfig:
-    only_run_testcase = "shuffle_ssl_enabled"  # TODO
+    only_run_testcase = "shuffle_ssl_enabled"  # TODO Remove this when shuffle works with SSL
     LIMIT_TESTCASES = False
     QUICK_MODE = False
     testcase_limit = 1 if QUICK_MODE or LIMIT_TESTCASES else TC_LIMIT_UNLIMITED
@@ -653,7 +653,7 @@ class Netty4TestConfig:
     run_without_patch = True
     run_with_patch = True
     enable_ssl_debugging = True  # TODO implement SSL debugging
-    # TODO add switch that simulates an intentional job failure?
+    # TODO Implement switch that simulates an intentional job failure?
 
     force_compile = False
 
@@ -834,6 +834,13 @@ class GeneratedOutputFiles:
         self.ctx = None
         self.tc = None
         self._curr_files_dict = None
+        self.expected_not_empty_output_types = [
+            (OutputFileType.TC_CONFIG_MR, HadesException, "Expected non-empty testcase config mapred-site.xml files list!"),
+            (OutputFileType.TC_CONFIG_YARN_SITE, HadesException, "Expected non-empty testcase config yarn-site.xml files list!"),
+            (OutputFileType.INITIAL_CONFIG_MR, HadesException, "Expected non-empty initial config files list!"),
+            (OutputFileType.YARN_DAEMON_LOGS, HadesException, "Expected non-empty YARN log files list!"),
+            (OutputFileType.NM_RESTART_LOGS, HadesException, "Expected non-empty YARN NM restart log files!"),
+        ]
 
     def update_with_ctx_and_tc(self, context, tc):
         self.ctx = context
@@ -864,17 +871,9 @@ class GeneratedOutputFiles:
 
     def verify(self, app_failed: bool = False):
         LOG.info("Verifying generated output files...")
-        # TODO Verify all members of OutputFileType in a generic way
-        if not self.get(OutputFileType.TC_CONFIG_MR):
-            raise HadesException("Expected non-empty testcase config mapred-site.xml files list!")
-        if not self.get(OutputFileType.TC_CONFIG_YARN_SITE):
-            raise HadesException("Expected non-empty testcase config yarn-site.xml files list!")
-        if not self.get(OutputFileType.INITIAL_CONFIG_MR):
-            raise HadesException("Expected non-empty initial config files list!")
-        if not self.get(OutputFileType.YARN_DAEMON_LOGS):
-            raise HadesException("Expected non-empty YARN log files list!")
-        if not self.get(OutputFileType.NM_RESTART_LOGS):
-            raise HadesException("Expected non-empty YARN NM restart log files!")
+        for tup in self.expected_not_empty_output_types:
+            if not self.get(tup[0]):
+                raise tup[1](tup[2])
 
         if app_failed and not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ):
             raise HadesException("App failed. Expected non-empty daemon logs for YARN processes!")
