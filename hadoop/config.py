@@ -163,8 +163,7 @@ class HadoopPropertiesConfig(HadoopConfigBase):
 
     def __iter__(self) -> Iterator[Tuple[str, str]]:
         if self._base_conf:
-            # TODO
-            return XMLConfigIterator(self.properties)
+            return self._get_all_props_as_dict().items().__iter__()
         else:
             return self._extension.items().__iter__()
 
@@ -187,8 +186,7 @@ class HadoopPropertiesConfig(HadoopConfigBase):
             raise HadesException("Can not merge without base properties. Set base properties before calling merge.")
 
         properties_to_set = set(self._extension.keys())
-        all_items: List[Tuple[str, str]] = [i for i in self._base_conf['global'].items()]
-        all_items_dict = {i[0]: i[1] for i in all_items}
+        all_items_dict = self._get_all_props_as_dict()
 
         self._base_conf['extension'] = {}
         ext_section = self._base_conf['extension']
@@ -203,6 +201,11 @@ class HadoopPropertiesConfig(HadoopConfigBase):
                 logger.debug("Adding new property %s with value %s", prop_name, prop_value)
                 ext_section[prop_name] = prop_value
 
+    def _get_all_props_as_dict(self):
+        all_items: List[Tuple[str, str]] = [i for i in self._base_conf['global'].items()]
+        all_items_dict = {i[0]: i[1] for i in all_items}
+        return all_items_dict
+
     def commit(self):
         with open(self._file.val, 'w') as configfile:
             self._base_conf.write(configfile)
@@ -211,4 +214,4 @@ class HadoopPropertiesConfig(HadoopConfigBase):
         return str({section: dict(self._base_conf[section]) for section in self._base_conf.sections()})
 
     def to_dict(self) -> dict:
-        return {k: v for k, v in self.__iter__()}
+        return self._get_all_props_as_dict()
