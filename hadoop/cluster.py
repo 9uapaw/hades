@@ -152,6 +152,10 @@ class HadoopCluster:
         selected = self.select_roles(selector)
         return self._executor.get_role_pids(*selected) or []
 
+    def get_role_pids_for_multi_selector(self, *selectors: str) -> List[RunnableCommand]:
+        selected = [self.select_roles(s) for s in selectors]
+        return self._executor.get_role_pids(*selected) or []
+
     def get_metrics(self) -> Dict[str, str]:
         return self._rm_api.get_metrics()
 
