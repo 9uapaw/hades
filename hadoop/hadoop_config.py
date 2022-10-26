@@ -12,6 +12,7 @@ class HadoopConfigFile(enum.Enum):
     CORE_SITE = ("core-site.xml", HadoopConfigFileType.XML)
     MAPRED_SITE = ("mapred-site.xml", HadoopConfigFileType.XML)
     SSL_SERVER = ("ssl-server.xml", HadoopConfigFileType.XML)
+    SSL_CLIENT = ("ssl-client.xml", HadoopConfigFileType.XML)
     LOG4J_PROPERTIES = ("log4j.properties", HadoopConfigFileType.PROPERTIES)
 
     def __init__(self, value, type):
