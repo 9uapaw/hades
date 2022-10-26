@@ -313,6 +313,7 @@ class TestcaseResult:
 
 class OutputFileWriter:
     def __init__(self, cluster):
+        # TODO Move all logic to ClusterHandler --> Remove field cluster
         self.cluster = cluster
         self._generated_files = GeneratedOutputFiles()
         self.tc_no = 0
@@ -551,20 +552,6 @@ class LogsByRoles:
 
     def __post_init__(self):
         self.log_lines_dict = {}
-
-    # TODO Move this to ClusterHandler? 
-    def read_logs_into_dict(self):
-        LOG.debug("Reading YARN logs from cluster...")
-
-        self.roles = self.cluster.select_roles(self.selector)
-        self.log_commands: List[RunnableCommand] = self.cluster.read_logs(follow=True, selector=self.selector)
-        LOG.debug("YARN log commands: %s", self.log_commands)
-
-        for read_logs_command in self.log_commands:
-            LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd,
-                      read_logs_command.target.host)
-            read_logs_command.run_async(stdout=_callback(read_logs_command, self.log_lines_dict),
-                                        stderr=_callback(read_logs_command, self.log_lines_dict))
 
     def search_in_logs(self, verification: LogVerification):
         LOG.info("Searching in logs, verification: %s", verification)
@@ -1178,7 +1165,7 @@ class Netty4RegressionTestSteps:
     def restart_services_and_save_logs(self):
         LOG.info("Restarting NodeManagers with new configs...")
         self.nm_restart_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=NODEMANAGER_SELECTOR)
-        self.cluster_handler.restart_nms(logs_by_roles=self.nm_restart_logs)
+        self.cluster_handler.restart_nms(self.nm_restart_logs)
         self.output_file_writer.write_nm_restart_logs(self.nm_restart_logs)
         LOG.info("Restarting ResourceManager...")
         self.cluster_handler.restart_rm()
@@ -1337,6 +1324,7 @@ class ClusterConfigUpdater:
     }
 
     def __init__(self, cluster, workdir):
+        # TODO Move all logic to ClusterHandler --> Remove field cluster
         self.cluster = cluster
         self.workdir = workdir
 
@@ -1369,11 +1357,24 @@ class ClusterHandler:
     def __init__(self, cluster):
         self.cluster = cluster
 
+    def read_logs_into_dict(self, logs_by_roles: LogsByRoles):
+        LOG.debug("Reading YARN logs from cluster...")
+
+        logs_by_roles.roles = self.cluster.select_roles(logs_by_roles.selector)
+        logs_by_roles.log_commands = self.cluster.read_logs(follow=True, selector=logs_by_roles.selector)
+        LOG.debug("YARN log commands: %s", logs_by_roles.log_commands)
+
+        for read_logs_command in logs_by_roles.log_commands:
+            LOG.debug("Running command '%s' in async mode on host '%s'", read_logs_command.cmd,
+                      read_logs_command.target.host)
+            read_logs_command.run_async(stdout=_callback(read_logs_command, logs_by_roles.log_lines_dict),
+                                        stderr=_callback(read_logs_command, logs_by_roles.log_lines_dict))
+
     def restart_rm(self):
         self.cluster.force_restart_roles(RESOURCEMANAGER_SELECTOR)
 
-    def restart_nms(self, logs_by_roles: LogsByRoles):
-        logs_by_roles.read_logs_into_dict()
+    def restart_nms(self, logs_by_roles):
+        self.read_logs_into_dict(logs_by_roles)
         selector = NODEMANAGER_SELECTOR
         self.cluster.restart_with_guarantee(selector)
 
