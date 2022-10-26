@@ -1065,9 +1065,13 @@ class Netty4RegressionTestSteps:
                            config_file=HadoopConfigFile.YARN_SITE,
                            selector=NODEMANAGER_SELECTOR)
 
-    def load_default_mapred_configs(self):
+    def load_default_mapred_configs(self, config: Netty4TestConfig):
+        configs = dict(DEFAULT_MAPRED_SITE_CONFIGS)
+        if config.enable_ssl_debugging:
+            configs["mapred.reduce.child.java.opts"] = "-Djavax.net.debug=all"
+
         self._load_configs(log_msg="Loading default MR ShuffleHandler configs for NodeManagers...",
-                           configs=DEFAULT_MAPRED_SITE_CONFIGS,
+                           configs=configs,
                            config_file=HadoopConfigFile.MAPRED_SITE,
                            selector=NODEMANAGER_SELECTOR)
 
@@ -1083,16 +1087,6 @@ class Netty4RegressionTestSteps:
                            config_file=HadoopConfigFile.SSL_SERVER,
                            selector=YARN_SELECTOR,
                            allow_empty_configs=True)
-
-    def load_default_mapred_configs(self, config: Netty4TestConfig):
-        configs = dict(DEFAULT_MAPRED_SITE_CONFIGS)
-        if config.enable_ssl_debugging:
-            configs["mapred.reduce.child.java.opts"] = "-Djavax.net.debug=all"
-
-        self._load_configs(log_msg="Loading default MR ShuffleHandler configs for NodeManagers...",
-                           configs=configs,
-                           config_file=HadoopConfigFile.MAPRED_SITE,
-                           selector=NODEMANAGER_SELECTOR)
 
     def load_default_ssl_client_configs(self):
         self._load_configs(log_msg="Loading default ssl-client.xml configs for ResourceManager and NodeManagers...",
