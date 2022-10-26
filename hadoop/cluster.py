@@ -275,7 +275,13 @@ class HadoopCluster:
         random_selected = self._select_random_role(selector)
         return self._executor.get_finished_apps(random_selected)
 
-    def generate_keystore(self, selector: str):
+    def generate_keystore(self,
+                          selector: str,
+                          store_type: str,
+                          type: str,
+                          target_path: str,
+                          password: str):
+        # TODO Use store arguments
         java_key_store = LocalFiles.get_unique_file("JavaKeyStore.java")
         self.upload_file(selector, java_key_store, KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH)
         self.compile_java_file(selector, KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH, KEY_STORE_GENERATOR_JAVA_COMPILED_CLASSES_DIR)

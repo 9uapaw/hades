@@ -522,7 +522,6 @@ class OutputFileWriter:
 @dataclass
 class LogsByRoles:
     output_file_writer: 'OutputFileWriter'
-    cluster: HadoopCluster
     selector: str
     roles = None
     log_commands = None
@@ -956,8 +955,6 @@ class Netty4RegressionTestSteps:
         self.handler = handler
         self.cluster_handler = ClusterHandler(test.cluster)
         self.cluster_config_updater = ClusterConfigUpdater(self.cluster_handler, test.session_dir)
-        # TODO Move all logic to ClusterHandler --> Remove field cluster
-        self.cluster = test.cluster
         self.config = test.config
         self.workdir = test.workdir
         self.session_dir = test.session_dir
@@ -1085,7 +1082,7 @@ class Netty4RegressionTestSteps:
         for config_key, config_val in self.tc.config_changes.items():
             self.hadoop_config.extend_with_args({config_key: config_val})
 
-        self.cluster.update_config(NODEMANAGER_SELECTOR, self.hadoop_config, no_backup=True, workdir=self.session_dir)
+        self.cluster_handler.update_config(NODEMANAGER_SELECTOR, self.hadoop_config, no_backup=True, workdir=self.session_dir)
 
     def set_log_levels(self, permanent=True):
         LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
@@ -1110,7 +1107,7 @@ class Netty4RegressionTestSteps:
         levels_dict = {tup[0]: tup[1] for tup in levels}
         LOG.debug("Verifying expected log levels: %s", levels_dict)
 
-        cmd_dict: Dict[str, List[RunnableCommand]] = self.cluster.get_log_levels(
+        cmd_dict: Dict[str, List[RunnableCommand]] = self.cluster_handler.get_log_levels(
             selector=YARN_SELECTOR,
             packages=list(levels_dict.keys())
         )
@@ -1141,7 +1138,7 @@ class Netty4RegressionTestSteps:
 
     def restart_services_and_save_logs(self):
         LOG.info("Restarting NodeManagers with new configs...")
-        self.nm_restart_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=NODEMANAGER_SELECTOR)
+        self.nm_restart_logs = LogsByRoles(self.output_file_writer, selector=NODEMANAGER_SELECTOR)
         self.cluster_handler.restart_nms(self.nm_restart_logs)
         self.output_file_writer.write_nm_restart_logs(self.nm_restart_logs)
         LOG.info("Restarting ResourceManager...")
@@ -1149,21 +1146,8 @@ class Netty4RegressionTestSteps:
 
     def run_app_and_collect_logs_to_file(self, app: MapReduceApp):
         app_log_lines = []
-        result_type = TestcaseResultType.PASSED
         with self.overwrite_config_func(cmd_prefix="sudo -u systest"):
-            app_command = self.cluster.run_app(app, selector=NODEMANAGER_SELECTOR)
-
-        LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
-        try:
-            app_command.run_async(block=True, stderr=lambda line: app_log_lines.append(line),
-                                  timeout=app.get_timeout_seconds())
-        except HadesCommandTimedOutException:
-            LOG.exception("Failed to run app command '%s'. Command '%s' timed out after %d seconds",
-                          app_command.cmd, app_command, app.get_timeout_seconds())
-            result_type = TestcaseResultType.TIMEOUT
-        except CommandExecutionException:
-            LOG.exception("Failed to run app command '%s'. Command '%s' failed.", app_command.cmd, app_command)
-            result_type = TestcaseResultType.FAILED
+            app_command, result_type = self.cluster_handler.run_app(app, app_log_lines, selector=NODEMANAGER_SELECTOR)
 
         self.output_file_writer.write_yarn_app_logs(app.name, app_command, app_log_lines)
 
@@ -1179,7 +1163,7 @@ class Netty4RegressionTestSteps:
 
     def start_to_collect_yarn_daemon_logs(self):
         LOG.info("Starting to collect live YARN daemon logs...")
-        self.yarn_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=YARN_SELECTOR)
+        self.yarn_logs = LogsByRoles(self.output_file_writer, selector=YARN_SELECTOR)
         self.cluster_handler.read_logs_into_dict(self.yarn_logs)
 
     def get_application(self):
@@ -1255,16 +1239,8 @@ class Netty4RegressionTestSteps:
         self.cluster_handler.verify_nm_configs(dic)
 
     def restart_services(self):
-        handlers = []
+        self.cluster_handler.restart_roles()
 
-        cmds = self.cluster.restart_roles(YARN_SELECTOR)
-        for cmd in cmds:
-            handlers.append(cmd.run_async())
-
-        for h in handlers:
-            h.wait()
-
-        # TODO Ensure that services are actually running!
 
     def setup_keystores_and_truststores(self):
         # https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/EncryptedShuffle.html
@@ -1277,12 +1253,12 @@ class Netty4RegressionTestSteps:
         self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION, "keystore")
 
     def _create_keystore_or_truststore(self, selector: str, conf: SSLConfigWithDefault, store_type: str):
-        self.cluster.generate_keystore(selector,
-                                       store_type,
-                                       password=ActualConfigs.get_store_password(conf.conf_key),
-                                       target_path=ActualConfigs.get_store_location(conf.conf_key),
-                                       type=ActualConfigs.get_store_type(conf.conf_key)
-                                       )
+        self.cluster_handler.generate_keystore(selector,
+                                               store_type,
+                                               type=ActualConfigs.get_store_type(conf.conf_key),
+                                               password=ActualConfigs.get_store_password(conf.conf_key),
+                                               target_path=ActualConfigs.get_store_location(conf.conf_key),
+                                               )
 
 
 class ClusterConfigUpdater:
@@ -1332,6 +1308,33 @@ class ClusterConfigUpdater:
 class ClusterHandler:
     def __init__(self, cluster):
         self.cluster = cluster
+
+    def generate_keystore(self,
+                          selector: str,
+                          store_type: str,
+                          type: str,
+                          target_path: str,
+                          password: str):
+        return self.cluster.generate_keystore(selector, store_type, type, target_path, password)
+
+    def run_app(self, app: 'ApplicationCommand', app_log_lines, selector: str = "") -> Tuple[RunnableCommand or None, TestcaseResultType]:
+        app_command = self.cluster.run_app(app, selector)
+        LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
+        try:
+            app_command.run_async(block=True, stderr=lambda line: app_log_lines.append(line),
+                                  timeout=app.get_timeout_seconds())
+        except HadesCommandTimedOutException:
+            LOG.exception("Failed to run app command '%s'. Command '%s' timed out after %d seconds",
+                          app_command.cmd, app_command, app.get_timeout_seconds())
+            return None, TestcaseResultType.TIMEOUT
+        except CommandExecutionException:
+            LOG.exception("Failed to run app command '%s'. Command '%s' failed.", app_command.cmd, app_command)
+            return None, TestcaseResultType.FAILED
+
+        return app_command, TestcaseResultType.PASSED
+
+    def get_log_levels(self, selector: str, packages: List[str]) -> Dict[str, List[RunnableCommand]]:
+        return self.cluster.get_log_levels(selector, packages)
 
     def update_config(self, selector: str, config: HadoopConfigBase, no_backup: bool = False, workdir: str = ".",
                       allow_empty: bool = False):
@@ -1464,6 +1467,15 @@ class ClusterHandler:
             LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
             cmd.run()
 
+    def restart_roles(self):
+        handlers = []
+        cmds = self.cluster.restart_roles(YARN_SELECTOR)
+        for cmd in cmds:
+            handlers.append(cmd.run_async())
+
+        for h in handlers:
+            h.wait()
+        # TODO Ensure that *ALL* services are actually running!
 
 class Netty4RegressionTestDriver(HadesScriptBase):
     def __init__(self, cluster: HadoopCluster, workdir: str, session_dir: str):
