@@ -252,6 +252,24 @@ class OutputFileWriter:
         self.current_ctx_dir = None
         self.current_tc_dir = None
 
+        self.initial_config_files: List[Tuple[OutputFileType, HadoopConfigFile]] = [
+            (OutputFileType.INITIAL_CONFIG_MR, HadoopConfigFile.MAPRED_SITE),
+            (OutputFileType.INITIAL_CONFIG_YARN_SITE, HadoopConfigFile.YARN_SITE),
+            (OutputFileType.INITIAL_CONFIG_CORE_SITE, HadoopConfigFile.CORE_SITE),
+            (OutputFileType.INITIAL_CONFIG_SSL_SERVER, HadoopConfigFile.SSL_SERVER),
+            (OutputFileType.INITIAL_CONFIG_SSL_CLIENT, HadoopConfigFile.SSL_CLIENT),
+            (OutputFileType.INITIAL_CONFIG_LOG4J_PROPERTIES, HadoopConfigFile.LOG4J_PROPERTIES),
+        ]
+
+        self.testcase_config_files: List[Tuple[OutputFileType, HadoopConfigFile]] = [
+            (OutputFileType.TC_CONFIG_MR, HadoopConfigFile.MAPRED_SITE),
+            (OutputFileType.TC_CONFIG_YARN_SITE, HadoopConfigFile.YARN_SITE),
+            (OutputFileType.TC_CONFIG_CORE_SITE, HadoopConfigFile.CORE_SITE),
+            (OutputFileType.TC_CONFIG_SSL_SERVER, HadoopConfigFile.SSL_SERVER),
+            (OutputFileType.TC_CONFIG_SSL_CLIENT, HadoopConfigFile.SSL_CLIENT),
+            (OutputFileType.TC_CONFIG_LOG4J_PROPERTIES, HadoopConfigFile.LOG4J_PROPERTIES),
+        ]
+
     def update_with_context_and_testcase(self, workdir, context, testcase):
         self.workdir = workdir
         self.context = context
@@ -302,30 +320,14 @@ class OutputFileWriter:
         return generated_config_files
 
     def write_initial_config_files(self):
-        configs: List[Tuple[OutputFileType, HadoopConfigFile]] = [
-            (OutputFileType.INITIAL_CONFIG_MR, HadoopConfigFile.MAPRED_SITE),
-            (OutputFileType.INITIAL_CONFIG_YARN_SITE, HadoopConfigFile.YARN_SITE),
-            (OutputFileType.INITIAL_CONFIG_CORE_SITE, HadoopConfigFile.CORE_SITE),
-            (OutputFileType.INITIAL_CONFIG_SSL_SERVER, HadoopConfigFile.SSL_SERVER),
-            (OutputFileType.INITIAL_CONFIG_LOG4J_PROPERTIES, HadoopConfigFile.LOG4J_PROPERTIES),
-        ]
-
-        for config_tup in configs:
+        for config_tup in self.initial_config_files:
             self._generated_files.register_files(config_tup[0],
                                                  self._write_config_files(NODEMANAGER_SELECTOR,
                                                                           config_tup[1],
                                                                           dir=CONF_DIR_INITIAL))
 
     def write_testcase_config_files(self):
-        configs: List[Tuple[OutputFileType, HadoopConfigFile]] = [
-            (OutputFileType.TC_CONFIG_MR, HadoopConfigFile.MAPRED_SITE),
-            (OutputFileType.TC_CONFIG_YARN_SITE, HadoopConfigFile.YARN_SITE),
-            (OutputFileType.TC_CONFIG_CORE_SITE, HadoopConfigFile.CORE_SITE),
-            (OutputFileType.TC_CONFIG_SSL_SERVER, HadoopConfigFile.SSL_SERVER),
-            (OutputFileType.TC_CONFIG_LOG4J_PROPERTIES, HadoopConfigFile.LOG4J_PROPERTIES),
-        ]
-
-        for config_tup in configs:
+        for config_tup in self.testcase_config_files:
             self._generated_files.register_files(config_tup[0],
                                                  self._write_config_files(NODEMANAGER_SELECTOR,
                                                                           config_tup[1],
