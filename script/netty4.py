@@ -1180,7 +1180,7 @@ class Netty4RegressionTestSteps:
     def start_to_collect_yarn_daemon_logs(self):
         LOG.info("Starting to collect live YARN daemon logs...")
         self.yarn_logs = LogsByRoles(self.output_file_writer, self.cluster, selector=YARN_SELECTOR)
-        self.yarn_logs.read_logs_into_dict()
+        self.cluster_handler.read_logs_into_dict(self.yarn_logs)
 
     def get_application(self):
         if self.test_results.is_current_tc_timed_out:
