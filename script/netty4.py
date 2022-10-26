@@ -138,7 +138,7 @@ DEFAULT_MAPRED_SITE_CONFIGS = {
     SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT,
 }
 
-######### KEYSTORE / TRUSTSTORE SETTINGS
+# KEYSTORE / TRUSTSTORE SETTINGS
 KEYSTORES_DIR = "/home/systest/keystores"
 
 SSL_CLIENT_TRUSTSTORE_TYPE_KEY = "ssl.client.truststore.type"
@@ -219,7 +219,7 @@ DEFAULT_SSL_CLIENT_CONFIGS = {
     SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY: store_passwords(SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY),
     "ssl.client.truststore.reload.interval": "10000"
 }
-######### END OF KEYSTORE / TRUSTSTORE SETTINGS
+# END OF KEYSTORE / TRUSTSTORE SETTINGS
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
@@ -368,11 +368,11 @@ class OutputFileWriter:
         tc_targz_filename = os.path.join(self.current_ctx_dir, f"testcase_{tc_no}_{self.tc.name}.tar.gz")
         return tc_targz_filename
 
-    def _write_config_files(self, selector: str, conf_type: HadoopConfigFile, dir=None) -> List[str]:
+    def _write_config_files(self, selector: str, conf_type: HadoopConfigFile, conf_dir=None) -> List[str]:
         conf_type_str = ""
-        if dir == CONF_DIR_INITIAL:
+        if conf_dir == CONF_DIR_INITIAL:
             conf_type_str = "initial"
-        elif dir == CONF_DIR_TC:
+        elif conf_dir == CONF_DIR_TC:
             conf_type_str = "testcase"
         LOG.info("Writing initial %s files for selector '%s'", conf_type_str, selector)
 
@@ -380,8 +380,8 @@ class OutputFileWriter:
         generated_config_files = []
         for host, conf in configs.items():
             config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name)
-            if dir:
-                dir_path = os.path.join(self.current_tc_dir, dir)
+            if conf_dir:
+                dir_path = os.path.join(self.current_tc_dir, conf_dir)
                 if not os.path.exists(dir_path):
                     os.mkdir(dir_path)
                 file_path = os.path.join(dir_path, config_file_name)
@@ -399,14 +399,14 @@ class OutputFileWriter:
             self._generated_files.register_files(config_tup[0],
                                                  self._write_config_files(NODEMANAGER_SELECTOR,
                                                                           config_tup[1],
-                                                                          dir=CONF_DIR_INITIAL))
+                                                                          conf_dir=CONF_DIR_INITIAL))
 
     def write_testcase_config_files(self):
         for config_tup in self.testcase_config_files:
             self._generated_files.register_files(config_tup[0],
                                                  self._write_config_files(NODEMANAGER_SELECTOR,
                                                                           config_tup[1],
-                                                                          dir=CONF_DIR_TC))
+                                                                          conf_dir=CONF_DIR_TC))
 
     def _write_role_logs(self, logs_by_role: 'LogsByRoles', prefix: str = "", app: str = ""):
         return self._write_yarn_log_file(logs_by_role.log_lines_dict, prefix=prefix, app=app)
@@ -439,13 +439,13 @@ class OutputFileWriter:
         if not node_health_reports:
             raise HadesException("YARN Node health report is empty for all nodes!")
 
-        for node_id, dict in node_health_reports.items():
+        for node_id, dic in node_health_reports.items():
             chars = [(".", "_"), (":", "_"), ("-", "_")]
             new_node_id = StringUtils.replace_chars(node_id, chars)
             file_path = os.path.join(self.current_tc_dir, f"healthreport_{new_node_id}.txt")
             files_written.append(file_path)
             with open(file_path, 'w') as f:
-                f.writelines(dict)
+                f.writelines(dic)
         return files_written
 
     def write_node_health_reports(self, node_health_reports):
@@ -1168,7 +1168,7 @@ class Netty4RegressionTestSteps:
             cmd.run()
 
     def verify_log_levels(self, levels: List[Tuple[str, HadoopLogLevel]]):
-        levels_dict = {l[0]: l[1] for l in levels}
+        levels_dict = {tup[0]: tup[1] for tup in levels}
         LOG.debug("Verifying expected log levels: %s", levels_dict)
 
         cmd_dict: Dict[str, List[RunnableCommand]] = self.cluster.get_log_levels(
@@ -1222,7 +1222,7 @@ class Netty4RegressionTestSteps:
             LOG.exception("Failed to run app command '%s'. Command '%s' timed out after %d seconds",
                           app_command.cmd, app_command, app.get_timeout_seconds())
             result_type = TestcaseResultType.TIMEOUT
-        except CommandExecutionException as e:
+        except CommandExecutionException:
             LOG.exception("Failed to run app command '%s'. Command '%s' failed.", app_command.cmd, app_command)
             result_type = TestcaseResultType.FAILED
 
@@ -1312,8 +1312,8 @@ class Netty4RegressionTestSteps:
     def compile(self):
         self.compiler.compile()
 
-    def verify_nm_configs(self, dict: Dict[HadoopConfigFile, List[Tuple[str, str]]]):
-        self.cluster_handler.verify_nm_configs(dict)
+    def verify_nm_configs(self, dic: Dict[HadoopConfigFile, List[Tuple[str, str]]]):
+        self.cluster_handler.verify_nm_configs(dic)
 
     def restart_services(self):
         handlers = []
@@ -1337,9 +1337,9 @@ class Netty4RegressionTestSteps:
         self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSL_CLIENT_KEYSTORE_LOCATION_KEY, "keystore")
         self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSL_SERVER_KEYSTORE_LOCATION_KEY, "keystore")
 
-    def _create_keystore_or_truststore(self, selector: str, key: str, type: str):
+    def _create_keystore_or_truststore(self, selector: str, key: str, store_type: str):
         self.cluster.generate_keystore(selector,
-                                       type,
+                                       store_type,
                                        password=store_passwords(key),
                                        target_path=store_locations(key),
                                        type=store_types(key)
@@ -1463,9 +1463,9 @@ class ClusterHandler:
         # Topmost row is the latest app
         return finished_apps[0]
 
-    def verify_nm_configs(self, dict: Dict[HadoopConfigFile, List[Tuple[str, str]]]):
+    def verify_nm_configs(self, dic: Dict[HadoopConfigFile, List[Tuple[str, str]]]):
         configs_per_nm = self.cluster.get_config_from_api(NODEMANAGER_SELECTOR)
-        for config_file, expected_conf_list in dict.items():
+        for config_file, expected_conf_list in dic.items():
             # We are not interested in the file types in this case (whether it's yarn-site.xml / mapred-site.xml or something else)
             for expected_conf_tup in expected_conf_list:
                 for host, nm_conf in configs_per_nm.items():
