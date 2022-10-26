@@ -312,9 +312,8 @@ class TestcaseResult:
 
 
 class OutputFileWriter:
-    def __init__(self, cluster):
-        # TODO Move all logic to ClusterHandler --> Remove field cluster
-        self.cluster = cluster
+    def __init__(self, cluster_handler):
+        self.cluster_handler = cluster_handler
         self._generated_files = GeneratedOutputFiles()
         self.tc_no = 0
         self.workdir = None
@@ -372,7 +371,7 @@ class OutputFileWriter:
             conf_type_str = "testcase"
         LOG.info("Writing initial %s files for selector '%s'", conf_type_str, selector)
 
-        configs = self.cluster.get_config(selector, conf_type)
+        configs = self.cluster_handler.get_config(selector, conf_type)
         generated_config_files = []
         for host, conf in configs.items():
             config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name)
@@ -477,38 +476,16 @@ class OutputFileWriter:
         self._generated_files.verify(app_failed=app_failed)
 
     def save_app_logs_from_cluster(self, app_id):
-        LOG.info("Saving application logs from cluster...")
-        if app_id == APP_ID_NOT_AVAILABLE:
-            return
-
         try:
-            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id,
-                                                               workdir=self.current_tc_dir,
-                                                               compress_dir=True)
-            files = []
-            for cmd in cmds:
-                cmd.run()
-                files.append(cmd.dest)
-            self._generated_files.register_files(OutputFileType.APP_LOG_TAR_GZ, files)
+            files = self.cluster_handler.save_app_logs_from_cluster(app_id, self.current_tc_dir, self.save_yarn_daemon_logs_callback)
+            if files:
+                self._generated_files.register_files(OutputFileType.APP_LOG_TAR_GZ, files)
         except HadesException as he:
-            LOG.exception("Error while creating targz files of application logs!")
-            if "Failed to compress app logs" in str(he):
-                self.save_yarn_daemon_logs()
-            else:
-                raise he
+            self.write_node_health_reports(self.cluster_handler.get_state_and_health_report())
+            raise he
+        self.write_node_health_reports(self.cluster_handler.get_state_and_health_report())
 
-        self.write_node_health_reports(self.cluster.get_state_and_health_report())
-
-    def save_yarn_daemon_logs(self):
-        nm_cmds = self.cluster.compress_and_download_daemon_logs(NODEMANAGER_SELECTOR,
-                                                                 workdir=self.current_tc_dir)
-        rm_cmds = self.cluster.compress_and_download_daemon_logs(RESOURCEMANAGER_SELECTOR,
-                                                                 workdir=self.current_tc_dir)
-        cmds = nm_cmds + rm_cmds
-        files = []
-        for cmd in cmds:
-            cmd.run()
-            files.append(cmd.dest)
+    def save_yarn_daemon_logs_callback(self, files):
         self._generated_files.register_files(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ, files)
 
     def write_yarn_app_logs(self, app_name, app_command, app_log_lines):
@@ -1005,7 +982,7 @@ class Netty4RegressionTestSteps:
         self.context = context
         LOG.info("Starting: %s", self.context)
         PrintUtils.print_banner_figlet(f"STARTING CONTEXT: {self.context}")
-        self.output_file_writer = OutputFileWriter(self.cluster)
+        self.output_file_writer = OutputFileWriter(self.cluster_handler)
         self.compiler = Compiler(self.workdir, self.context, self.handler, self.config)
         return ExecutionState.RUNNING
 
@@ -1239,7 +1216,7 @@ class Netty4RegressionTestSteps:
             self.output_file_writer.save_app_logs_from_cluster(self.app_id)
         else:
             LOG.warning("Not saving app logs as last app failed, but saving YARN daemon logs!")
-        self.output_file_writer.save_yarn_daemon_logs()
+        self.cluster_handler.save_yarn_daemon_logs(self.output_file_writer.current_tc_dir, self.output_file_writer.save_yarn_daemon_logs_callback)
         self.output_file_writer.write_testcase_config_files()
         self.output_file_writer.verify(app_failed=app_failed)
 
@@ -1356,6 +1333,46 @@ class ClusterConfigUpdater:
 class ClusterHandler:
     def __init__(self, cluster):
         self.cluster = cluster
+
+    def get_state_and_health_report(self):
+        return self.cluster.get_state_and_health_report()
+
+    def get_config(self, selector, conf_type):
+        return self.cluster.get_config(selector, conf_type)
+
+    def save_app_logs_from_cluster(self, app_id, current_tc_dir, failed_to_compress_callback_fun):
+        LOG.info("Saving application logs from cluster...")
+        if app_id == APP_ID_NOT_AVAILABLE:
+            return
+
+        try:
+            cmds = self.cluster.compress_and_download_app_logs(NODEMANAGER_SELECTOR, app_id,
+                                                               workdir=current_tc_dir,
+                                                               compress_dir=True)
+            files = []
+            for cmd in cmds:
+                cmd.run()
+                files.append(cmd.dest)
+            return files
+        except HadesException as he:
+            LOG.exception("Error while creating targz files of application logs!")
+            if "Failed to compress app logs" in str(he):
+                self.save_yarn_daemon_logs(current_tc_dir, failed_to_compress_callback_fun)
+                return []
+            else:
+                raise he
+
+    def save_yarn_daemon_logs(self, current_tc_dir, callback):
+        nm_cmds = self.cluster.compress_and_download_daemon_logs(NODEMANAGER_SELECTOR,
+                                                                 workdir=current_tc_dir)
+        rm_cmds = self.cluster.compress_and_download_daemon_logs(RESOURCEMANAGER_SELECTOR,
+                                                                 workdir=current_tc_dir)
+        cmds = nm_cmds + rm_cmds
+        files = []
+        for cmd in cmds:
+            cmd.run()
+            files.append(cmd.dest)
+        callback(files)
 
     def read_logs_into_dict(self, logs_by_roles: LogsByRoles):
         LOG.debug("Reading YARN logs from cluster...")
