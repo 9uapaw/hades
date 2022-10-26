@@ -274,6 +274,13 @@ class Netty4TestcasesBuilder:
 
 
 @dataclass
+class LogLevelSpec:
+    selector: str
+    package: str
+    log_level: str
+
+
+@dataclass
 class Netty4Testcase:
     simple_name: str
     name: str
@@ -985,6 +992,7 @@ class Netty4RegressionTestSteps:
         self.handler = handler
         self.cluster_handler = ClusterHandler(test.cluster)
         self.cluster_config_updater = ClusterConfigUpdater(test.cluster, test.session_dir)
+        # TODO Move all logic to ClusterHandler --> Remove field cluster
         self.cluster = test.cluster
         self.config = test.config
         self.workdir = test.workdir
@@ -1129,24 +1137,10 @@ class Netty4RegressionTestSteps:
             self._set_log_levels_via_daemonlog()
 
     def _set_log_levels_via_daemonlog(self):
-        cmds1: List[RunnableCommand] = self.cluster.set_log_level(
-            selector=YARN_SELECTOR,
-            package=PACKAGE_SHUFFLEHANDLER,
-            log_level=self.config.shufflehandler_log_level)
-        # TODO Move this elsewhere
-        cmds2: List[RunnableCommand] = self.cluster.set_log_level(
-            selector=YARN_SELECTOR,
-            package=PACKAGE_SECURITY_SSL,
-            log_level=HadoopLogLevel.DEBUG)
-        set_log_level_cmds = cmds1 + cmds2
-        LOG.debug("YARN set log level commands: %s", set_log_level_cmds)
-        if not cmds1:
-            raise HadesException("No 'set ShuffleHandler loglevel' commands were created!")
-        if not cmds2:
-            raise HadesException("No 'set org.apache.hadoop.security.ssl loglevel' commands were created!")
-        for cmd in set_log_level_cmds:
-            LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
-            cmd.run()
+        self.cluster_handler.set_log_levels_via_daemonlog([
+            LogLevelSpec(YARN_SELECTOR, PACKAGE_SHUFFLEHANDLER, self.config.shufflehandler_log_level),
+            LogLevelSpec(YARN_SELECTOR, PACKAGE_SECURITY_SSL, HadoopLogLevel.DEBUG.value)
+        ])
 
     def verify_log_levels(self, levels: List[Tuple[str, HadoopLogLevel]]):
         levels_dict = {tup[0]: tup[1] for tup in levels}
@@ -1430,6 +1424,24 @@ class ClusterHandler:
                         raise HadesException("Invalid config value found for NM on host '{}'. "
                                              "Config name: {}, Expected value: {}, Actual value: {}"
                                              .format(host, conf_name, exp_value, act_val))
+
+    def set_log_levels_via_daemonlog(self, log_level_specs: List[LogLevelSpec]):
+        set_log_level_cmds = []
+        for spec in log_level_specs:
+            set_log_level_cmds.append(
+                self.cluster.set_log_level(
+                    selector=spec.selector,
+                    package=spec.package,
+                    log_level=spec.log_level)
+            )
+        LOG.debug("YARN set log level commands: %s", set_log_level_cmds)
+
+        if len(log_level_specs) != len(set_log_level_cmds):
+            raise HadesException("Not all 'set loglevel' commands were created!")
+
+        for cmd in set_log_level_cmds:
+            LOG.debug("Running command '%s' in async mode on host '%s'", cmd.cmd, cmd.target.host)
+            cmd.run()
 
 
 class Netty4RegressionTestDriver(HadesScriptBase):
