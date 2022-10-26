@@ -148,7 +148,6 @@ SSL_CLIENT_KEYSTORE_TYPE_KEY = "ssl.client.keystore.type"
 SSL_CLIENT_KEYSTORE_LOCATION_KEY = "ssl.client.keystore.location"
 SSL_CLIENT_KEYSTORE_PASSWORD_KEY = "ssl.client.keystore.password"
 
-
 SSL_SERVER_TRUSTSTORE_TYPE_KEY = "ssl.server.truststore.type"
 SSL_SERVER_TRUSTSTORE_LOCATION_KEY = "ssl.server.truststore.location"
 SSL_SERVER_TRUSTSTORE_PASSWORD_KEY = "ssl.server.truststore.password"
@@ -235,6 +234,7 @@ def _callback(cmd: RunnableCommand, logs_dict: Dict[RunnableCommand, List[str]])
             logs_dict[cmd] = []
         logs_dict[cmd].append(YARN_LOG_FORMAT.format(name=cmd.target.host, log=line))
         # LOG.debug("****logs_dict: %s", logs_dict)
+
     return _cb
 
 
@@ -277,7 +277,8 @@ class Netty4TestcasesBuilder:
                 conf_changes[conf_name] = conf_value
                 tc_counter += 1
             for app_type in self.apps:
-                testcases.append(Netty4Testcase(self.name, self._generate_tc_name(tc_counter, app_type), conf_changes, config.mr_apps[app_type]))
+                testcases.append(Netty4Testcase(self.name, self._generate_tc_name(tc_counter, app_type), conf_changes,
+                                                config.mr_apps[app_type]))
         return testcases
 
     def _generate_tc_name(self, tc_counter, app_type: MapReduceAppType):
@@ -572,7 +573,8 @@ class LogsByRoles:
 
     def search_in_logs(self, verification: LogVerification):
         LOG.info("Searching in logs, verification: %s", verification)
-        filtered_roles = list(filter(lambda rc: rc.target.role_type in [verification.role_type], list(self.log_lines_dict.keys())))
+        filtered_roles = list(
+            filter(lambda rc: rc.target.role_type in [verification.role_type], list(self.log_lines_dict.keys())))
 
         valid = True if verification.inverted_mode else False
         bad_role = None
@@ -581,13 +583,13 @@ class LogsByRoles:
                 if verification.text in line:
                     if verification.inverted_mode:
                         LOG.info("Verification became invalid. Text: %s, Line: %s, Role: %s, Verification object: %s",
-                                  verification.text, line, role, verification)
+                                 verification.text, line, role, verification)
                         valid = False
                         bad_role = role
                         break
                     else:
                         LOG.info("Verification became valid. Text: %s, Line: %s, Role: %s, Verification object: %s",
-                                  verification.text, line, role, verification)
+                                 verification.text, line, role, verification)
                         valid = True
                         break
 
@@ -699,18 +701,22 @@ class Netty4TestConfig:
         self.contexts = []
         if self.run_without_patch:
             self.contexts.append(Netty4TestContext("without netty patch on trunk",
-                                           DEFAULT_BRANCH,
-                                           log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=True)],
-                                           compile=self.enable_compilation or self.force_compile,
-                                           allow_verification_failure=self.allow_verification_failure))
+                                                   DEFAULT_BRANCH,
+                                                   log_verifications=[
+                                                       LogVerification(HadoopRoleType.NM, netty_log_message,
+                                                                       inverted_mode=True)],
+                                                   compile=self.enable_compilation or self.force_compile,
+                                                   allow_verification_failure=self.allow_verification_failure))
         if self.run_with_patch:
             self.contexts.append(Netty4TestContext("with netty patch based on trunk",
-                                           DEFAULT_BRANCH,
-                                           patch_file=patch,
-                                           log_verifications=[LogVerification(HadoopRoleType.NM, netty_log_message, inverted_mode=False)],
-                                           compile=self.enable_compilation or self.force_compile,
-                                           allow_verification_failure=self.allow_verification_failure
-                                           ))
+                                                   DEFAULT_BRANCH,
+                                                   patch_file=patch,
+                                                   log_verifications=[
+                                                       LogVerification(HadoopRoleType.NM, netty_log_message,
+                                                                       inverted_mode=False)],
+                                                   compile=self.enable_compilation or self.force_compile,
+                                                   allow_verification_failure=self.allow_verification_failure
+                                                   ))
 
         self.testcases = [
             *Netty4TestcasesBuilder("shuffle_max_connections")
@@ -885,8 +891,10 @@ class GeneratedOutputFiles:
         if app_failed and not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ):
             raise HadesException("App failed. Expected non-empty daemon logs for YARN processes!")
 
-        if not app_failed and (not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ) or not self.get(OutputFileType.APP_LOG_TAR_GZ)):
-            raise HadesException("App not failed. Expected non-empty daemon logs for YARN processes and app log tar files list!")
+        if not app_failed and (
+                not self.get(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ) or not self.get(OutputFileType.APP_LOG_TAR_GZ)):
+            raise HadesException(
+                "App not failed. Expected non-empty daemon logs for YARN processes and app log tar files list!")
 
 
 @dataclass
@@ -924,7 +932,8 @@ class Compiler:
 
             if compilation_required:
                 LOG.info("[%s] Starting compilation...", self.context)
-                changed_modules: Dict[str, str] = self.handler.compile(all=True, changed=False, deploy=True, modules=None, no_copy=True, single=None)
+                changed_modules: Dict[str, str] = self.handler.compile(all=True, changed=False, deploy=True,
+                                                                       modules=None, no_copy=True, single=None)
                 self.save_to_cache(branch, patch_file, changed_modules)
 
     @staticmethod
@@ -937,7 +946,8 @@ class Compiler:
         cache_paths = {}
         for module_name, module_path in changed_jars.items():
             jar_path = module_path.replace(self.handler.ctx.config.hadoop_path, "").lstrip(os.sep)
-            cache_paths[module_name] = os.path.join(self.workdir, "jarcache", self._make_key(branch, patch_file), jar_path)
+            cache_paths[module_name] = os.path.join(self.workdir, "jarcache", self._make_key(branch, patch_file),
+                                                    jar_path)
         return cache_paths
 
     def load_from_cache(self, branch, patch_file, changed_jars):
@@ -1037,7 +1047,8 @@ class Netty4RegressionTestSteps:
                 invalid[k] = v
 
         if invalid:
-            raise HadesException("Invalid configuration entries found for '{}'. Entries: {}".format(config_file.config_type, invalid))
+            raise HadesException(
+                "Invalid configuration entries found for '{}'. Entries: {}".format(config_file.config_type, invalid))
 
     def _load_configs(self, log_msg, configs: Dict[str, str], config_file: HadoopConfigFile, selector: str,
                       allow_empty_configs: bool = False):
@@ -1098,7 +1109,8 @@ class Netty4RegressionTestSteps:
         self.tc = tc
         self.test_results.update_with_context_and_testcase(self.context, self.tc)
         self.output_file_writer.update_with_context_and_testcase(self.session_dir, self.context, self.tc)
-        LOG.info("[%s] [%d / %d] Running testcase: %s", self.context, self.output_file_writer.tc_no, self.no_of_testcases,
+        LOG.info("[%s] [%d / %d] Running testcase: %s", self.context, self.output_file_writer.tc_no,
+                 self.no_of_testcases,
                  self.tc)
         PrintUtils.print_banner_figlet(f"STARTING TESTCASE: {self.tc.name}")
 
@@ -1178,7 +1190,8 @@ class Netty4RegressionTestSteps:
                 regex = "Effective Level: (.*)"
                 result = re.findall(f".*{regex}", stdout)
                 if len(result) != 1:
-                    raise HadesException(f"Unexpected loglevel output, cannot find regex \"{regex}\"! Command: {cmd.cmd}, Output: {stdout}, Host: {cmd.target.host}")
+                    raise HadesException(
+                        f"Unexpected loglevel output, cannot find regex \"{regex}\"! Command: {cmd.cmd}, Output: {stdout}, Host: {cmd.target.host}")
                 effective_level = result[0]
                 if effective_level != levels_dict[package].value:
                     if cmd.target.host not in bad_log_levels:
@@ -1203,7 +1216,8 @@ class Netty4RegressionTestSteps:
 
         LOG.debug("Running app command '%s' in async mode on host '%s'", app_command.cmd, app_command.target.host)
         try:
-            app_command.run_async(block=True, stderr=lambda line: app_log_lines.append(line), timeout=app.get_timeout_seconds())
+            app_command.run_async(block=True, stderr=lambda line: app_log_lines.append(line),
+                                  timeout=app.get_timeout_seconds())
         except HadesCommandTimedOutException:
             LOG.exception("Failed to run app command '%s'. Command '%s' timed out after %d seconds",
                           app_command.cmd, app_command, app.get_timeout_seconds())
@@ -1247,7 +1261,8 @@ class Netty4RegressionTestSteps:
                     self.yarn_logs.search_in_logs(verification)
             except HadesException as e:
                 if self.context.allow_verification_failure:
-                    LOG.exception("Verification failed: %s, but allow verification failure is set to True!", verification)
+                    LOG.exception("Verification failed: %s, but allow verification failure is set to True!",
+                                  verification)
                 else:
                     raise e
         else:
@@ -1289,7 +1304,8 @@ class Netty4RegressionTestSteps:
 
     def compare_results(self):
         if self.config.testcase_limit < TC_LIMIT_UNLIMITED:
-            LOG.warning("Skipping comparison of testcase results as the testcase limit is set to: %s", self.config.testcase_limit)
+            LOG.warning("Skipping comparison of testcase results as the testcase limit is set to: %s",
+                        self.config.testcase_limit)
             return
         self.test_results.compare(self.config.contexts[0])
 
@@ -1344,23 +1360,25 @@ class ClusterConfigUpdater:
         # [ /tmp/hadoop-logs : used space above threshold of 90.0% ]
         CONF_DISK_MAX_UTILIZATION: CONF_DISK_MAX_UTILIZATION_VAL
     }
-    
+
     def __init__(self, cluster, workdir):
         self.cluster = cluster
         self.workdir = workdir
-    
+
     def load_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False):
         default_config = HadoopConfigBase.create(conf_file_type)
         for k, v in conf_dict.items():
             if isinstance(v, int):
                 v = str(v)
             default_config.extend_with_args({k: v})
-        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir, allow_empty=allow_empty)
+        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir,
+                                   allow_empty=allow_empty)
 
     def load_properties_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False):
         allowed_config_file_types = [HadoopConfigFile.LOG4J_PROPERTIES]
         if conf_file_type not in allowed_config_file_types:
-            raise HadesException("Config file type '{}' is not in allowed types: {}".format(conf_file_type, allowed_config_file_types))
+            raise HadesException(
+                "Config file type '{}' is not in allowed types: {}".format(conf_file_type, allowed_config_file_types))
 
         default_config = HadoopPropertiesConfig(conf_file_type)
         for k, v in conf_dict.items():
@@ -1368,9 +1386,10 @@ class ClusterConfigUpdater:
                 v = str(v)
             default_config.extend_with_args({k: v})
         # TODO
-        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir, allow_empty=allow_empty)
+        self.cluster.update_config(selector, default_config, no_backup=True, workdir=self.workdir,
+                                   allow_empty=allow_empty)
 
-        
+
 class ClusterHandler:
     def __init__(self, cluster):
         self.cluster = cluster
@@ -1395,14 +1414,18 @@ class ClusterHandler:
         same_pids = self._verify_if_pids_are_different(role_pids_after, role_pids_before)
 
         if same_pids:
-            LOG.warning("pids of NodeManagers are the same before and after restart: %s. Trying to kill the processes and start NodeManagers.", same_pids)
+            LOG.warning(
+                "pids of NodeManagers are the same before and after restart: %s. Trying to kill the processes and start NodeManagers.",
+                same_pids)
         self.cluster.force_restart_roles(NODEMANAGER_SELECTOR)
 
         # Check pids again
         role_pids_after = self.cluster.get_role_pids(NODEMANAGER_SELECTOR)
         same_pids = self._verify_if_pids_are_different(role_pids_after, role_pids_before)
         if same_pids:
-            raise HadesException("pids of NodeManagers are the same before and after restart (even after tried to kill them manually): {}".format(same_pids))
+            raise HadesException(
+                "pids of NodeManagers are the same before and after restart (even after tried to kill them manually): {}".format(
+                    same_pids))
 
     @staticmethod
     def _verify_if_pids_are_different(role_pids_after, role_pids_before):
@@ -1494,7 +1517,7 @@ class Netty4RegressionTestDriver(HadesScriptBase):
             self.steps.setup_branch_and_patch()
             self.steps.compile()
             self.steps.load_default_yarn_site_configs()
-            
+
             for idx, tc in enumerate(testcases):
                 exec_state = self.steps.init_testcase(tc)  # 1. Update context, TestResults
                 if exec_state == ExecutionState.HALTED:
@@ -1507,7 +1530,7 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                 self.steps.set_log_levels(permanent=True)  # 5. Set log level of ShuffleHandler to DEBUG
                 self.steps.restart_services_and_save_logs()  # 4. Restart NMs, Save logs
                 self.steps.verify_log_levels([(PACKAGE_SHUFFLEHANDLER, self.config.shufflehandler_log_level),
-                                        (PACKAGE_SECURITY_SSL, HadoopLogLevel.DEBUG)])
+                                              (PACKAGE_SECURITY_SSL, HadoopLogLevel.DEBUG)])
                 self.steps.verify_nm_configs({
                     HadoopConfigFile.YARN_SITE: [(CONF_DISK_MAX_UTILIZATION, CONF_DISK_MAX_UTILIZATION_VAL)],
                 })
