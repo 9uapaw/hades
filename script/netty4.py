@@ -81,8 +81,6 @@ class ConfigWithDefault(enum.Enum):
         self.default_val = default_val
 
 
-# KEYSTORE / TRUSTSTORE CONFIG KEYS WITH DEFAULTS
-
 STORE_TYPE_JKS = "jks"
 KEYSTORES_DIR = "/home/systest/keystores"
 COMMON_TRUSTSTORE_LOCATION = f"{KEYSTORES_DIR}/truststore.jks"
@@ -112,106 +110,104 @@ class SSLConfigWithDefault(enum.Enum):
     def __init__(self, conf_key, default_val):
         self.conf_key = conf_key
         self.default_val = default_val
+        
+        
+class ActualConfigs:
+    ssl = SSLConfigWithDefault
+    c = ConfigWithDefault
 
-# KEYSTORE / TRUSTSTORE CONFIG KEYS WITH DEFAULTS
+    @staticmethod
+    def make_ssl_conf_dict(confs: List[SSLConfigWithDefault]):
+        return {c.conf_key: c.default_val for c in confs}
 
+    @staticmethod
+    def make_conf_dict(confs_with_default_vals: List[ConfigWithDefault]):
+        return {c.conf_key: c.default_val for c in confs_with_default_vals}
 
+    @staticmethod
+    def get_store_type(conf: SSLConfigWithDefault):
+        return ActualConfigs.STORE_SETTINGS["types"][conf.conf_key]
 
+    @staticmethod
+    def get_store_password(conf: SSLConfigWithDefault):
+        return ActualConfigs.STORE_SETTINGS["passwords"][conf.conf_key]
 
-# GENERATED CONFIG DICT: MAPRED
-def make_conf_dict(confs_with_default_vals: List[ConfigWithDefault]):
-    return {c.conf_key: c.default_val for c in confs_with_default_vals}
+    @staticmethod
+    def get_store_location(conf: SSLConfigWithDefault):
+        return ActualConfigs.STORE_SETTINGS["locations"][conf.conf_key]
 
-DEFAULT_MAPRED_SITE_CONFIGS: Dict[str, str] = make_conf_dict(
-    [ConfigWithDefault.SHUFFLE_MANAGE_OS_CACHE,
-     ConfigWithDefault.SHUFFLE_READAHEAD_BYTES,
-     ConfigWithDefault.SHUFFLE_MAX_CONNECTIONS,
-     ConfigWithDefault.SHUFFLE_MAX_THREADS,
-     ConfigWithDefault.SHUFFLE_TRANSFER_BUFFER_SIZE,
-     ConfigWithDefault.SHUFFLE_TRANSFERTO_ALLOWED,
-     ConfigWithDefault.SHUFFLE_MAX_SESSION_OPEN_FILES,
-     ConfigWithDefault.SHUFFLE_LISTEN_QUEUE_SIZE,
-     ConfigWithDefault.SHUFFLE_PORT,
-     ConfigWithDefault.SHUFFLE_SSL_FILE_BUFFER_SIZE,
-     ConfigWithDefault.SHUFFLE_CONNECTION_KEEPALIVE_ENABLE,
-     ConfigWithDefault.SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT,
-     ConfigWithDefault.SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE,
-     ConfigWithDefault.SHUFFLE_SSL_ENABLED,
-     ConfigWithDefault.SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES,
-     ConfigWithDefault.SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL,
-     ConfigWithDefault.SHUFFLE_PATHCACHE_MAX_WEIGHT,
-     ConfigWithDefault.SHUFFLE_LOG_SEPARATE,
-     ConfigWithDefault.SHUFFLE_LOG_LIMIT_KB,
-     ConfigWithDefault.SHUFFLE_PATHCACHE_MAX_WEIGHT,
-     ConfigWithDefault.SHUFFLE_LOG_BACKUPS,
-     ]
-)
+    STORE_SETTINGS = {
+        "passwords": make_ssl_conf_dict([ssl.SERVER_KEYSTORE_PASSWORD,
+                                         ssl.SERVER_TRUSTSTORE_PASSWORD,
+                                         ssl.CLIENT_KEYSTORE_PASSWORD,
+                                         ssl.CLIENT_TRUSTSTORE_PASSWORD
+                                         ]),
+        "locations": make_ssl_conf_dict([
+            ssl.SERVER_KEYSTORE_LOCATION,
+            ssl.SERVER_TRUSTSTORE_LOCATION,
+            ssl.CLIENT_KEYSTORE_LOCATION,
+            ssl.CLIENT_TRUSTSTORE_LOCATION
+        ]),
+        "types": make_ssl_conf_dict([
+            ssl.SERVER_KEYSTORE_TYPE,
+            ssl.SERVER_TRUSTSTORE_TYPE,
+            ssl.CLIENT_KEYSTORE_TYPE,
+            ssl.CLIENT_TRUSTSTORE_TYPE,
+        ])
+    }
 
+    DEFAULT_MAPRED_SITE_CONFIGS: Dict[str, str] = make_conf_dict(
+        [c.SHUFFLE_MANAGE_OS_CACHE,
+         c.SHUFFLE_READAHEAD_BYTES,
+         c.SHUFFLE_MAX_CONNECTIONS,
+         c.SHUFFLE_MAX_THREADS,
+         c.SHUFFLE_TRANSFER_BUFFER_SIZE,
+         c.SHUFFLE_TRANSFERTO_ALLOWED,
+         c.SHUFFLE_MAX_SESSION_OPEN_FILES,
+         c.SHUFFLE_LISTEN_QUEUE_SIZE,
+         c.SHUFFLE_PORT,
+         c.SHUFFLE_SSL_FILE_BUFFER_SIZE,
+         c.SHUFFLE_CONNECTION_KEEPALIVE_ENABLE,
+         c.SHUFFLE_CONNECTION_KEEPALIVE_TIMEOUT,
+         c.SHUFFLE_MAPOUTPUT_INFO_META_CACHE_SIZE,
+         c.SHUFFLE_SSL_ENABLED,
+         c.SHUFFLE_PATHCACHE_EXPIRE_AFTER_ACCESS_MINUTES,
+         c.SHUFFLE_PATHCACHE_CONCURRENCY_LEVEL,
+         c.SHUFFLE_PATHCACHE_MAX_WEIGHT,
+         c.SHUFFLE_LOG_SEPARATE,
+         c.SHUFFLE_LOG_LIMIT_KB,
+         c.SHUFFLE_PATHCACHE_MAX_WEIGHT,
+         c.SHUFFLE_LOG_BACKUPS,
+         ]
+    )
 
-######
-def get_store_type(conf: SSLConfigWithDefault):
-    return STORE_SETTINGS["types"][conf.conf_key]
-
-
-def get_store_password(conf: SSLConfigWithDefault):
-    return STORE_SETTINGS["passwords"][conf.conf_key]
-
-
-def get_store_location(conf: SSLConfigWithDefault):
-    return STORE_SETTINGS["locations"][conf.conf_key]
-
-
-def make_ssl_conf_dict(confs: List[SSLConfigWithDefault]):
-    return {c.conf_key: c.default_val for c in confs}
-
-STORE_SETTINGS = {
-    "passwords": make_ssl_conf_dict([SSLConfigWithDefault.SERVER_KEYSTORE_PASSWORD,
-                                     SSLConfigWithDefault.SERVER_TRUSTSTORE_PASSWORD,
-                                     SSLConfigWithDefault.CLIENT_KEYSTORE_PASSWORD,
-                                     SSLConfigWithDefault.CLIENT_TRUSTSTORE_PASSWORD
-                                     ]),
-    "locations": make_ssl_conf_dict([
-        SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION,
-        SSLConfigWithDefault.SERVER_TRUSTSTORE_LOCATION,
-        SSLConfigWithDefault.CLIENT_KEYSTORE_LOCATION,
-        SSLConfigWithDefault.CLIENT_TRUSTSTORE_LOCATION
-    ]),
-    "types": make_ssl_conf_dict([
-        SSLConfigWithDefault.SERVER_KEYSTORE_TYPE,
-        SSLConfigWithDefault.SERVER_TRUSTSTORE_TYPE,
-        SSLConfigWithDefault.CLIENT_KEYSTORE_TYPE,
-        SSLConfigWithDefault.CLIENT_TRUSTSTORE_TYPE,
+    DEFAULT_CORE_SITE_CONFIGS = make_ssl_conf_dict([
+        ssl.HADOOP_REQUIRE_CLIENT_CERT,
+        ssl.HADOOP_HOSTNAME_VERIFIER,
+        ssl.HADOOP_SSL_KEYSTORES_FACTORY_CLASS,
+        ssl.HADOOP_SSL_SERVER_CONF,
+        ssl.HADOOP_SSL_CLIENT_CONF
     ])
-}
-
-DEFAULT_CORE_SITE_CONFIGS = make_ssl_conf_dict([
-    SSLConfigWithDefault.HADOOP_REQUIRE_CLIENT_CERT,
-    SSLConfigWithDefault.HADOOP_HOSTNAME_VERIFIER,
-    SSLConfigWithDefault.HADOOP_SSL_KEYSTORES_FACTORY_CLASS,
-    SSLConfigWithDefault.HADOOP_SSL_SERVER_CONF,
-    SSLConfigWithDefault.HADOOP_SSL_CLIENT_CONF
-])
-
-DEFAULT_SSL_SERVER_CONFIGS = {
-    SSLConfigWithDefault.SERVER_KEYSTORE_TYPE: get_store_type(SSLConfigWithDefault.SERVER_KEYSTORE_TYPE),
-    SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION: get_store_location(SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION),
-    SSLConfigWithDefault.SERVER_KEYSTORE_PASSWORD: get_store_password(SSLConfigWithDefault.SERVER_KEYSTORE_PASSWORD),
-    SSLConfigWithDefault.SERVER_TRUSTSTORE_TYPE: get_store_type(SSLConfigWithDefault.SERVER_TRUSTSTORE_TYPE),
-    SSLConfigWithDefault.SERVER_TRUSTSTORE_LOCATION: get_store_location(SSLConfigWithDefault.SERVER_TRUSTSTORE_LOCATION),
-    SSLConfigWithDefault.SERVER_TRUSTSTORE_PASSWORD: get_store_password(SSLConfigWithDefault.SERVER_TRUSTSTORE_PASSWORD),
-    "ssl.server.truststore.reload.interval": "10000"
-}
-
-DEFAULT_SSL_CLIENT_CONFIGS = {
-    SSLConfigWithDefault.CLIENT_KEYSTORE_TYPE: get_store_type(SSLConfigWithDefault.CLIENT_KEYSTORE_TYPE),
-    SSLConfigWithDefault.CLIENT_KEYSTORE_LOCATION: get_store_location(SSLConfigWithDefault.CLIENT_KEYSTORE_LOCATION),
-    SSLConfigWithDefault.CLIENT_KEYSTORE_PASSWORD: get_store_password(SSLConfigWithDefault.CLIENT_KEYSTORE_PASSWORD),
-    SSLConfigWithDefault.CLIENT_TRUSTSTORE_TYPE: get_store_type(SSLConfigWithDefault.CLIENT_TRUSTSTORE_TYPE),
-    SSLConfigWithDefault.CLIENT_TRUSTSTORE_LOCATION: get_store_location(SSLConfigWithDefault.CLIENT_TRUSTSTORE_LOCATION),
-    SSLConfigWithDefault.CLIENT_TRUSTSTORE_PASSWORD: get_store_password(SSLConfigWithDefault.CLIENT_TRUSTSTORE_PASSWORD),
-    "ssl.client.truststore.reload.interval": "10000"
-}
-# END OF KEYSTORE / TRUSTSTORE SETTINGS
+    
+    DEFAULT_SSL_SERVER_CONFIGS = {
+        ssl.SERVER_KEYSTORE_TYPE: get_store_type(ssl.SERVER_KEYSTORE_TYPE),
+        ssl.SERVER_KEYSTORE_LOCATION: get_store_location(ssl.SERVER_KEYSTORE_LOCATION),
+        ssl.SERVER_KEYSTORE_PASSWORD: get_store_password(ssl.SERVER_KEYSTORE_PASSWORD),
+        ssl.SERVER_TRUSTSTORE_TYPE: get_store_type(ssl.SERVER_TRUSTSTORE_TYPE),
+        ssl.SERVER_TRUSTSTORE_LOCATION: get_store_location(ssl.SERVER_TRUSTSTORE_LOCATION),
+        ssl.SERVER_TRUSTSTORE_PASSWORD: get_store_password(ssl.SERVER_TRUSTSTORE_PASSWORD),
+        "ssl.server.truststore.reload.interval": "10000"
+    }
+    
+    DEFAULT_SSL_CLIENT_CONFIGS = {
+        ssl.CLIENT_KEYSTORE_TYPE: get_store_type(ssl.CLIENT_KEYSTORE_TYPE),
+        ssl.CLIENT_KEYSTORE_LOCATION: get_store_location(ssl.CLIENT_KEYSTORE_LOCATION),
+        ssl.CLIENT_KEYSTORE_PASSWORD: get_store_password(ssl.CLIENT_KEYSTORE_PASSWORD),
+        ssl.CLIENT_TRUSTSTORE_TYPE: get_store_type(ssl.CLIENT_TRUSTSTORE_TYPE),
+        ssl.CLIENT_TRUSTSTORE_LOCATION: get_store_location(ssl.CLIENT_TRUSTSTORE_LOCATION),
+        ssl.CLIENT_TRUSTSTORE_PASSWORD: get_store_password(ssl.CLIENT_TRUSTSTORE_PASSWORD),
+        "ssl.client.truststore.reload.interval": "10000"
+    }
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
@@ -1058,7 +1054,7 @@ class Netty4RegressionTestSteps:
                            selector=NODEMANAGER_SELECTOR)
 
     def load_default_mapred_configs(self):
-        configs = dict(DEFAULT_MAPRED_SITE_CONFIGS)
+        configs = dict(ActualConfigs.DEFAULT_MAPRED_SITE_CONFIGS)
         if self.config.enable_ssl_debugging:
             configs["mapred.reduce.child.java.opts"] = "-Djavax.net.debug=all"
 
@@ -1069,20 +1065,20 @@ class Netty4RegressionTestSteps:
 
     def load_default_core_site_configs(self):
         self._load_configs(log_msg="Loading default core-site.xml configs for ResourceManager and NodeManagers...",
-                           configs=DEFAULT_CORE_SITE_CONFIGS,
+                           configs=ActualConfigs.DEFAULT_CORE_SITE_CONFIGS,
                            config_file=HadoopConfigFile.CORE_SITE,
                            selector=YARN_SELECTOR)
 
     def load_default_ssl_server_configs(self):
         self._load_configs(log_msg="Loading default ssl-server.xml configs for ResourceManager and NodeManagers...",
-                           configs=DEFAULT_SSL_SERVER_CONFIGS,
+                           configs=ActualConfigs.DEFAULT_SSL_SERVER_CONFIGS,
                            config_file=HadoopConfigFile.SSL_SERVER,
                            selector=YARN_SELECTOR,
                            allow_empty_configs=True)
 
     def load_default_ssl_client_configs(self):
         self._load_configs(log_msg="Loading default ssl-client.xml configs for ResourceManager and NodeManagers...",
-                           configs=DEFAULT_SSL_CLIENT_CONFIGS,
+                           configs=ActualConfigs.DEFAULT_SSL_CLIENT_CONFIGS,
                            config_file=HadoopConfigFile.SSL_CLIENT,
                            selector=YARN_SELECTOR,
                            allow_empty_configs=True)
@@ -1326,9 +1322,9 @@ class Netty4RegressionTestSteps:
     def _create_keystore_or_truststore(self, selector: str, conf: SSLConfigWithDefault, store_type: str):
         self.cluster.generate_keystore(selector,
                                        store_type,
-                                       password=get_store_password(conf.conf_key),
-                                       target_path=get_store_location(conf.conf_key),
-                                       type=get_store_type(conf.conf_key)
+                                       password=ActualConfigs.get_store_password(conf.conf_key),
+                                       target_path=ActualConfigs.get_store_location(conf.conf_key),
+                                       type=ActualConfigs.get_store_type(conf.conf_key)
                                        )
 
 
