@@ -138,17 +138,89 @@ DEFAULT_MAPRED_SITE_CONFIGS = {
     SHUFFLE_LOG_BACKUPS: SHUFFLE_LOG_BACKUPS_DEFAULT,
 }
 
+######### KEYSTORE / TRUSTSTORE SETTINGS
+KEYSTORES_DIR = "/home/systest/keystores"
+
+SSL_CLIENT_TRUSTSTORE_TYPE_KEY = "ssl.client.truststore.type"
+SSL_CLIENT_TRUSTSTORE_LOCATION_KEY = "ssl.client.truststore.location"
+SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY = "ssl.client.truststore.password"
+SSL_CLIENT_KEYSTORE_TYPE_KEY = "ssl.client.keystore.type"
+SSL_CLIENT_KEYSTORE_LOCATION_KEY = "ssl.client.keystore.location"
+SSL_CLIENT_KEYSTORE_PASSWORD_KEY = "ssl.client.keystore.password"
+
+
+SSL_SERVER_TRUSTSTORE_TYPE_KEY = "ssl.server.truststore.type"
+SSL_SERVER_TRUSTSTORE_LOCATION_KEY = "ssl.server.truststore.location"
+SSL_SERVER_TRUSTSTORE_PASSWORD_KEY = "ssl.server.truststore.password"
+SSL_SERVER_KEYSTORE_TYPE_KEY = "ssl.server.keystore.type"
+SSL_SERVER_KEYSTORE_LOCATION_KEY = "ssl.server.keystore.location"
+SSL_SERVER_KEYSTORE_PASSWORD_KEY = "ssl.server.keystore.password"
+
+STORE_TYPE_JKS = "jks"
+COMMON_TRUSTSTORE_LOCATION = f"{KEYSTORES_DIR}/truststore.jks"
+
+STORE_SETTINGS = {
+    "passwords": {
+        SSL_SERVER_KEYSTORE_PASSWORD_KEY: "ssl_server_ks_pass",
+        SSL_SERVER_TRUSTSTORE_PASSWORD_KEY: "ssl_server_ts_pass",
+        SSL_CLIENT_KEYSTORE_PASSWORD_KEY: "ssl_client_ks_pass",
+        SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY: "ssl_client_ts_pass",
+    },
+    "locations": {
+        SSL_SERVER_KEYSTORE_LOCATION_KEY: f"{KEYSTORES_DIR}/server-keystore.jks",
+        SSL_SERVER_TRUSTSTORE_LOCATION_KEY: COMMON_TRUSTSTORE_LOCATION,
+        SSL_CLIENT_KEYSTORE_LOCATION_KEY: f"{KEYSTORES_DIR}/client-keystore.jks",
+        SSL_CLIENT_TRUSTSTORE_LOCATION_KEY: COMMON_TRUSTSTORE_LOCATION
+    },
+    "types": {
+        SSL_SERVER_KEYSTORE_TYPE_KEY: STORE_TYPE_JKS,
+        SSL_SERVER_TRUSTSTORE_TYPE_KEY: STORE_TYPE_JKS,
+        SSL_CLIENT_KEYSTORE_TYPE_KEY: STORE_TYPE_JKS,
+        SSL_CLIENT_TRUSTSTORE_TYPE_KEY: STORE_TYPE_JKS
+    }
+}
+
+
+def store_types(key):
+    return STORE_SETTINGS["types"][key]
+
+
+def store_passwords(key):
+    return STORE_SETTINGS["passwords"][key]
+
+
+def store_locations(key):
+    return STORE_SETTINGS["locations"][key]
+
+
 DEFAULT_CORE_SITE_CONFIGS = {
     "hadoop.ssl.require.client.cert": "false",
+    "hadoop.ssl.hostname.verifier": "DEFAULT",
     "hadoop.ssl.keystores.factory.class": "org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory",
-    "hadoop.ssl.server.conf": "ssl-server.xml"
+    "hadoop.ssl.server.conf": "ssl-server.xml",
+    "hadoop.ssl.client.conf": "ssl-client.xml"
 }
 
 DEFAULT_SSL_SERVER_CONFIGS = {
-    "ssl.server.keystore.type": "jks",
-    "ssl.server.keystore.password": "abc123",
-    "ssl.server.keystore.location": "REPLACETHIS"
+    SSL_SERVER_KEYSTORE_TYPE_KEY: store_types(SSL_SERVER_KEYSTORE_TYPE_KEY),
+    SSL_SERVER_KEYSTORE_LOCATION_KEY: store_locations(SSL_SERVER_KEYSTORE_LOCATION_KEY),
+    SSL_SERVER_KEYSTORE_PASSWORD_KEY: store_passwords(SSL_SERVER_KEYSTORE_PASSWORD_KEY),
+    SSL_SERVER_TRUSTSTORE_TYPE_KEY: store_types(SSL_SERVER_TRUSTSTORE_TYPE_KEY),
+    SSL_SERVER_TRUSTSTORE_LOCATION_KEY: store_locations(SSL_SERVER_TRUSTSTORE_LOCATION_KEY),
+    SSL_SERVER_TRUSTSTORE_PASSWORD_KEY: store_passwords(SSL_SERVER_TRUSTSTORE_PASSWORD_KEY),
+    "ssl.server.truststore.reload.interval": "10000"
 }
+
+DEFAULT_SSL_CLIENT_CONFIGS = {
+    SSL_CLIENT_KEYSTORE_TYPE_KEY: store_types(SSL_CLIENT_KEYSTORE_TYPE_KEY),
+    SSL_CLIENT_KEYSTORE_LOCATION_KEY: store_locations(SSL_CLIENT_KEYSTORE_LOCATION_KEY),
+    SSL_CLIENT_KEYSTORE_PASSWORD_KEY: store_passwords(SSL_CLIENT_KEYSTORE_PASSWORD_KEY),
+    SSL_CLIENT_TRUSTSTORE_TYPE_KEY: store_types(SSL_CLIENT_TRUSTSTORE_TYPE_KEY),
+    SSL_CLIENT_TRUSTSTORE_LOCATION_KEY: store_locations(SSL_CLIENT_TRUSTSTORE_LOCATION_KEY),
+    SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY: store_passwords(SSL_CLIENT_TRUSTSTORE_PASSWORD_KEY),
+    "ssl.client.truststore.reload.interval": "10000"
+}
+######### END OF KEYSTORE / TRUSTSTORE SETTINGS
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
