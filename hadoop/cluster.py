@@ -22,6 +22,9 @@ from hadoop.yarn.rm_api import RmApi
 from hadoop_dir.module import HadoopDir
 from local_dir.local_files import LocalFiles
 
+KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH = "/home/systest/JavaKeyStore.java"
+KEY_STORE_GENERATOR_JAVA_COMPILED_CLASSES_DIR = "~systest/compiled_java/"
+
 logger = logging.getLogger(__name__)
 
 
@@ -223,13 +226,12 @@ class HadoopCluster:
 
     def generate_keystore(self, selector: str):
         java_key_store = LocalFiles.get_unique_file("JavaKeyStore.java")
-        java_key_store_cluster_path = "/home/systest/JavaKeyStore.java"
-        self.upload_file(selector, java_key_store, java_key_store_cluster_path)
-        self.compile_java_file(selector, java_key_store_cluster_path, "~systest/compiled_java/")
+        self.upload_file(selector, java_key_store, KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH)
+        self.compile_java_file(selector, KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH, KEY_STORE_GENERATOR_JAVA_COMPILED_CLASSES_DIR)
         keystore_files = self.execute_java(selector,
-                          classpath=".",
-                          working_dir="~systest/compiled_java",
-                          main_class="com.hades.keystore.JavaKeyStore")
+                                           classpath=".",
+                                           working_dir=KEY_STORE_GENERATOR_JAVA_COMPILED_CLASSES_DIR,
+                                           main_class="com.hades.keystore.JavaKeyStore")
 
         def all_same(items):
             return all(x == items[0] for x in items)
