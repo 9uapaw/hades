@@ -662,7 +662,7 @@ class Netty4TestConfig:
     loadgen_timeout = 1000
     run_without_patch = True
     run_with_patch = True
-
+    enable_ssl_debugging = True  # TODO implement SSL debugging
     # TODO add switch that simulates an intentional job failure?
 
     force_compile = False
@@ -868,6 +868,7 @@ class GeneratedOutputFiles:
 
     def verify(self, app_failed: bool = False):
         LOG.info("Verifying generated output files...")
+        # TODO Verify all members of OutputFileType in a generic way
         if not self.get(OutputFileType.TC_CONFIG_MR):
             raise HadesException("Expected non-empty testcase config mapred-site.xml files list!")
         if not self.get(OutputFileType.TC_CONFIG_YARN_SITE):
@@ -1000,7 +1001,6 @@ class Netty4RegressionTestSteps:
         self.tc = None
         self.compiler = None
         self.execution_state = ExecutionState.RUNNING
-        self.keystore_file_location = None
 
     def start_context(self, context):
         if self._should_halt():
