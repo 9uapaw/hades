@@ -623,7 +623,7 @@ class Netty4TestConfig:
     run_without_patch = True
     run_with_patch = True
     enable_ssl_debugging = True  # TODO implement SSL debugging
-    # TODO Implement switch that simulates an intentional job failure?
+    # TODO Implement switch that simulates an intentional job failure for given testcase names e.g. 'shuffle_ssl_enabled'
 
     force_compile = False
 

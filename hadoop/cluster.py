@@ -281,7 +281,7 @@ class HadoopCluster:
                           type: str,
                           target_path: str,
                           password: str):
-        # TODO Use store arguments
+        # TODO Use store arguments: store_type, type (?), target_path, password
         java_key_store = LocalFiles.get_unique_file("JavaKeyStore.java")
         self.upload_file(selector, java_key_store, KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH)
         self.compile_java_file(selector, KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH, KEY_STORE_GENERATOR_JAVA_COMPILED_CLASSES_DIR)
