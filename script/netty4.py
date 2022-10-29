@@ -85,6 +85,16 @@ KEYSTORES_DIR = "/home/systest/keystores"
 COMMON_TRUSTSTORE_LOCATION = f"{KEYSTORES_DIR}/truststore.jks"
 
 
+class SSLConfigParty(Enum):
+    CLIENT = "client"
+    SERVER = "server"
+
+
+class SSLConfigStoreType(Enum):
+    TRUSTSTORE = "truststore"
+    KEYSTORE = "keystore"
+
+
 class SSLConfigWithDefault(Enum):
     CLIENT_TRUSTSTORE_TYPE = ("ssl.client.truststore.type", STORE_TYPE_JKS)
     CLIENT_TRUSTSTORE_LOCATION = ("ssl.client.truststore.location", COMMON_TRUSTSTORE_LOCATION)
@@ -118,11 +128,23 @@ class ActualConfigs:
     def make_conf_dict(self, confs_with_default_vals: List[ConfigWithDefault]):
         return {c.conf_key: c.default_val for c in confs_with_default_vals}
 
+    def get_store_type_by_key(self, key: str):
+        key = f"{key}.type"
+        return self.STORE_SETTINGS["types"][key]
+
     def get_store_type(self, conf: SSLConfigWithDefault):
         return self.STORE_SETTINGS["types"][conf.conf_key]
 
+    def get_store_password_by_key(self, key: str):
+        key = f"{key}.password"
+        return self.STORE_SETTINGS["passwords"][key]
+
     def get_store_password(self, conf: SSLConfigWithDefault):
         return self.STORE_SETTINGS["passwords"][conf.conf_key]
+
+    def get_store_location_by_key(self, key: str):
+        key = f"{key}.location"
+        return self.STORE_SETTINGS["locations"][key]
 
     def get_store_location(self, conf: SSLConfigWithDefault):
         return self.STORE_SETTINGS["locations"][conf.conf_key]
@@ -1241,19 +1263,20 @@ class Netty4RegressionTestSteps:
         # https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/EncryptedShuffle.html
 
         # Use same truststore file for server and client
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigWithDefault.CLIENT_TRUSTSTORE_LOCATION, "truststore")
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigParty.CLIENT, SSLConfigStoreType.TRUSTSTORE)
 
         # Create separate keystore files for server and client
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigWithDefault.CLIENT_KEYSTORE_LOCATION, "keystore")
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION, "keystore")
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigParty.CLIENT, SSLConfigStoreType.KEYSTORE)
+        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigParty.SERVER, SSLConfigStoreType.KEYSTORE)
 
-    def _create_keystore_or_truststore(self, selector: str, conf: SSLConfigWithDefault, store_type: str):
+    def _create_keystore_or_truststore(self, selector: str, ssl_party: SSLConfigParty, ssl_store_type: SSLConfigStoreType):
         # TODO These queries might be wrong here: conf.conf_key is always *_LOCATION, but type, password & target_path are also being used
+        conf = f"ssl.{ssl_party.value}.{ssl_store_type.value}"
         self.cluster_handler.generate_keystore(selector,
-                                               store_type,
-                                               type=self.actual_configs.get_store_type(conf.conf_key),
-                                               password=self.actual_configs.get_store_password(conf.conf_key),
-                                               target_path=self.actual_configs.get_store_location(conf.conf_key),
+                                               store_type = ssl_store_type.value,
+                                               type=self.actual_configs.get_store_type_by_key(conf),
+                                               password=self.actual_configs.get_store_password_by_key(conf),
+                                               target_path=self.actual_configs.get_store_location_by_key(conf),
                                                )
 
 
