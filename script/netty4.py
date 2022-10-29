@@ -54,11 +54,11 @@ CONF_DISK_MAX_UTILIZATION = "yarn.nodemanager.disk-health-checker.max-disk-utili
 CONF_DISK_MAX_UTILIZATION_VAL = "99.5"
 
 
-class ConfigWithDefault(enum.Enum):
+class ConfigWithDefault(Enum):
     SHUFFLE_MANAGE_OS_CACHE = (MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache", "true")
     SHUFFLE_READAHEAD_BYTES = (MAPREDUCE_SHUFFLE_PREFIX + ".readahead.bytes", 4 * 1024 * 1024)
     SHUFFLE_MAX_CONNECTIONS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.connections", 0)
-    SHUFFLE_MAX_THREADS = (MAPREDUCE_SHUFFLE_PREFIX + "max.threads", 0)
+    SHUFFLE_MAX_THREADS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.threads", 0) # TODO this might be wrong
     SHUFFLE_TRANSFER_BUFFER_SIZE = (MAPREDUCE_SHUFFLE_PREFIX + ".transfer.buffer.size", 128 * 1024)
     SHUFFLE_TRANSFERTO_ALLOWED = (MAPREDUCE_SHUFFLE_PREFIX + ".transferTo.allowed", "true")
     SHUFFLE_MAX_SESSION_OPEN_FILES = (MAPREDUCE_SHUFFLE_PREFIX + ".max.session-open-files", 3)
@@ -86,7 +86,7 @@ KEYSTORES_DIR = "/home/systest/keystores"
 COMMON_TRUSTSTORE_LOCATION = f"{KEYSTORES_DIR}/truststore.jks"
 
 
-class SSLConfigWithDefault(enum.Enum):
+class SSLConfigWithDefault(Enum):
     CLIENT_TRUSTSTORE_TYPE = ("ssl.client.truststore.type", STORE_TYPE_JKS)
     CLIENT_TRUSTSTORE_LOCATION = ("ssl.client.truststore.location", COMMON_TRUSTSTORE_LOCATION)
     CLIENT_TRUSTSTORE_PASSWORD = ("ssl.client.truststore.password", "ssl_client_ts_pass")
@@ -101,8 +101,8 @@ class SSLConfigWithDefault(enum.Enum):
     SERVER_KEYSTORE_LOCATION = ("ssl.server.keystore.location", f"{KEYSTORES_DIR}/server-keystore.jks")
     SERVER_KEYSTORE_PASSWORD = ("ssl.server.keystore.password", "ssl_server_ks_pass")
 
-    HADOOP_REQUIRE_CLIENT_CERT = ("hadoop.ssl.require.client.cert", "false"),
-    HADOOP_HOSTNAME_VERIFIER = ("hadoop.ssl.hostname.verifier", "DEFAULT"),
+    HADOOP_REQUIRE_CLIENT_CERT = ("hadoop.ssl.require.client.cert", "false")
+    HADOOP_HOSTNAME_VERIFIER = ("hadoop.ssl.hostname.verifier", "DEFAULT")
     HADOOP_SSL_KEYSTORES_FACTORY_CLASS = ("hadoop.ssl.keystores.factory.class", "org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory")
     HADOOP_SSL_SERVER_CONF = ("hadoop.ssl.server.conf", "ssl-server.xml")
     HADOOP_SSL_CLIENT_CONF = ("hadoop.ssl.client.conf", "ssl-client.xml")
@@ -208,6 +208,7 @@ class ActualConfigs:
         ssl.CLIENT_TRUSTSTORE_PASSWORD: get_store_password(ssl.CLIENT_TRUSTSTORE_PASSWORD),
         "ssl.client.truststore.reload.interval": "10000"
     }
+
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
@@ -1241,7 +1242,6 @@ class Netty4RegressionTestSteps:
     def restart_services(self):
         self.cluster_handler.restart_roles()
 
-
     def setup_keystores_and_truststores(self):
         # https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/EncryptedShuffle.html
 
@@ -1253,6 +1253,7 @@ class Netty4RegressionTestSteps:
         self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigWithDefault.SERVER_KEYSTORE_LOCATION, "keystore")
 
     def _create_keystore_or_truststore(self, selector: str, conf: SSLConfigWithDefault, store_type: str):
+        # TODO These queries might be wrong here: conf.conf_key is always *_LOCATION, but type, password & target_path are also being used
         self.cluster_handler.generate_keystore(selector,
                                                store_type,
                                                type=ActualConfigs.get_store_type(conf.conf_key),
