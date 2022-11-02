@@ -70,7 +70,7 @@ class MainCommandHandler:
             raise HadesException("No executor is set. Set cluster config.")
 
         if path.exists(self.ctx.cluster_config_path):
-            logger.info("Cluster manifest already exists.")
+            logger.info("Cluster manifest already exists: %s", self.ctx.cluster_config_path)
             return
 
         cluster_config = self.executor.discover()
