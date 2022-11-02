@@ -89,5 +89,5 @@ class HadoopOperationExecutor(ABC):
     def compile_java(self, *args: 'HadoopRoleInstance', file_path, target_dir):
         pass
 
-    def execute_java(self, *args: 'HadoopRoleInstance', selector: str, classpath: str, working_dir: str, main_class: str):
+    def execute_java(self, *args: 'HadoopRoleInstance', classpath: str, working_dir: str, main_class: str, program_args: List[str]):
         pass

@@ -343,16 +343,17 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             compile = f"cd {target_dir} && javac -d . *.java"
             role.host.create_cmd(f"{copy_to_target_dir} && {compile}").run()
 
-    def execute_java(self, *args: 'HadoopRoleInstance', classpath: str, working_dir: str, main_class: str):
+    def execute_java(self, *args: 'HadoopRoleInstance', classpath: str, working_dir: str, main_class: str, program_args: List[str]):
         outputs = {}
         for role in args:
             logger.info("Executing Java main class '%s' (classpath: %s, working dir: %s) on host '%s'", main_class, classpath, working_dir, role.host)
-            cmd = f"cd {working_dir} && java -classpath {classpath} {main_class}"
+            args_str = " ".join(program_args)
+            cmd = f"cd {working_dir} && java -classpath {classpath} {main_class} {args_str}"
             cmd_obj = role.host.create_cmd(cmd)
             cmd_obj.run()
-            if len(cmd_obj.stdout) > 1:
-                raise HadesException("Expected a one-line stdout from command '{}'. Output was: {}".format(cmd, cmd_obj.stdout))
-            outputs[role.host] = cmd_obj.stdout[0]
+            if len(cmd_obj.stdout) != 2:
+                raise HadesException("Expected a 2-line stdout from command '{}'. Output was: {}".format(cmd, cmd_obj.stdout))
+            outputs[role.host] = cmd_obj.stdout[1]
         return outputs
 
     @staticmethod

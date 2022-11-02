@@ -281,14 +281,14 @@ class HadoopCluster:
                           type: str,
                           target_path: str,
                           password: str):
-        # TODO Use store arguments: store_type, type (?), target_path, password
         java_key_store = LocalFiles.get_unique_file("JavaKeyStore.java")
         self.upload_file(selector, java_key_store, KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH)
         self.compile_java_file(selector, KEY_STORE_GENERATOR_JAVA_CLUSTER_PATH, KEY_STORE_GENERATOR_JAVA_COMPILED_CLASSES_DIR)
         keystore_files = self.execute_java(selector,
                                            classpath=".",
                                            working_dir=KEY_STORE_GENERATOR_JAVA_COMPILED_CLASSES_DIR,
-                                           main_class="com.hades.keystore.JavaKeyStore")
+                                           main_class="com.hades.keystore.JavaKeyStore",
+                                           args=[type, target_path, password])
 
         def all_same(items):
             return all(x == items[0] for x in items)
@@ -306,6 +306,10 @@ class HadoopCluster:
         roles = self.select_roles(selector)
         return self._executor.compile_java(*roles, file_path=file_path, target_dir=target_dir)
 
-    def execute_java(self, selector: str, classpath: str, working_dir: str, main_class: str):
+    def execute_java(self, selector: str, classpath: str, working_dir: str, main_class: str, args: List[str] = []):
         roles = self.select_roles(selector)
-        return self._executor.execute_java(*roles, classpath=classpath, working_dir=working_dir, main_class=main_class)
+        return self._executor.execute_java(*roles,
+                                           classpath=classpath,
+                                           working_dir=working_dir,
+                                           main_class=main_class,
+                                           program_args=args)
