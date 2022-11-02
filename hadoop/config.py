@@ -156,10 +156,11 @@ class HadoopPropertiesConfig(HadoopConfigBase):
 
     @staticmethod
     def _read_file(f: str):
-        cfg = configparser.RawConfigParser(strict=False)
+        config_parser = configparser.RawConfigParser(strict=False)
+        config_parser.optionxform = str
         with open(f) as fp:
-            cfg.read_file(itertools.chain(['[global]'], fp), source=f)
-        return cfg
+            config_parser.read_file(itertools.chain(['[global]'], fp), source=f)
+        return config_parser
 
     def __iter__(self) -> Iterator[Tuple[str, str]]:
         if self._base_conf:
