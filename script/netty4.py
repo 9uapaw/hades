@@ -640,6 +640,7 @@ class Netty4TestConfig:
     enable_compilation = False if QUICK_MODE else True
     allow_verification_failure = True if QUICK_MODE else False
 
+    mr_app_debug = True
     extract_tar_files = True
     timeout = 120
     compress_tc_result = False
@@ -660,21 +661,23 @@ class Netty4TestConfig:
     force_compile = False
 
     def __post_init__(self):
-        sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout)
-        pi_job = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000', timeout=self.timeout)
+        sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout, debug=self.mr_app_debug)
+        pi_job = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000', timeout=self.timeout, debug=self.mr_app_debug)
         loadgen_job = MapReduceApp(MapReduceAppType.LOADGEN,
                                    cmd=f"loadgen -m {self.loadgen_no_mappers} -r {self.loadgen_no_reducers} "
                                        f"-outKey org.apache.hadoop.io.Text "
                                        f"-outValue org.apache.hadoop.io.Text",
-                                   timeout=self.loadgen_timeout)
+                                   timeout=self.loadgen_timeout,
+                                   debug=self.mr_app_debug)
 
         sort_input_dir = "/user/systest/sortInputDir"
         sort_output_dir = "/user/systest/sortOutputDir"
-        random_writer_job = MapReduceApp(MapReduceAppType.RANDOM_WRITER, cmd=f"randomwriter {sort_input_dir}")
+        random_writer_job = MapReduceApp(MapReduceAppType.RANDOM_WRITER, cmd=f"randomwriter {sort_input_dir}", debug=self.mr_app_debug)
         mapred_sort_job = MapReduceApp(MapReduceAppType.TEST_MAPRED_SORT,
                                        cmd=f"testmapredsort "
                                            f"-sortInput {sort_input_dir} "
-                                           f"-sortOutput {sort_output_dir}")
+                                           f"-sortOutput {sort_output_dir}",
+                                       debug=self.mr_app_debug)
 
         self.mr_apps: Dict[MapReduceAppType, MapReduceApp] = {
             MapReduceAppType.SLEEP: sleep_job,

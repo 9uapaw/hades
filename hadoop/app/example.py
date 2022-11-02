@@ -1,5 +1,6 @@
 import sys
 from enum import Enum
+
 this_module = sys.modules[__name__]
 
 
@@ -49,20 +50,36 @@ class MapReduceAppType(Enum):
 class MapReduceApp(ApplicationCommand):
     MAPREDUCE_JAR = "{path}/*hadoop-mapreduce-client-jobclient-*-tests.jar"
     YARN_CMD = "yarn jar {jar} {cmd}"
+    SLEEP_CMD = 'sleep {jvm_switches} -m 1 -r 1 -mt 1 -rt 1'
 
-    def __init__(self, mr_app_type: MapReduceAppType, path: str = None, cmd: str = None, queue: str = None, timeout: int = 99999999):
+    def __init__(self, mr_app_type: MapReduceAppType, path: str = None, cmd: str = None, queue: str = None, timeout: int = 99999999, debug: bool = False):
         super().__init__(path, queue)
         self.name = mr_app_type.value
-        self.cmd = cmd or 'sleep -m 1 -r 1 -mt 1 -rt 1'
+        self.cmd = self._determine_cmd(cmd)
         self.timeout = timeout
+        self.debug = debug
+
+    @staticmethod
+    def _determine_cmd(cmd):
+        if not cmd:
+            return MapReduceApp.SLEEP_CMD
+        split_cmd = cmd.split(" ")
+        cmd = split_cmd[0] + " {jvm_switches} " + " ".join(split_cmd[1:])
+        return cmd
 
     def build(self):
         prop = ""
         if self.queue:
             prop += f" -Dmapreduce.job.queuename={self.queue}"
-        cmd = self.YARN_CMD.format(jar=self.MAPREDUCE_JAR.format(path=self.path), cmd=self.cmd)
+        jvm_switches = ""
+        if self.debug:
+            jvm_switches = "-Dmapreduce.reduce.log.level=DEBUG "
+            jvm_switches += "-Dmapreduce.mapper.log.level=DEBUG "
+            jvm_switches += "-Dyarn.app.mapreduce.am.log.level=DEBUG "
+        self.cmd = self.cmd.format(jvm_switches=jvm_switches)
 
-        return cmd
+        final_cmd = self.YARN_CMD.format(jar=self.MAPREDUCE_JAR.format(path=self.path), cmd=self.cmd)
+        return final_cmd
 
     def get_timeout_seconds(self):
         return self.timeout
