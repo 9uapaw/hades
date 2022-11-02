@@ -1363,10 +1363,10 @@ class ClusterHandler:
         except HadesCommandTimedOutException:
             LOG.exception("Failed to run app command '%s'. Command '%s' timed out after %d seconds",
                           app_command.cmd, app_command, app.get_timeout_seconds())
-            return None, TestcaseResultType.TIMEOUT
+            return app_command, TestcaseResultType.TIMEOUT
         except CommandExecutionException:
             LOG.exception("Failed to run app command '%s'. Command '%s' failed.", app_command.cmd, app_command)
-            return None, TestcaseResultType.FAILED
+            return app_command, TestcaseResultType.FAILED
 
         return app_command, TestcaseResultType.PASSED
 
