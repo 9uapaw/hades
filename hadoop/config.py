@@ -10,6 +10,7 @@ from hadoop.hadoop_config import HadoopConfigFile, HadoopConfigFileType
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ElementTree, Element
 
+EXTENSION_SEPARATOR = "#EXTENSION\n"
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,8 @@ class HadoopConfigBase(ABC, Iterable):
             return HadoopXMLConfig(config, base_path)
         elif config.config_type == HadoopConfigFileType.PROPERTIES:
             return HadoopPropertiesConfig(config, base_path)
+        elif config.config_type == HadoopConfigFileType.SHELL:
+            return HadoopShellScriptConfig(config, base_path)
 
 
 class HadoopXMLConfig(HadoopConfigBase):
@@ -216,3 +219,53 @@ class HadoopPropertiesConfig(HadoopConfigBase):
 
     def to_dict(self) -> dict:
         return self._get_all_props_as_dict()
+
+
+class HadoopShellScriptConfig(HadoopConfigBase):
+    def __init__(self, file: HadoopConfigFile, base_path: str = None):
+        self._file = file
+        self._extension: List[str] = []
+        if base_path:
+            self._base_conf: List[str] = self._read_file(base_path)
+        else:
+            self._base_conf = None
+
+    @staticmethod
+    def _read_file(f: str):
+        with open(f) as file:
+            lines = [line.rstrip() for line in file]
+        return lines
+
+    def __iter__(self) -> Iterator[str]:
+        if self._base_conf:
+            return self._base_conf.__iter__()
+        else:
+            return self._extension.__iter__()
+
+    @property
+    def file(self) -> str:
+        return str(self._file.val)
+
+    def set_base_config(self, path: str):
+        self._base_conf = self._read_file(path)
+
+    def extend_with_args(self, args: Dict[str, str]):
+        for name, value in args.items():
+            self._extension.append(f"{name}={value}")
+
+    def merge(self):
+        if not self._base_conf:
+            raise HadesException("Can not merge without base config. Set base cconfig before calling merge.")
+        # Don't need to do anything fancy here, commit will handle it on its own
+
+    def commit(self):
+        with open(self._file.val, 'w') as configfile:
+            configfile.writelines("\n".join(self._base_conf))
+            configfile.write("\n\n" + EXTENSION_SEPARATOR)
+            configfile.writelines("\n".join(self._extension))
+
+    def to_str(self) -> str:
+        return "\n".join(self._base_conf) + EXTENSION_SEPARATOR + "\n".join(self._extension)
+
+    def to_dict(self) -> dict:
+        raise NotImplementedError("This is intentionally not implemented for this config type!")

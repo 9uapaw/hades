@@ -240,6 +240,10 @@ class ActualConfigs:
             "ssl.client.truststore.reload.interval": "10000"
         })
 
+        self.DEFAULT_YARN_ENV_SH_CONFIGS = {}
+        if config.enable_ssl_debugging:
+            self.DEFAULT_YARN_ENV_SH_CONFIGS["YARN_NODEMANAGER_OPTS"] = "-Djavax.net.debug=all"
+
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
@@ -1087,6 +1091,12 @@ class Netty4RegressionTestSteps:
                            selector=YARN_SELECTOR,
                            allow_empty_configs=True)
 
+    def load_default_yarn_env_sh_config(self):
+        self._load_configs(log_msg="Loading default yarn-env.sh configs for NodeManagers...",
+                           configs=self.actual_configs.DEFAULT_YARN_ENV_SH_CONFIGS,
+                           config_file=HadoopConfigFile.YARN_ENV_SH,
+                           selector=YARN_SELECTOR)
+
     def init_testcase(self, tc):
         if self._should_halt():
             self.execution_state = ExecutionState.HALTED
@@ -1110,6 +1120,7 @@ class Netty4RegressionTestSteps:
         self.load_default_core_site_configs()
         self.load_default_ssl_server_configs()
         self.load_default_ssl_client_configs()
+        self.load_default_yarn_env_sh_config()
         self.hadoop_config = HadoopConfigBase.create(HadoopConfigFile.MAPRED_SITE)
         self.output_file_writer.write_initial_config_files()
 
