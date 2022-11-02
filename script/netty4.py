@@ -6,7 +6,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, List, Dict, Tuple
+from typing import Callable, List, Dict, Tuple, Any
 
 from tabulate import tabulate
 
@@ -57,7 +57,7 @@ class ConfigWithDefault(Enum):
     SHUFFLE_MANAGE_OS_CACHE = (MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache", "true")
     SHUFFLE_READAHEAD_BYTES = (MAPREDUCE_SHUFFLE_PREFIX + ".readahead.bytes", 4 * 1024 * 1024)
     SHUFFLE_MAX_CONNECTIONS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.connections", 0)
-    SHUFFLE_MAX_THREADS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.threads", 0) # TODO this might be wrong
+    SHUFFLE_MAX_THREADS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.threads", 0)  # TODO this might be wrong
     SHUFFLE_TRANSFER_BUFFER_SIZE = (MAPREDUCE_SHUFFLE_PREFIX + ".transfer.buffer.size", 128 * 1024)
     SHUFFLE_TRANSFERTO_ALLOWED = (MAPREDUCE_SHUFFLE_PREFIX + ".transferTo.allowed", "true")
     SHUFFLE_MAX_SESSION_OPEN_FILES = (MAPREDUCE_SHUFFLE_PREFIX + ".max.session-open-files", 3)
@@ -122,10 +122,24 @@ class SSLConfigWithDefault(Enum):
         
         
 class ActualConfigs:
-    def make_ssl_conf_dict(self, confs: List[SSLConfigWithDefault]):
+    @staticmethod
+    def make_generic_conf_dict(confs: Dict[Any, str]):
+        result = {}
+        for k, v in confs.items():
+            if isinstance(k, SSLConfigWithDefault):
+                result[k.conf_key] = v
+            elif isinstance(k, str):
+                result[k] = v
+            else:
+                raise ValueError("Unexpected key. Type: {}, key: {}, value: {}".format(type(k), k, v))
+        return result
+
+    @staticmethod
+    def make_ssl_conf_dict(confs: List[SSLConfigWithDefault]):
         return {c.conf_key: c.default_val for c in confs}
 
-    def make_conf_dict(self, confs_with_default_vals: List[ConfigWithDefault]):
+    @staticmethod
+    def make_conf_dict(confs_with_default_vals: List[ConfigWithDefault]):
         return {c.conf_key: c.default_val for c in confs_with_default_vals}
 
     def get_store_type_by_key(self, key: str):
@@ -154,10 +168,10 @@ class ActualConfigs:
         c = ConfigWithDefault
         self.STORE_SETTINGS = {
             "passwords": self.make_ssl_conf_dict([ssl.SERVER_KEYSTORE_PASSWORD,
-                                               ssl.SERVER_TRUSTSTORE_PASSWORD,
-                                               ssl.CLIENT_KEYSTORE_PASSWORD,
-                                               ssl.CLIENT_TRUSTSTORE_PASSWORD
-                                               ]),
+                                                  ssl.SERVER_TRUSTSTORE_PASSWORD,
+                                                  ssl.CLIENT_KEYSTORE_PASSWORD,
+                                                  ssl.CLIENT_TRUSTSTORE_PASSWORD
+                                                  ]),
             "locations": self.make_ssl_conf_dict([
                 ssl.SERVER_KEYSTORE_LOCATION,
                 ssl.SERVER_TRUSTSTORE_LOCATION,
@@ -205,7 +219,7 @@ class ActualConfigs:
             ssl.HADOOP_SSL_CLIENT_CONF
         ])
 
-        self.DEFAULT_SSL_SERVER_CONFIGS = {
+        self.DEFAULT_SSL_SERVER_CONFIGS = self.make_generic_conf_dict({
             ssl.SERVER_KEYSTORE_TYPE: self.get_store_type(ssl.SERVER_KEYSTORE_TYPE),
             ssl.SERVER_KEYSTORE_LOCATION: self.get_store_location(ssl.SERVER_KEYSTORE_LOCATION),
             ssl.SERVER_KEYSTORE_PASSWORD: self.get_store_password(ssl.SERVER_KEYSTORE_PASSWORD),
@@ -213,9 +227,9 @@ class ActualConfigs:
             ssl.SERVER_TRUSTSTORE_LOCATION: self.get_store_location(ssl.SERVER_TRUSTSTORE_LOCATION),
             ssl.SERVER_TRUSTSTORE_PASSWORD: self.get_store_password(ssl.SERVER_TRUSTSTORE_PASSWORD),
             "ssl.server.truststore.reload.interval": "10000"
-        }
+        })
 
-        self.DEFAULT_SSL_CLIENT_CONFIGS = {
+        self.DEFAULT_SSL_CLIENT_CONFIGS = self.make_generic_conf_dict({
             ssl.CLIENT_KEYSTORE_TYPE: self.get_store_type(ssl.CLIENT_KEYSTORE_TYPE),
             ssl.CLIENT_KEYSTORE_LOCATION: self.get_store_location(ssl.CLIENT_KEYSTORE_LOCATION),
             ssl.CLIENT_KEYSTORE_PASSWORD: self.get_store_password(ssl.CLIENT_KEYSTORE_PASSWORD),
@@ -223,7 +237,7 @@ class ActualConfigs:
             ssl.CLIENT_TRUSTSTORE_LOCATION: self.get_store_location(ssl.CLIENT_TRUSTSTORE_LOCATION),
             ssl.CLIENT_TRUSTSTORE_PASSWORD: self.get_store_password(ssl.CLIENT_TRUSTSTORE_PASSWORD),
             "ssl.client.truststore.reload.interval": "10000"
-        }
+        })
 
 
 APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
@@ -386,7 +400,7 @@ class OutputFileWriter:
             conf_type_str = "initial"
         elif conf_dir == CONF_DIR_TC:
             conf_type_str = "testcase"
-        LOG.info("Writing initial %s files for selector '%s'", conf_type_str, selector)
+        LOG.info("Writing %s files for selector '%s'", conf_type_str, selector)
 
         configs = self.cluster_handler.get_config(selector, conf_type)
         generated_config_files = []
@@ -1270,10 +1284,10 @@ class Netty4RegressionTestSteps:
         self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigParty.SERVER, SSLConfigStoreType.KEYSTORE)
 
     def _create_keystore_or_truststore(self, selector: str, ssl_party: SSLConfigParty, ssl_store_type: SSLConfigStoreType):
-        # TODO These queries might be wrong here: conf.conf_key is always *_LOCATION, but type, password & target_path are also being used
+        LOG.info("Creating %s for %s", ssl_store_type.value, ssl_party.value)
         conf = f"ssl.{ssl_party.value}.{ssl_store_type.value}"
         self.cluster_handler.generate_keystore(selector,
-                                               store_type = ssl_store_type.value,
+                                               store_type=ssl_store_type.value,
                                                type=self.actual_configs.get_store_type_by_key(conf),
                                                password=self.actual_configs.get_store_password_by_key(conf),
                                                target_path=self.actual_configs.get_store_location_by_key(conf),
