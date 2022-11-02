@@ -156,21 +156,21 @@ class HadoopCluster:
         :return:
         """
 
-        handlers = []
         # Get pids before restart
-        role_pids_before = self.get_role_pids(selector)
+        role_pids_before: Dict[HadoopRoleInstance, int] = self.get_role_pids(selector)
 
         # Do restart
+        handlers = []
         for cmd in self.restart_roles(selector):
             handlers.append(cmd.run_async())
         for h in handlers:
             h.wait()
 
         # Get pids after restart
-        role_pids_after = self.get_role_pids(selector)
+        role_pids_after: Dict[HadoopRoleInstance, int] = self.get_role_pids(selector)
 
         # Compare pids
-        same_pids = self._verify_if_pids_are_different(role_pids_after, role_pids_before)
+        same_pids = self._verify_if_nm_pids_are_different(role_pids_before, role_pids_after)
 
         if same_pids:
             logger.warning(
@@ -178,21 +178,24 @@ class HadoopCluster:
                 same_pids)
         self.force_restart_roles(selector)
 
-        # Check pids once again (after force restart)
-        role_pids_after = self.get_role_pids(selector)
-        same_pids = self._verify_if_pids_are_different(role_pids_after, role_pids_before)
-        if same_pids:
-            raise HadesException(
-                "pids of NodeManagers are the same before and after restart (even after tried to kill them manually): {}".format(
-                    same_pids))
+            # Check pids once again (after force restart)
+            role_pids_after = self.get_role_pids(selector)
+            same_pids = self._verify_if_nm_pids_are_different(role_pids_before, role_pids_after)
+            if same_pids:
+                raise HadesException(
+                    "pids of NodeManagers are the same before and after restart (even after tried to force kill them): {}".format(
+                        same_pids))
 
     @staticmethod
-    def _verify_if_pids_are_different(role_pids_after, role_pids_before):
-        nm_hostnames = role_pids_before.keys()
-        same_pids = {}
-        for host in nm_hostnames:
-            if role_pids_before[host] == role_pids_after[host]:
-                same_pids[host] = role_pids_after[host]
+    def _verify_if_nm_pids_are_different(role_pids_before: Dict[HadoopRoleInstance, int], role_pids_after: Dict[HadoopRoleInstance, int]):
+        before = dict(filter(lambda item: item[0].role_type == HadoopRoleType.NM, role_pids_before.items()))
+        after = dict(filter(lambda item: item[0].role_type == HadoopRoleType.NM, role_pids_after.items()))
+
+        roles = before.keys()
+        same_pids: Dict[HadoopRoleInstance, int] = {}
+        for role in roles:
+            if before[role] == after[role]:
+                same_pids[role] = after[role]
         return same_pids
 
     def get_role_pids(self, selector: str):
