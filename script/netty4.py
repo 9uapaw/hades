@@ -124,7 +124,9 @@ class SSLConfigWithDefault(Enum):
         
 class ActualConfigs:
     @staticmethod
-    def make_generic_conf_dict(confs: Dict[Any, str]):
+    def make_generic_conf_dict(config: 'Netty4TestConfig', confs: Dict[Any, str]):
+        if config.generate_empty_ssl_configs:
+            return {}
         result = {}
         for k, v in confs.items():
             if isinstance(k, SSLConfigWithDefault):
@@ -164,7 +166,7 @@ class ActualConfigs:
     def get_store_location(self, conf: SSLConfigWithDefault):
         return self.STORE_SETTINGS["locations"][conf.conf_key]
 
-    def __init__(self):
+    def __init__(self, config: 'Netty4TestConfig'):
         ssl = SSLConfigWithDefault
         c = ConfigWithDefault
         self.STORE_SETTINGS = {
@@ -220,7 +222,7 @@ class ActualConfigs:
             ssl.HADOOP_SSL_CLIENT_CONF
         ])
 
-        self.DEFAULT_SSL_SERVER_CONFIGS = self.make_generic_conf_dict({
+        self.DEFAULT_SSL_SERVER_CONFIGS = self.make_generic_conf_dict(config, {
             ssl.SERVER_KEYSTORE_TYPE: self.get_store_type(ssl.SERVER_KEYSTORE_TYPE),
             ssl.SERVER_KEYSTORE_LOCATION: self.get_store_location(ssl.SERVER_KEYSTORE_LOCATION),
             ssl.SERVER_KEYSTORE_PASSWORD: self.get_store_password(ssl.SERVER_KEYSTORE_PASSWORD),
@@ -230,7 +232,7 @@ class ActualConfigs:
             "ssl.server.truststore.reload.interval": "10000"
         })
 
-        self.DEFAULT_SSL_CLIENT_CONFIGS = self.make_generic_conf_dict({
+        self.DEFAULT_SSL_CLIENT_CONFIGS = self.make_generic_conf_dict(config, {
             ssl.CLIENT_KEYSTORE_TYPE: self.get_store_type(ssl.CLIENT_KEYSTORE_TYPE),
             ssl.CLIENT_KEYSTORE_LOCATION: self.get_store_location(ssl.CLIENT_KEYSTORE_LOCATION),
             ssl.CLIENT_KEYSTORE_PASSWORD: self.get_store_password(ssl.CLIENT_KEYSTORE_PASSWORD),
@@ -519,6 +521,7 @@ class OutputFileWriter:
         except HadesException as he:
             self.write_node_health_reports(self.cluster_handler.get_state_and_health_report())
             raise he
+        # TODO Node health report contains only 1 line
         self.write_node_health_reports(self.cluster_handler.get_state_and_health_report())
 
     def save_yarn_daemon_logs_callback(self, files):
@@ -659,7 +662,8 @@ class Netty4TestConfig:
     loadgen_timeout = 1000
     run_without_patch = True
     run_with_patch = True
-    enable_ssl_debugging = True  # TODO implement SSL debugging
+    enable_ssl_debugging = True
+    generate_empty_ssl_configs = False
     # TODO Implement switch that simulates an intentional job failure for given testcase names e.g. 'shuffle_ssl_enabled'
 
     force_compile = False
@@ -1008,10 +1012,11 @@ class Netty4RegressionTestSteps:
         self.tc = None
         self.compiler = None
         self.execution_state = ExecutionState.RUNNING
-        self.actual_configs = ActualConfigs()
+        self.actual_configs = ActualConfigs(self.config)
 
     def start_context(self, context):
         if self._should_halt():
+            # TODO print 'timed out' if TIMEOUT
             LOG.info("Execution halted as last job failed!")
             self.execution_state = ExecutionState.HALTED
             return self.execution_state
