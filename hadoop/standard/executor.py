@@ -253,21 +253,21 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
     def get_role_pids(self, *args: 'HadoopRoleInstance'):
         result = {}
         for role in args:
-            pid = self._get_pid_by_role(role)
-            result[role.host.address] = pid
+            result[role] = self._get_pid_by_role(role)
         return result
 
     @staticmethod
     def _get_pid_by_role(role):
         try:
             out = role.host.create_cmd(f"jps | grep -i {role.role_type.value}").run()
+            first_line = out[0]
+            if len(first_line) > 1:
+                raise HadesException("Unexpected output from jps: '{}'. Full output: {}".format(first_line, out))
+            pid = first_line[0].split(" ")[0]
+            return pid
         except CommandExecutionException as e:
-            logger.exception("No '%s' process is running!")
-        first_line = out[0]
-        if len(first_line) > 1:
-            raise HadesException("Unexpected output from jps: '{}'. Full output: {}".format(first_line, out))
-        pid = first_line[0].split(" ")[0]
-        return pid
+            logger.exception("No %s process is running on host %s!", role.role_type.value, role.host)
+            return None
 
     def restart_cluster(self, cluster: str):
         pass
