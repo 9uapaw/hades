@@ -1121,7 +1121,7 @@ class Netty4RegressionTestSteps:
         LOG.debug("Setting ShuffleHandler log level to: %s", self.config.shufflehandler_log_level)
         if permanent:
             LOG.info("Loading default log4j.properties configs for NodeManagers...")
-            configs = {f"log4j.logger.{PACKAGE_SHUFFLEHANDLER}": HadoopLogLevel.DEBUG.value,
+            configs = {f"log4j.logger.{PACKAGE_SHUFFLEHANDLER}": self.config.shufflehandler_log_level.value,
                        f"log4j.logger.{PACKAGE_SECURITY_SSL}": HadoopLogLevel.DEBUG.value}
             self.cluster_config_updater.load_properties_configs(HadoopConfigFile.LOG4J_PROPERTIES,
                                                                 configs,
@@ -1132,7 +1132,7 @@ class Netty4RegressionTestSteps:
 
     def _set_log_levels_via_daemonlog(self):
         self.cluster_handler.set_log_levels_via_daemonlog([
-            LogLevelSpec(YARN_SELECTOR, PACKAGE_SHUFFLEHANDLER, self.config.shufflehandler_log_level),
+            LogLevelSpec(YARN_SELECTOR, PACKAGE_SHUFFLEHANDLER, self.config.shufflehandler_log_level.value),
             LogLevelSpec(YARN_SELECTOR, PACKAGE_SECURITY_SSL, HadoopLogLevel.DEBUG.value)
         ])
 
