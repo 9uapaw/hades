@@ -83,6 +83,7 @@ class ConfigWithDefault(Enum):
 STORE_TYPE_JKS = "jks"
 KEYSTORES_DIR = "/home/systest/keystores"
 COMMON_TRUSTSTORE_LOCATION = f"{KEYSTORES_DIR}/truststore.jks"
+COMMON_TRUSTSTORE_PASS = f"truststore_pass"
 
 
 class SSLConfigParty(Enum):
@@ -98,14 +99,14 @@ class SSLConfigStoreType(Enum):
 class SSLConfigWithDefault(Enum):
     CLIENT_TRUSTSTORE_TYPE = ("ssl.client.truststore.type", STORE_TYPE_JKS)
     CLIENT_TRUSTSTORE_LOCATION = ("ssl.client.truststore.location", COMMON_TRUSTSTORE_LOCATION)
-    CLIENT_TRUSTSTORE_PASSWORD = ("ssl.client.truststore.password", "ssl_client_ts_pass")
+    CLIENT_TRUSTSTORE_PASSWORD = ("ssl.client.truststore.password", COMMON_TRUSTSTORE_PASS)
     CLIENT_KEYSTORE_TYPE = ("ssl.client.keystore.type", STORE_TYPE_JKS)
     CLIENT_KEYSTORE_LOCATION = ("ssl.client.keystore.location", f"{KEYSTORES_DIR}/client-keystore.jks")
     CLIENT_KEYSTORE_PASSWORD = ("ssl.client.keystore.password", "ssl_client_ks_pass")
 
     SERVER_TRUSTSTORE_TYPE = ("ssl.server.truststore.type", STORE_TYPE_JKS)
     SERVER_TRUSTSTORE_LOCATION = ("ssl.server.truststore.location", COMMON_TRUSTSTORE_LOCATION)
-    SERVER_TRUSTSTORE_PASSWORD = ("ssl.server.truststore.password", "ssl_server_ts_pass")
+    SERVER_TRUSTSTORE_PASSWORD = ("ssl.server.truststore.password", COMMON_TRUSTSTORE_PASS)
     SERVER_KEYSTORE_TYPE = ("ssl.server.keystore.type", STORE_TYPE_JKS)
     SERVER_KEYSTORE_LOCATION = ("ssl.server.keystore.location", f"{KEYSTORES_DIR}/server-keystore.jks")
     SERVER_KEYSTORE_PASSWORD = ("ssl.server.keystore.password", "ssl_server_ks_pass")
