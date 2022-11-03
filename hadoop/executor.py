@@ -91,3 +91,21 @@ class HadoopOperationExecutor(ABC):
 
     def execute_java(self, *args: 'HadoopRoleInstance', classpath: str, working_dir: str, main_class: str, program_args: List[str]):
         pass
+
+    def generate_keypair(self, *args: 'HadoopRoleInstance', dname: str, keystore: str, store_pass: str, alias: str, extensions: List[str],
+                         key_alg="RSA",
+                         keysize=2048,
+                         validity=3650):
+        pass
+
+    def modify_file_permissions(self, *args: 'HadoopRoleInstance', file, owner_group: str, permission: int):
+        pass
+
+    def export_cert_from_keystore(self, *args: 'HadoopRoleInstance', dest_dir: str, dest_cert_ext: str, alias: str, keystore: str, store_pass: str):
+        pass
+
+    def scp_certs_from_other_hosts(self, *args: 'HadoopRoleInstance', src_dir: str, dest_dir: str, cert_ext: str, run_as_user: str = None):
+        pass
+
+    def import_certs(self, *args: 'HadoopRoleInstance', src_dir: str, filename_pattern: str, truststore: str, store_pass: str):
+        pass

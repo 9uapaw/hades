@@ -86,16 +86,6 @@ COMMON_TRUSTSTORE_LOCATION = f"{KEYSTORES_DIR}/truststore.jks"
 COMMON_TRUSTSTORE_PASS = f"truststore_pass"
 
 
-class SSLConfigParty(Enum):
-    CLIENT = "client"
-    SERVER = "server"
-
-
-class SSLConfigStoreType(Enum):
-    TRUSTSTORE = "truststore"
-    KEYSTORE = "keystore"
-
-
 class SSLConfigWithDefault(Enum):
     CLIENT_TRUSTSTORE_TYPE = ("ssl.client.truststore.type", STORE_TYPE_JKS)
     CLIENT_TRUSTSTORE_LOCATION = ("ssl.client.truststore.location", COMMON_TRUSTSTORE_LOCATION)
@@ -145,25 +135,25 @@ class ActualConfigs:
     def make_conf_dict(confs_with_default_vals: List[ConfigWithDefault]):
         return {c.conf_key: c.default_val for c in confs_with_default_vals}
 
-    def get_store_type_by_key(self, key: str):
+    def get_store_type_by_key(self, key: str) -> str:
         key = f"{key}.type"
         return self.STORE_SETTINGS["types"][key]
 
-    def get_store_type(self, conf: SSLConfigWithDefault):
+    def get_store_type(self, conf: SSLConfigWithDefault) -> str:
         return self.STORE_SETTINGS["types"][conf.conf_key]
 
-    def get_store_password_by_key(self, key: str):
+    def get_store_password_by_key(self, key: str) -> str:
         key = f"{key}.password"
         return self.STORE_SETTINGS["passwords"][key]
 
-    def get_store_password(self, conf: SSLConfigWithDefault):
+    def get_store_password(self, conf: SSLConfigWithDefault) -> str:
         return self.STORE_SETTINGS["passwords"][conf.conf_key]
 
-    def get_store_location_by_key(self, key: str):
+    def get_store_location_by_key(self, key: str) -> str:
         key = f"{key}.location"
         return self.STORE_SETTINGS["locations"][key]
 
-    def get_store_location(self, conf: SSLConfigWithDefault):
+    def get_store_location(self, conf: SSLConfigWithDefault) -> str:
         return self.STORE_SETTINGS["locations"][conf.conf_key]
 
     def __init__(self, config: 'Netty4TestConfig'):
@@ -1097,6 +1087,7 @@ class Netty4RegressionTestSteps:
                            allow_empty_configs=True)
 
     def load_default_yarn_env_sh_config(self):
+        # TODO In case of yarn_env.sh, the added variables are repeated over and over in the target file
         self._load_configs(log_msg="Loading default yarn-env.sh configs for NodeManagers...",
                            configs=self.actual_configs.DEFAULT_YARN_ENV_SH_CONFIGS,
                            config_file=HadoopConfigFile.YARN_ENV_SH,
@@ -1293,25 +1284,8 @@ class Netty4RegressionTestSteps:
     def restart_services(self):
         self.cluster_handler.restart_roles()
 
-    def setup_keystores_and_truststores(self):
-        # https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/EncryptedShuffle.html
-
-        # Use same truststore file for server and client
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigParty.CLIENT, SSLConfigStoreType.TRUSTSTORE)
-
-        # Create separate keystore files for server and client
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigParty.CLIENT, SSLConfigStoreType.KEYSTORE)
-        self._create_keystore_or_truststore(NODEMANAGER_SELECTOR, SSLConfigParty.SERVER, SSLConfigStoreType.KEYSTORE)
-
-    def _create_keystore_or_truststore(self, selector: str, ssl_party: SSLConfigParty, ssl_store_type: SSLConfigStoreType):
-        LOG.info("Creating %s for %s", ssl_store_type.value, ssl_party.value)
-        conf = f"ssl.{ssl_party.value}.{ssl_store_type.value}"
-        self.cluster_handler.generate_keystore(selector,
-                                               store_type=ssl_store_type.value,
-                                               type=self.actual_configs.get_store_type_by_key(conf),
-                                               password=self.actual_configs.get_store_password_by_key(conf),
-                                               target_path=self.actual_configs.get_store_location_by_key(conf),
-                                               )
+    def setup_ssl(self):
+        self.cluster_handler.setup_ssl(self.actual_configs)
 
 
 class ClusterConfigUpdater:
@@ -1362,13 +1336,8 @@ class ClusterHandler:
     def __init__(self, cluster):
         self.cluster = cluster
 
-    def generate_keystore(self,
-                          selector: str,
-                          store_type: str,
-                          type: str,
-                          target_path: str,
-                          password: str):
-        return self.cluster.generate_keystore(selector, store_type, type, target_path, password)
+    def setup_ssl(self, configs: ActualConfigs):
+        self.cluster.setup_ssl(NODEMANAGER_SELECTOR, configs)
 
     def run_app(self, app: 'ApplicationCommand', app_log_lines, selector: str = "") -> Tuple[RunnableCommand or None, TestcaseResultType]:
         app_command = self.cluster.run_app(app, selector)
@@ -1546,7 +1515,9 @@ class Netty4RegressionTestDriver(HadesScriptBase):
         self.steps = Netty4RegressionTestSteps(self, no_of_testcases, handler)
 
         # As a first step, set up SSL + Keystore - Required for testcase 'shuffle_ssl_enabled'
-        self.steps.setup_keystores_and_truststores()
+        # TODO Only add this if test is SSL-based?
+        # TODO Add switch: Only generate once between testcases, not generate at all
+        self.steps.setup_ssl()
 
         for context in self.config.contexts:
             exec_state = self.steps.start_context(context)
