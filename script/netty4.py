@@ -1115,9 +1115,14 @@ class Netty4RegressionTestSteps:
                            allow_empty_configs=True)
 
     def load_default_yarn_env_sh_config(self):
-        # TODO In case of yarn_env.sh, the added variables are repeated over and over in the target file
+        delete_configs = {}
+        if not self.config.enable_ssl_debugging:
+            # Delete this config if it's a remnant from a previous run to really switch off SSL debugging
+            delete_configs["YARN_NODEMANAGER_OPTS"] = "-Djavax.net.debug=all"
+
         self._load_configs(log_msg="Loading default yarn-env.sh configs for NodeManagers...",
                            configs=self.actual_configs.DEFAULT_YARN_ENV_SH_CONFIGS,
+                           delete_configs=delete_configs,
                            config_file=HadoopConfigFile.YARN_ENV_SH,
                            selector=YARN_SELECTOR)
 

@@ -242,7 +242,8 @@ class HadoopPropertiesConfig(HadoopConfigBase):
 class HadoopShellScriptConfig(HadoopConfigBase):
     def __init__(self, file: HadoopConfigFile, base_path: str = None):
         self._file = file
-        self._extension: List[str] = []
+        self._extension: Dict[str, str] = {}
+        self._removals: Dict[str, str] = {}
         if base_path:
             self._base_conf: List[str] = self._read_file(base_path)
         else:
@@ -268,8 +269,10 @@ class HadoopShellScriptConfig(HadoopConfigBase):
         self._base_conf = self._read_file(path)
 
     def extend_with_args(self, args: Dict[str, str]):
-        for name, value in args.items():
-            self._extension.append(f"{name}={value}")
+        self._extension.update(args)
+
+    def remove_confs(self, confs: Dict[str, str]):
+        self._removals = confs
 
     def merge(self):
         if not self._base_conf:
@@ -277,10 +280,24 @@ class HadoopShellScriptConfig(HadoopConfigBase):
         # Don't need to do anything fancy here, commit will handle it on its own
 
     def commit(self):
+        base_conf_set = set(self._base_conf)
+        removals = set([f"{k}={v}" for k, v in self._removals.items()])
+        extensions = set([f"{k}={v}" for k, v in self._extension.items()])
+
         with open(self._file.val, 'w') as configfile:
-            configfile.writelines("\n".join(self._base_conf))
-            configfile.write("\n\n" + EXTENSION_SEPARATOR)
-            configfile.writelines("\n".join(self._extension))
+            for line in self._base_conf:
+                if line not in removals:
+                    # Do not write line from base conf if we want to remove it from the file
+                    configfile.write(line + "\n")
+
+            # Do not write Separator if it's already in base conf
+            if EXTENSION_SEPARATOR not in base_conf_set:
+                configfile.write("\n\n" + EXTENSION_SEPARATOR)
+
+            for line in extensions:
+                # Do not write line again if it's already in base conf
+                if line not in base_conf_set:
+                    configfile.write(line + "\n")
 
     def to_str(self) -> str:
         return "\n".join(self._base_conf) + EXTENSION_SEPARATOR + "\n".join(self._extension)
