@@ -652,7 +652,7 @@ class Netty4TestConfig:
     loadgen_timeout = 1000
     run_without_patch = True
     run_with_patch = True
-    enable_ssl_debugging = True
+    enable_ssl_debugging = False
     generate_empty_ssl_configs = False
     # TODO Implement switch that simulates an intentional job failure for given testcase names e.g. 'shuffle_ssl_enabled'
 
