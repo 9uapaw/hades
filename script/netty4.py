@@ -254,11 +254,18 @@ def _callback(cmd: RunnableCommand, logs_dict: Dict[RunnableCommand, List[str]])
     return _cb
 
 
+class SSLSetupMode(Enum):
+    BETWEEN_EACH_TESTCASE = "between_each_testcase"
+    ONCE = "once"
+    SKIP = "skip"
+
+
 class Netty4TestcasesBuilder:
     def __init__(self, name):
         self.configs: Dict[str, List[str]] = {}
         self.name = name
         self.apps: List[MapReduceAppType] = []
+        self.ssl_based = False
 
     def with_config(self, conf_key: str, value: str):
         if conf_key not in self.configs:
@@ -275,6 +282,10 @@ class Netty4TestcasesBuilder:
 
     def with_apps(self, *apps):
         self.apps = list(*apps)
+        return self
+
+    def with_ssl_based(self, value: bool):
+        self.ssl_based = value
         return self
 
     def generate_testcases(self, config):
@@ -294,7 +305,8 @@ class Netty4TestcasesBuilder:
                 tc_counter += 1
             for app_type in self.apps:
                 testcases.append(Netty4Testcase(self.name, self._generate_tc_name(tc_counter, app_type), conf_changes,
-                                                config.mr_apps[app_type]))
+                                                config.mr_apps[app_type],
+                                                ssl_based=self.ssl_based))
         return testcases
 
     def _generate_tc_name(self, tc_counter, app_type: MapReduceAppType):
@@ -314,6 +326,7 @@ class Netty4Testcase:
     name: str
     config_changes: Dict[str, str]
     app: MapReduceApp
+    ssl_based: bool = False
 
     def __hash__(self):
         return hash(self.name)
@@ -615,6 +628,7 @@ class Netty4TestContext:
     invert_nm_log_msg_verification: str = None
     compile: bool = True
     allow_verification_failure: bool = False
+    ssl_setup_completed: bool = False
 
     def __str__(self):
         return f"Context: {self.name}"
@@ -638,7 +652,7 @@ class Netty4TestConfig:
     allow_verification_failure = True if QUICK_MODE else False
 
     mr_app_debug = True
-    extract_tar_files = True
+    extract_tar_files = True # TODO Unused, search for 'decompress' in this file
     timeout = 120
     compress_tc_result = False
     decompress_app_container_logs = True
@@ -654,6 +668,7 @@ class Netty4TestConfig:
     run_with_patch = True
     enable_ssl_debugging = False
     generate_empty_ssl_configs = False
+    ssl_setup_mode = SSLSetupMode.SKIP # TODO Turn it back on
     # TODO Implement switch that simulates an intentional job failure for given testcase names e.g. 'shuffle_ssl_enabled'
 
     force_compile = False
@@ -729,6 +744,7 @@ class Netty4TestConfig:
             *Netty4TestcasesBuilder("shuffle_ssl_enabled")
             .with_configs(ConfigWithDefault.SHUFFLE_SSL_ENABLED.conf_key, ["true"])
             .with_apps(self.default_apps)
+            .with_ssl_based(True)
             .generate_testcases(self),
             *Netty4TestcasesBuilder("keepalive")
             .with_config(ConfigWithDefault.SHUFFLE_CONNECTION_KEEPALIVE_ENABLE.conf_key, "true")
@@ -1284,8 +1300,21 @@ class Netty4RegressionTestSteps:
     def restart_services(self):
         self.cluster_handler.restart_roles()
 
-    def setup_ssl(self):
-        self.cluster_handler.setup_ssl(self.actual_configs)
+    def setup_ssl(self, tc):
+        # As a first step, set up SSL + Keystore - Required for testcase 'shuffle_ssl_enabled', for example
+        if not tc.ssl_based:
+            LOG.info("Testcase '%s' is not SSL-based, skipping setup...", tc.name)
+            return
+        if self.config.ssl_setup_mode == SSLSetupMode.SKIP:
+            LOG.warning("SSL setup mode set to %s, skipping setup...", self.config.ssl_setup_mode)
+            return
+        elif self.config.ssl_setup_mode == SSLSetupMode.ONCE and self.context.ssl_setup_completed:
+            LOG.warning("SSL setup mode set to %s, and SSL setup was completed before, skipping setup again...", self.config.ssl_setup_mode)
+            return
+        elif self.config.ssl_setup_mode in (SSLSetupMode.ONCE, SSLSetupMode.BETWEEN_EACH_TESTCASE):
+            # Setup SSL
+            self.cluster_handler.setup_ssl(self.actual_configs)
+            self.context.ssl_setup_completed = True
 
 
 class ClusterConfigUpdater:
@@ -1497,7 +1526,6 @@ class Netty4RegressionTestDriver(HadesScriptBase):
     def __init__(self, cluster: HadoopCluster, workdir: str, session_dir: str):
         super().__init__(cluster, workdir, session_dir)
         self.config = Netty4TestConfig()
-        self.context = None
         self.output_file_writer = None
 
     def run(self, handler: MainCommandHandler):
@@ -1514,11 +1542,6 @@ class Netty4RegressionTestDriver(HadesScriptBase):
         LOG.info("Will run %d testcases", no_of_testcases)
         self.steps = Netty4RegressionTestSteps(self, no_of_testcases, handler)
 
-        # As a first step, set up SSL + Keystore - Required for testcase 'shuffle_ssl_enabled'
-        # TODO Only add this if test is SSL-based?
-        # TODO Add switch: Only generate once between testcases, not generate at all
-        self.steps.setup_ssl()
-
         for context in self.config.contexts:
             exec_state = self.steps.start_context(context)
             if exec_state == ExecutionState.HALTED:
@@ -1534,6 +1557,7 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                     LOG.warning("Stopping test driver execution as execution state is HALTED!")
                     break
 
+                self.steps.setup_ssl(tc)
                 self.steps.restart_services()
                 self.steps.load_default_configs()  # 2. Load default configs / Write initial config files
                 self.steps.apply_testcase_configs()  # 3. Apply testcase configs
