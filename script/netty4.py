@@ -57,7 +57,7 @@ class ConfigWithDefault(Enum):
     SHUFFLE_MANAGE_OS_CACHE = (MAPREDUCE_SHUFFLE_PREFIX + ".manage.os.cache", "true")
     SHUFFLE_READAHEAD_BYTES = (MAPREDUCE_SHUFFLE_PREFIX + ".readahead.bytes", 4 * 1024 * 1024)
     SHUFFLE_MAX_CONNECTIONS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.connections", 0)
-    SHUFFLE_MAX_THREADS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.threads", 0)  # TODO this might be wrong
+    SHUFFLE_MAX_THREADS = (MAPREDUCE_SHUFFLE_PREFIX + ".max.threads", 0)
     SHUFFLE_TRANSFER_BUFFER_SIZE = (MAPREDUCE_SHUFFLE_PREFIX + ".transfer.buffer.size", 128 * 1024)
     SHUFFLE_TRANSFERTO_ALLOWED = (MAPREDUCE_SHUFFLE_PREFIX + ".transferTo.allowed", "true")
     SHUFFLE_MAX_SESSION_OPEN_FILES = (MAPREDUCE_SHUFFLE_PREFIX + ".max.session-open-files", 3)
@@ -644,7 +644,7 @@ class Netty4TestContext:
 
 @dataclass
 class Netty4TestConfig:
-    only_run_testcase = "shuffle_ssl_enabled"  # TODO Remove this when shuffle works with SSL
+    only_run_testcases = ["shuffle_ssl_enabled"]  # TODO Remove this when shuffle works with SSL
     LIMIT_TESTCASES = False
     QUICK_MODE = False
     testcase_limit = 1 if QUICK_MODE or LIMIT_TESTCASES else TC_LIMIT_UNLIMITED
@@ -753,16 +753,18 @@ class Netty4TestConfig:
             .generate_testcases(self)
         ]
 
-        if self.only_run_testcase:
-            tmp = []
+        if self.only_run_testcases:
+            filtered_testcases = []
             for tc in self.testcases:
-                if tc.simple_name == self.only_run_testcase:
-                    tmp.append(tc)
-            if not tmp:
-                raise HadesException("Cannot find any testcase matching name '{}'".format(self.only_run_testcase))
+                if tc.simple_name in self.only_run_testcases:
+                    filtered_testcases.append(tc)
 
-            self.testcases = tmp
-            LOG.info("Found testcases matching for name '%s': %s", self.only_run_testcase, self.testcases)
+            diff = set(self.only_run_testcases).difference(set([tc.simple_name for tc in self.testcases]))
+            if diff:
+                raise HadesException("Cannot find testcases for these specified testcases '{}'. All specified testcases: {}".format(diff, self.only_run_testcases))
+
+            LOG.info("Found testcases matching for names '%s': %s", self.only_run_testcases, filtered_testcases)
+            self.testcases = filtered_testcases
 
 
 class Netty4TestResults:
