@@ -241,7 +241,7 @@ APP_LOG_FILE_NAME_FORMAT = "app_{app}.log"
 YARN_LOG_FILE_NAME_FORMAT = "{host}_{role}_{app}.log"
 PREFIXED_YARN_LOG_FILE_NAME_FORMAT = "{prefix}_{host}_{role}.log"
 YARN_LOG_FORMAT = "{name} - {log}"
-CONF_FORMAT = "{host}_{conf}.xml"
+CONF_FORMAT = "{host}_{conf}"
 
 
 def _callback(cmd: RunnableCommand, logs_dict: Dict[RunnableCommand, List[str]]) -> Callable:
@@ -415,7 +415,9 @@ class OutputFileWriter:
         configs = self.cluster_handler.get_config(selector, conf_type)
         generated_config_files = []
         for host, conf in configs.items():
-            config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.name)
+            config_file_name = CONF_FORMAT.format(host=host, conf=conf_type.val)
+            if "." not in config_file_name:
+                raise ValueError("Invalid config file name: {}. File does not have extension!".format(config_file_name))
             if conf_dir:
                 dir_path = os.path.join(self.current_tc_dir, conf_dir)
                 if not os.path.exists(dir_path):
