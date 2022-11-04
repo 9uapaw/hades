@@ -109,3 +109,6 @@ class HadoopOperationExecutor(ABC):
 
     def import_certs(self, *args: 'HadoopRoleInstance', src_dir: str, filename_pattern: str, truststore: str, store_pass: str):
         pass
+
+    def cleanup_files(self, *args: 'HadoopRoleInstance', dirs: List[str], limit: int):
+        pass

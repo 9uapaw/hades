@@ -412,3 +412,8 @@ class HadoopCluster:
                                            working_dir=working_dir,
                                            main_class=main_class,
                                            program_args=args)
+
+    def cleanup_files(self, dirs: List[str], limit: int):
+        # TODO Must use YARN_SELECTOR
+        roles = self.select_roles("Yarn")
+        self._executor.cleanup_files(*roles, dirs=dirs, limit=limit)

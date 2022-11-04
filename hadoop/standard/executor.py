@@ -494,8 +494,11 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         StandardUpstreamExecutor._log_stderr(cmd)
 
     @staticmethod
-    def _log_stdout(cmd: RunnableCommand):
-        logger.debug("stdout: %s", pformat(cmd.stdout))
+    def _log_stdout(cmd: RunnableCommand, info=False):
+        if info:
+            logger.info(pformat(cmd.stdout))
+        else:
+            logger.debug("stdout: %s", pformat(cmd.stdout))
 
     @staticmethod
     def _log_stderr(cmd: RunnableCommand):
@@ -515,11 +518,46 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             "tar -cvf {fname} -C {parent_dir} {dir}".format(fname=targz_file_path, parent_dir=parent_dir, dir=f"./{logs_dir}"))
 
         try:
-            stdout, stderr = tar_cmd.run()
-            logger.debug("stdout: %s", stdout)
-            logger.debug("stderr: %s", stderr)
+            tar_cmd.run()
+            StandardUpstreamExecutor._log_all(tar_cmd)
         except CommandExecutionException as e:
             # If any of the tar commands fail, raise the Exception
             raise e
 
         return targz_file_path, targz_file_name
+
+    def cleanup_files(self, *args: 'HadoopRoleInstance', dirs: List[str], limit: int):
+        for role in args:
+            logger.info("Running cleanup on %s. Dirs: %s", role.host.address, dirs)
+            size_descriptor = f"{limit}M"
+
+            rm_cmd = "rm -rf "
+            for dir in dirs:
+                du_cmd = f"du -sh {dir}/* --block-size=1M | sort -rh"
+
+                logger.debug("Cleaning up files in %s:%s", role.host.address, dir)
+                show_large_files_cmd = role.host.create_cmd(du_cmd)
+                show_large_files_cmd.run()
+                StandardUpstreamExecutor._log_stdout(show_large_files_cmd, info=True)
+
+                rm_large_files_find_cmd = role.host.create_cmd(f"find {dir} -type f -size {size_descriptor} -maxdepth 1 2>/dev/null")
+                rm_large_files_find_cmd.run()
+
+                du_output, _ = role.host.create_cmd(du_cmd).run()
+
+                for line in du_output:
+                    split = line.split("\t")
+                    if len(split) != 2:
+                        raise ValueError("Unexpected output line of du command. Should have 2 parts: size and file name. "
+                                         "Actual line: '%s'", line)
+                    size = split[0]
+                    file = split[1]
+                    if int(size) >= limit:
+                        logger.info("Detected large file: %s\t%s", size, file)
+                        rm_cmd += f"{file} "
+
+            if rm_cmd != "rm -rf ":
+                response = input("Are you sure you want to execute command: {}:{} ? ".format(role.host.address, rm_cmd))
+                if response in ("y", "yes"):
+                    rm_cmd_obj = role.host.create_cmd(rm_cmd)
+                    rm_cmd_obj.run()

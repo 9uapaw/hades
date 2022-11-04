@@ -190,6 +190,10 @@ class MainCommandHandler:
     def mutate_yarn_config(self, config: str):
         self._create_cluster().get_rm_api().modify_config(config)
 
+    def cleanup_files(self, dirs: List[str], limit: int):
+        # Limit is in MBs
+        self._create_cluster().cleanup_files(dirs, limit)
+
     def role_action(self, selector: str, action: RoleAction):
         handlers = []
 
