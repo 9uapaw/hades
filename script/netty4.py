@@ -1059,14 +1059,19 @@ class Netty4RegressionTestSteps:
             raise HadesException(
                 "Invalid configuration entries found for '{}'. Entries: {}".format(config_file.config_type, invalid))
 
-    def _load_configs(self, log_msg, configs: Dict[str, str], config_file: HadoopConfigFile, selector: str,
-                      allow_empty_configs: bool = False):
+    def _load_configs(self, log_msg,
+                      configs: Dict[str, str],
+                      config_file: HadoopConfigFile,
+                      selector: str,
+                      allow_empty_configs: bool = False,
+                      delete_configs: Dict[str, str] = None):
         LOG.info(log_msg)
         self._validate_config_values(config_file, configs)
         self.cluster_config_updater.load_configs(config_file,
                                                  configs,
                                                  selector,
-                                                 allow_empty=allow_empty_configs)
+                                                 allow_empty=allow_empty_configs,
+                                                 delete_configs=delete_configs)
 
     def load_default_yarn_site_configs(self):
         self._load_configs(log_msg="Loading default yarn-site.xml configs for NodeManagers...",
@@ -1076,11 +1081,16 @@ class Netty4RegressionTestSteps:
 
     def load_default_mapred_configs(self):
         configs = dict(self.actual_configs.DEFAULT_MAPRED_SITE_CONFIGS)
+        delete_configs = {}
         if self.config.enable_ssl_debugging:
             configs["mapred.reduce.child.java.opts"] = "-Djavax.net.debug=all"
+        else:
+            # Delete this config if it's a remnant from a previous run to really switch off SSL debugging
+            delete_configs["mapred.reduce.child.java.opts"] = "-Djavax.net.debug=all"
 
         self._load_configs(log_msg="Loading default MR ShuffleHandler configs for NodeManagers...",
                            configs=configs,
+                           delete_configs=delete_configs,
                            config_file=HadoopConfigFile.MAPRED_SITE,
                            selector=NODEMANAGER_SELECTOR)
 
@@ -1338,12 +1348,16 @@ class ClusterConfigUpdater:
         self.cluster_handler = cluster_handler
         self.workdir = workdir
 
-    def load_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False):
+    def load_configs(self, conf_file_type, conf_dict, selector, allow_empty: bool = False,
+                     delete_configs: Dict[str, str] = None):
         default_config = HadoopConfigBase.create(conf_file_type)
         for k, v in conf_dict.items():
             if isinstance(v, int):
                 v = str(v)
             default_config.extend_with_args({k: v})
+        if delete_configs:
+            default_config.remove_confs(delete_configs)
+
         self.cluster_handler.update_config(selector, default_config, no_backup=True, workdir=self.workdir,
                                            allow_empty=allow_empty)
 

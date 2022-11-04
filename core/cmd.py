@@ -52,6 +52,7 @@ class RunnableCommand:
                 stderr_callback = stderr
 
             # TODO timeout should be used for async_cmd as well (??) --> https://stackoverflow.com/a/25616495/1106893
+            # TODO Add printout callback as well!
             process = self.get_async_cmd(self.cmd, self.work_dir, stdout_callback, stderr_callback)
             if block:
                 process.wait(timeout=timeout)

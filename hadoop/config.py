@@ -60,6 +60,8 @@ class HadoopXMLConfig(HadoopConfigBase):
     def __init__(self, file: HadoopConfigFile, base_path: str = None):
         self._file = file
         self._extension: Dict[str, str] = {}
+        self._removals: Dict[str, str] = {}
+
         if base_path:
             self._base_xml = ET.parse(base_path)
         else:
@@ -98,9 +100,16 @@ class HadoopXMLConfig(HadoopConfigBase):
     def extend_with_args(self, args: Dict[str, str]):
         self._extension.update(args)
 
+    def remove_confs(self, confs: Dict[str, str]):
+        self._removals = confs
+
     def merge(self):
         if not self._base_xml:
             raise HadesException("Can not merge without base xml. Set base xml before calling merge.")
+
+        intersection = set(self._extension.keys()).intersection(set(self._removals.keys()))
+        if intersection:
+            raise ValueError("Invalid config update, some keys are set to update + remove at the same time. Removals: {}, Updates: {}".format(self._removals, self._extension))
 
         properties_to_set = set(self._extension.keys())
         root = self._get_root()
@@ -114,6 +123,15 @@ class HadoopXMLConfig(HadoopConfigBase):
                     logger.debug("Setting %s to %s", prop_name, prop[1].text)
 
                 properties_to_set.remove(prop_name)
+
+            if prop_name in self._removals:
+                val_to_remove = self._removals[prop_name]
+                if val_to_remove in prop_value:
+                    new_prop_value = prop_value.replace(val_to_remove, "")
+                    if str.isspace(new_prop_value) or len(new_prop_value) == 0:
+                        root.remove(prop)
+                    else:
+                        prop.findall('value')[0].text = new_prop_value
 
         for remaining_prop in properties_to_set:
             new_config_prop = Element('property')
