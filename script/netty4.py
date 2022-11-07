@@ -653,7 +653,7 @@ class Netty4TestConfig:
     enable_compilation = False if QUICK_MODE else True
     allow_verification_failure = True if QUICK_MODE else False
 
-    mr_app_debug = True
+    mr_app_debug = False
     extract_tar_files = True # TODO Unused, search for 'decompress' in this file
     timeout = 120
     compress_tc_result = False
