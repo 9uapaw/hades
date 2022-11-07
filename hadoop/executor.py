@@ -60,7 +60,7 @@ class HadoopOperationExecutor(ABC):
     def restart_roles(self, *args: 'HadoopRoleInstance'):
         raise NotImplementedError()
 
-    def force_restart_roles(self, *args: 'HadoopRoleInstance') -> None:
+    def force_restart_roles(self, *args: 'HadoopRoleInstance', sleep_after: int = 0) -> None:
         pass
 
     @abstractmethod

@@ -161,9 +161,9 @@ class HadoopCluster:
         selected = self.select_roles(selector)
         return self._executor.restart_roles(*selected) or []
 
-    def force_restart_roles(self, selector: str) -> List[RunnableCommand]:
+    def force_restart_roles(self, selector: str, sleep_after: int = 0) -> List[RunnableCommand]:
         selected = self.select_roles(selector)
-        return self._executor.force_restart_roles(*selected) or []
+        return self._executor.force_restart_roles(*selected, sleep_after=sleep_after) or []
 
     def restart(self):
         self._executor.restart_cluster(self.name)

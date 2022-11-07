@@ -246,10 +246,13 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return [role.host.create_cmd("yarn --daemon stop {role} && yarn --daemon start {role}".format(
             role=role.role_type.value)) for role in args]
 
-    def force_restart_roles(self, *args: HadoopRoleInstance) -> None:
+    def force_restart_roles(self, *args: HadoopRoleInstance, sleep_after: int = 0) -> None:
         for role in args:
             pid = self._get_pid_by_role(role)
-            role.host.create_cmd(f"kill {pid} && sleep 15 && yarn --daemon start {role.role_type.value}").run()
+            cmd = f"kill {pid} && sleep 15 && yarn --daemon start {role.role_type.value}"
+            if sleep_after > 0:
+                cmd += f" && sleep {sleep_after}"
+            role.host.create_cmd(cmd).run()
 
     def get_role_pids(self, *args: 'HadoopRoleInstance'):
         result = {}
