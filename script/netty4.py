@@ -646,7 +646,8 @@ class Netty4TestContext:
 
 @dataclass
 class Netty4TestConfig:
-    only_run_testcases = ["shuffle_ssl_enabled"]  # TODO Remove this when shuffle works with SSL
+    # only_run_testcases = ["shuffle_ssl_enabled"]
+    only_run_testcases = []
     LIMIT_TESTCASES = False
     QUICK_MODE = False
     testcase_limit = 1 if QUICK_MODE or LIMIT_TESTCASES else TC_LIMIT_UNLIMITED
@@ -654,15 +655,14 @@ class Netty4TestConfig:
     allow_verification_failure = True if QUICK_MODE else False
 
     mr_app_debug = False
-    extract_tar_files = True # TODO Unused, search for 'decompress' in this file
-    timeout = 120
+    timeout_for_apps = 120
     compress_tc_result = False
     decompress_app_container_logs = True
     decompress_daemon_logs = True
     shufflehandler_log_level = HadoopLogLevel.DEBUG
     cache_built_maven_artifacts = True
     halt_execution_on_failed_job = True
-    halt_execution_on_job_timeout = True  # TODO Remove later?
+    halt_execution_on_job_timeout = False
     loadgen_no_mappers = 4
     loadgen_no_reducers = 3
     loadgen_timeout = 1000
@@ -670,7 +670,7 @@ class Netty4TestConfig:
     run_with_patch = True
     enable_ssl_debugging = False
     generate_empty_ssl_configs = False
-    ssl_setup_mode = SSLSetupMode.SKIP # TODO Turn it back on
+    ssl_setup_mode = SSLSetupMode.BETWEEN_EACH_TESTCASE
     # TODO Implement switch that simulates an intentional job failure for given testcase names e.g. 'shuffle_ssl_enabled'
     patch_file_path = "/Users/snemeth/development/my-repos/linux-env/workplace-specific/cloudera/investigations/HADOOP-15327/patches/backup-patch-test-changes-20220815.patch"
     netty_log_message = "*** HADOOP-15327: netty upgrade"
@@ -678,8 +678,8 @@ class Netty4TestConfig:
     force_compile = False
 
     def __post_init__(self):
-        sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout, debug=self.mr_app_debug)
-        pi_job = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000', timeout=self.timeout, debug=self.mr_app_debug)
+        sleep_job = MapReduceApp(MapReduceAppType.SLEEP, cmd='sleep -m 1 -r 1 -mt 10 -rt 10', timeout=self.timeout_for_apps, debug=self.mr_app_debug)
+        pi_job = MapReduceApp(MapReduceAppType.PI, cmd='pi 1 1000', timeout=self.timeout_for_apps, debug=self.mr_app_debug)
         loadgen_job = MapReduceApp(MapReduceAppType.LOADGEN,
                                    cmd=f"loadgen -m {self.loadgen_no_mappers} -r {self.loadgen_no_reducers} "
                                        f"-outKey org.apache.hadoop.io.Text "
