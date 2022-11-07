@@ -672,6 +672,8 @@ class Netty4TestConfig:
     generate_empty_ssl_configs = False
     ssl_setup_mode = SSLSetupMode.SKIP # TODO Turn it back on
     # TODO Implement switch that simulates an intentional job failure for given testcase names e.g. 'shuffle_ssl_enabled'
+    patch_file_path = "/Users/snemeth/development/my-repos/linux-env/workplace-specific/cloudera/investigations/HADOOP-15327/patches/backup-patch-test-changes-20220815.patch"
+    netty_log_message = "*** HADOOP-15327: netty upgrade"
 
     force_compile = False
 
@@ -703,24 +705,21 @@ class Netty4TestConfig:
         }
         self.default_apps = [MapReduceAppType.SLEEP, MapReduceAppType.LOADGEN]
 
-        patch = "~/googledrive/development_drive/_upstream/HADOOP-15327/patches/backup-patch-test-changes-20220815.patch"
-        netty_log_message = "*** HADOOP-15327: netty upgrade"
-
         self.contexts = []
         if self.run_without_patch:
             self.contexts.append(Netty4TestContext("without netty patch on trunk",
                                                    DEFAULT_BRANCH,
                                                    log_verifications=[
-                                                       LogVerification(HadoopRoleType.NM, netty_log_message,
+                                                       LogVerification(HadoopRoleType.NM, self.netty_log_message,
                                                                        inverted_mode=True)],
                                                    compile=self.enable_compilation or self.force_compile,
                                                    allow_verification_failure=self.allow_verification_failure))
         if self.run_with_patch:
             self.contexts.append(Netty4TestContext("with netty patch based on trunk",
                                                    DEFAULT_BRANCH,
-                                                   patch_file=patch,
+                                                   patch_file=self.patch_file_path,
                                                    log_verifications=[
-                                                       LogVerification(HadoopRoleType.NM, netty_log_message,
+                                                       LogVerification(HadoopRoleType.NM, self.netty_log_message,
                                                                        inverted_mode=False)],
                                                    compile=self.enable_compilation or self.force_compile,
                                                    allow_verification_failure=self.allow_verification_failure
