@@ -171,7 +171,7 @@ class PrintUtils:
 
     @staticmethod
     def print_banner_figlet(string):
-        LOG.info(PrintUtils.HORIZONTAL_LINE)
+        LOG.info(PrintUtils.HORIZONTAL_LINE + "\n\n")
         LOG.info(pyfiglet.figlet_format(string))
         LOG.info(PrintUtils.HORIZONTAL_LINE)
 

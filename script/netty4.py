@@ -6,6 +6,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Callable, List, Dict, Tuple, Any
 
 from tabulate import tabulate
@@ -672,7 +673,7 @@ class Netty4TestConfig:
     generate_empty_ssl_configs = False
     ssl_setup_mode = SSLSetupMode.BETWEEN_EACH_TESTCASE
     # TODO Implement switch that simulates an intentional job failure for given testcase names e.g. 'shuffle_ssl_enabled'
-    patch_file_path = "/Users/snemeth/development/my-repos/linux-env/workplace-specific/cloudera/investigations/HADOOP-15327/patches/backup-patch-test-changes-20220815.patch"
+    patch_file_path = str(Path.home()) + os.sep + "netty4patch.patch"
     netty_log_message = "*** HADOOP-15327: netty upgrade"
 
     force_compile = False
@@ -715,6 +716,8 @@ class Netty4TestConfig:
                                                    compile=self.enable_compilation or self.force_compile,
                                                    allow_verification_failure=self.allow_verification_failure))
         if self.run_with_patch:
+            if not os.path.exists(self.patch_file_path):
+                raise ValueError("Patch file cannot be found in: {}".format(self.patch_file_path))
             self.contexts.append(Netty4TestContext("with netty patch based on trunk",
                                                    DEFAULT_BRANCH,
                                                    patch_file=self.patch_file_path,
