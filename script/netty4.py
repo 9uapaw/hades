@@ -1025,8 +1025,8 @@ class Netty4RegressionTestSteps:
 
     def start_context(self, context):
         if self._should_halt():
-            # TODO print 'timed out' if TIMEOUT
-            LOG.info("Execution halted as last job failed!")
+            status = self.test_results.current_result.type.value
+            LOG.info("Execution halted as status of last job is: %s", status)
             self.execution_state = ExecutionState.HALTED
             return self.execution_state
 
