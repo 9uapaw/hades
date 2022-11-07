@@ -464,12 +464,12 @@ cd ~/hades
 pipenv shell
 ```
 
-# 10 . Create Hades working dir
+### 10 . Create Hades working dir
 ```
 mkdir ~/hades_working_dir
 ```
 
-# 11. Generate initial Hades configuration
+### 11. Generate initial Hades configuration
 ```
 cd ~/hades_working_dir
 python ~/hades/cli.py init
