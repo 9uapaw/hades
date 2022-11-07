@@ -517,7 +517,7 @@ cd ~/hades && pipenv shell
 
 NOTE: The remaining steps are specific to the netty4.py script
 
-### 19. scp the patch file or reate patch file link (from your local machine)
+### 19. scp the patch file or create patch file link (from your local machine)
 ```
 scp `readlink ~/netty4patch.patch` ccycloud.snemeth-testing.root.hwx.site:netty4patch.patch
 ```
