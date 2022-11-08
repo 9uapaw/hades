@@ -667,7 +667,7 @@ class Netty4TestConfig:
     loadgen_no_mappers = 4
     loadgen_no_reducers = 3
     loadgen_timeout = 1000
-    run_without_patch = True
+    run_without_patch = False
     run_with_patch = True
     enable_ssl_debugging = False
     generate_empty_ssl_configs = False
