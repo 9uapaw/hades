@@ -2,6 +2,7 @@ import enum
 import glob
 import logging
 import distutils
+import os
 import re
 from distutils import dir_util
 from typing import Dict, List
@@ -41,6 +42,16 @@ class HadoopDir:
         self._modules: Dict[str, str] = {}
         self._changed: Dict[str, str] = {}
         self._hadoop_dir = hadoop_dir
+        self.project_version = self._extract_version()
+
+    def _extract_version(self):
+        from xml.etree import ElementTree as et
+        ns = "http://maven.apache.org/POM/4.0.0"
+        et.register_namespace('', ns)
+        tree = et.ElementTree()
+        tree.parse(os.path.join(self._hadoop_dir, "pom.xml"))
+        p = tree.getroot().find("{%s}version" % ns)
+        return p.text
 
     def extract_changed_modules(self, allow_empty: bool = False):
         logger.info("Searching modules in hadoop dir %s", self._hadoop_dir)

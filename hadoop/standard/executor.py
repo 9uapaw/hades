@@ -296,9 +296,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return configs
 
     def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):
-        unique_args = {role.host.get_address(): role for role in args}
+        uniqe_roles = {role.host.get_address(): role for role in args}
         cached_found_jar = {}
-        for role in unique_args.values():
+        for role in uniqe_roles.values():
             logger.info("Replacing jars on %s", role.host.get_address())
             for module, jar in modules.get_jar_paths().items():
                 logger.info("Replacing jar %s", jar)
@@ -312,8 +312,20 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
                     find_remote_jar = role.host.find_file(remote_jar_dir, f"*{module}*").run()
                     remote_jar = ""
-                    if find_remote_jar[0]:
-                        remote_jar = find_remote_jar[0][0]
+                    # 0th item is stdout, 1st item is stderr
+                    stdout = find_remote_jar[0]
+                    if stdout:
+                        if len(stdout) > 1:
+                            logger.debug("Found ambiguous jars on host '%s' for module '%s': %s", role.host.get_address(), module, "\n".join(stdout))
+                            # Find best match according to project version
+                            module_dir = os.path.join(remote_jar_dir, module)
+                            jar_path = f"{module_dir}-{modules.project_version}.jar"
+                            if jar_path not in stdout:
+                                raise HadesException("Found ambiguous jars on host '{}' for module '{}': {}.\n"
+                                                     "Assumed jar path is not correct: {}", role.host.get_address(), module, "\n".join(stdout), jar_path)
+                            remote_jar = jar_path
+                        else:
+                            remote_jar = stdout[0]
                         cached_found_jar[module] = remote_jar
                 else:
                     remote_jar = cached_found_jar[module]
