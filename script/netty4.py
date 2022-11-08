@@ -940,7 +940,9 @@ class Compiler:
                 self.build_contexts = self.load_db()
                 hadoop_dir.extract_changed_modules(allow_empty=True)
                 changed_jars = hadoop_dir.get_changed_jar_paths()
+                # TODO this logic also founds very old cached jars --> Should use commit message
                 all_loaded, cached_modules = self.load_from_cache(branch, patch_file, changed_jars)
+
                 if all_loaded:
                     compilation_required = False
                     LOG.info("Found all required jars in the jar cache! Jars: %s", cached_modules)
@@ -969,12 +971,17 @@ class Compiler:
 
     def load_from_cache(self, branch, patch_file, changed_jars):
         cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_jars)
+
+        exp_iterations = len(cached_modules)
+        iterations = 0
         for module_name, module_path in cached_modules.items():
+            iterations += 1
             if not os.path.exists(module_path):
                 LOG.info("Module '%s' not found in cache at location: %s", module_name, module_path)
                 return False, cached_modules
             LOG.debug("Module '%s' found in cache at location: %s", module_name, module_path)
-        return True, cached_modules
+
+        return iterations == exp_iterations, cached_modules
 
     def save_to_cache(self, branch, patch_file, changed_modules):
         cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_modules)
@@ -1056,6 +1063,8 @@ class Netty4RegressionTestSteps:
 
         if self.context.patch_file:
             hadoop_dir.apply_patch(self.context.patch_file, force_reset=True)
+            return True
+        return False
 
     @staticmethod
     def _validate_config_values(config_file: HadoopConfigFile, configs: Dict[str, str]):
