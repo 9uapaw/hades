@@ -936,6 +936,7 @@ class Compiler:
             branch = hadoop_dir.get_current_branch(fallback="trunk")
 
             compilation_required = True
+            all_loaded = False
             if not self.config.force_compile and self.config.cache_built_maven_artifacts:
                 self.build_contexts = self.load_db()
                 hadoop_dir.extract_changed_modules(allow_empty=True)
@@ -957,6 +958,9 @@ class Compiler:
                 changed_modules: Dict[str, str] = self.handler.compile(all=True, changed=False, deploy=True,
                                                                        modules=None, no_copy=True, single=None)
                 self.save_to_cache(branch, patch_file, changed_modules)
+            elif expect_changed_modules and all_loaded:
+                # Deploy even if we did not perform compilation
+                self.handler.deploy()
 
     @staticmethod
     def _make_key(branch, patch_file):
