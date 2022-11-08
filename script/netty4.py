@@ -542,13 +542,16 @@ class OutputFileWriter:
             f.writelines(app_log_lines)
         self._generated_files.register_files(OutputFileType.APP_LOG_FILE, [app_log_file])
 
-    def decompress_app_container_logs(self):
-        self._decompress_logs(OutputFileType.APP_LOG_TAR_GZ, OutputFileType.EXTRACTED_APP_LOG_FILES)
+    def decompress_app_container_logs(self, remove_src_file=True):
+        self._decompress_logs(OutputFileType.APP_LOG_TAR_GZ, OutputFileType.EXTRACTED_APP_LOG_FILES,
+                              remove_src_file=remove_src_file)
 
-    def decompress_daemon_logs(self):
-        self._decompress_logs(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ, OutputFileType.EXTRACTED_YARN_DAEMON_LOG_FILES)
+    def decompress_daemon_logs(self, remove_src_file=True):
+        self._decompress_logs(OutputFileType.YARN_DAEMON_LOGS_TAR_GZ, OutputFileType.EXTRACTED_YARN_DAEMON_LOG_FILES,
+                              remove_src_file=remove_src_file)
 
-    def _decompress_logs(self, src_type: 'OutputFileType', dst_type: 'OutputFileType'):
+    def _decompress_logs(self, src_type: 'OutputFileType', dst_type: 'OutputFileType',
+                         remove_src_file=False):
         for tar_file in self._generated_files.get(src_type):
             target_dir = os.path.join(self.current_tc_dir)
             LOG.debug("[%s] Extracting file '%s' to %s", self.context, tar_file, target_dir)
@@ -556,6 +559,10 @@ class OutputFileWriter:
             self._generated_files.register_files(dst_type,
                                                  CompressedFileUtils.list_targz_file(tar_file),
                                                  allow_multiple=True)
+            if remove_src_file and os.path.isfile(tar_file):
+                LOG.debug("Removing and de-registering file: %s", tar_file)
+                os.remove(tar_file)
+                self._generated_files.deregister_file(src_type, tar_file)
 
     def write_patch_file(self, patch_file):
         target_file = os.path.join(self.current_ctx_dir, os.path.basename(patch_file))
@@ -882,6 +889,9 @@ class GeneratedOutputFiles:
         if out_type in self._curr_files_dict and not allow_multiple:
             raise HadesException("Output type is already used: {}".format(out_type))
         self._curr_files_dict[out_type] = files
+
+    def deregister_file(self, out_type: OutputFileType, file: str):
+        self._curr_files_dict[out_type].remove(file)
 
     def get(self, out_type):
         if out_type not in self._curr_files_dict:
