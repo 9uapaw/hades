@@ -500,7 +500,8 @@ git clone https://github.com/apache/hadoop.git
 
 ### 16. Edit config.json to point to the Hadoop repo
 ```
-jq -c '.hadoopPath = $newHadoopPath' --arg newHadoopPath '/home/systest/hadoop' ~/hades_working_dir/cluster.json > /tmp/config.json && mv /tmp/config.json ~/hades_working_dir/config.json
+jq -c '.hadoopPath = $newHadoopPath' --arg newHadoopPath '/home/systest/hadoop' ~/hades_working_dir/config.json > /tmp/config.json && mv /tmp/config.json ~/hades_working_dir/config.json
+jq -c '.hadoopJarPath = $hadoopJarPath' --arg hadoopJarPath '/home/systest/hadoop/hadoop-dist/target/hadoop-3.4.0-SNAPSHOT/share' ~/hades_working_dir/config.json > /tmp/config.json && mv /tmp/config.json ~/hades_working_dir/config.json
 ```
 
 
@@ -544,3 +545,7 @@ scp root@ccycloud-4.snemeth-netty.root.hwx.site:/opt/hadoop/etc/hadoop/yarn-site
 cd ~/hades_working_dir/
 python ~/hades/cli.py -d run-script -s netty4
 ```
+
+### Notes
+Please refer to [this](https://gist.github.com/miroslavtamas/cdca97f2eafdd6c28b844434eaa3b631) script if you need to install Maven.
+For instance, this is required if compilation needs to be performed for the Netty end to end testing.
