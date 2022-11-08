@@ -52,7 +52,6 @@ class RunnableCommand:
                 stderr_callback = stderr
 
             # TODO timeout should be used for async_cmd as well (??) --> https://stackoverflow.com/a/25616495/1106893
-            # TODO Add printout callback as well!
             process = self.get_async_cmd(self.cmd, self.work_dir, stdout_callback, stderr_callback)
             if block:
                 process.wait(timeout=timeout)
@@ -60,9 +59,13 @@ class RunnableCommand:
             return process
 
         except sh.TimeoutException as e:
-            raise HadesCommandTimedOutException(f"Error while executing {self.cmd}", cmd=self.cmd)
+            raise HadesCommandTimedOutException(f"Error while executing {self.cmd}",
+                                                cmd=self.cmd)
         except sh.ErrorReturnCode as e:
-            raise CommandExecutionException(f"Error while executing {self.cmd}", cmd=e.stderr.decode())
+            raise CommandExecutionException(f"Error while executing {self.cmd}",
+                                            cmd=self.cmd,
+                                            stdout=self.extract_stdout(e),
+                                            stderr=self.extract_stderr(e))
 
     def get_sync_cmd(self, c: str, cwd: str) -> any:
         return sh.bash(_cwd=cwd, c=c)
@@ -71,18 +74,33 @@ class RunnableCommand:
         return sh.bash(_cwd=cwd, c=c, _bg=True, _out=out, _err=err)
 
     def _stdout_callback(self, res: str):
+        # logger.debug("appending stdout...")
         self.stdout.append(res.replace('\n', ''))
         logger.info(res.replace("\n", ""))
 
     def _stderr_callback(self, res: str):
+        # logger.debug("appending stderr...")
         self.stderr.append(res.replace('\n', ''))
         logger.info(res.replace("\n", ""))
 
-    def _convert_output(self, output: str) -> List[str]:
+    @staticmethod
+    def _convert_output(output: str) -> List[str]:
         return list(filter(bool, output.split("\n")))
 
     def set_cmd_prefix(self, prefix: str):
         self._cmd_prefix = prefix
+
+    def extract_stderr(self, e):
+        err = e.stderr.decode()
+        if err:
+            return err
+        return self.stderr
+
+    def extract_stdout(self, e):
+        out = e.stdout.decode()
+        if out:
+            return out
+        return self.stdout
 
 
 class RemoteRunnableCommand(RunnableCommand):
