@@ -955,6 +955,8 @@ class Compiler:
     def _make_key(branch, patch_file):
         if not patch_file:
             patch_file = "without_patch"
+
+        patch_file = os.path.basename(patch_file).replace(".", "_")
         return f"{branch}_{patch_file}"
 
     def _build_cache_path_for_jars(self, branch, patch_file, changed_jars):
