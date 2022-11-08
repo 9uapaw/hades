@@ -798,10 +798,12 @@ class Netty4TestResults:
 
     def update_with_context_and_testcase(self, context, testcase):
         self.context = context
-        self.results[self.context] = {}
+        if self.context not in self.results:
+            self.results[self.context] = {}
         self.tc = testcase
 
     def update_with_result(self, tc, result):
+        LOG.info("Result of testcase '%s' is: %s", tc, result)
         self.results[self.context][tc] = result
 
     def print_report(self):
