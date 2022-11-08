@@ -1280,7 +1280,7 @@ class Netty4RegressionTestSteps:
         if self.context.log_verifications:
             try:
                 for verification in self.context.log_verifications:
-                    self.yarn_logs.search_in_logs(verification)
+                    self.nm_restart_logs.search_in_logs(verification)
             except HadesException as e:
                 if self.context.allow_verification_failure:
                     LOG.exception("Verification failed: %s, but allow verification failure is set to True!",
