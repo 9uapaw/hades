@@ -928,7 +928,7 @@ class Compiler:
         self.build_contexts = {}
         self.db_file = os.path.join(self.workdir, "db", "db.pickle")
 
-    def compile(self):
+    def compile(self, expect_changed_modules=False):
         LOG.info("Compile set to %s, force compile: %s", self.context.compile, self.config.force_compile)
         if self.context.compile:
             patch_file = self.context.patch_file
@@ -940,17 +940,20 @@ class Compiler:
                 self.build_contexts = self.load_db()
                 hadoop_dir.extract_changed_modules(allow_empty=True)
                 changed_jars = hadoop_dir.get_changed_jar_paths()
-                # TODO this logic also founds very old cached jars --> Should use commit message
+                if expect_changed_modules and not changed_jars:
+                    raise HadesException("Expected change modules but changed modules not found!")
+                # TODO this logic also founds very old cached jars --> Should use commit message in dir name
                 all_loaded, cached_modules = self.load_from_cache(branch, patch_file, changed_jars)
 
                 if all_loaded:
                     compilation_required = False
-                    LOG.info("Found all required jars in the jar cache! Jars: %s", cached_modules)
+                    LOG.info("Found all required jars in the jar cache, compilation won't be performed! Jars: %s", cached_modules)
 
             if compilation_required:
                 LOG.info("[%s] Starting compilation...", self.context)
                 changed_modules: Dict[str, str] = self.handler.compile(all=True, changed=False, deploy=True,
-                                                                       modules=None, no_copy=True, single=None)
+                                                                       modules=None, no_copy=True, single=None,
+                                                                       expect_changed_modules=expect_changed_modules)
                 self.save_to_cache(branch, patch_file, changed_modules)
 
     @staticmethod
@@ -1326,8 +1329,8 @@ class Netty4RegressionTestSteps:
             return
         self.test_results.compare(self.config.contexts[0])
 
-    def compile(self):
-        self.compiler.compile()
+    def compile(self, expect_changed_modules=False):
+        self.compiler.compile(expect_changed_modules=expect_changed_modules)
 
     def verify_nm_configs(self, dic: Dict[HadoopConfigFile, List[Tuple[str, str]]]):
         self.cluster_handler.verify_nm_configs(dic)
@@ -1587,7 +1590,8 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                 LOG.warning("Stopping test driver execution as execution state is HALTED!")
                 break
             self.steps.setup_branch_and_patch()
-            self.steps.compile()
+            expected_changed_modules = True if context.patch_file else False
+            self.steps.compile(expect_changed_modules=expected_changed_modules)
             self.steps.load_default_yarn_site_configs()
 
             for idx, tc in enumerate(testcases):
