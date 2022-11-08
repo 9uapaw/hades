@@ -928,7 +928,7 @@ class Compiler:
         self.build_contexts = {}
         self.db_file = os.path.join(self.workdir, "db", "db.pickle")
 
-    def compile(self, expect_changed_modules=False):
+    def compile(self, expect_changed_modules=False, force_compile_if_no_changed_modules=True):
         LOG.info("Compile set to %s, force compile: %s", self.context.compile, self.config.force_compile)
         if self.context.compile:
             patch_file = self.context.patch_file
@@ -941,7 +941,10 @@ class Compiler:
                 hadoop_dir.extract_changed_modules(allow_empty=True)
                 changed_jars = hadoop_dir.get_changed_jar_paths()
                 if expect_changed_modules and not changed_jars:
-                    raise HadesException("Expected change modules but changed modules not found!")
+                    if not force_compile_if_no_changed_modules:
+                        raise HadesException("Expected changed modules but changed modules not found!")
+                    else:
+                        compilation_required = True
                 # TODO this logic also founds very old cached jars --> Should use commit message in dir name
                 all_loaded, cached_modules = self.load_from_cache(branch, patch_file, changed_jars)
 
@@ -952,8 +955,7 @@ class Compiler:
             if compilation_required:
                 LOG.info("[%s] Starting compilation...", self.context)
                 changed_modules: Dict[str, str] = self.handler.compile(all=True, changed=False, deploy=True,
-                                                                       modules=None, no_copy=True, single=None,
-                                                                       expect_changed_modules=expect_changed_modules)
+                                                                       modules=None, no_copy=True, single=None)
                 self.save_to_cache(branch, patch_file, changed_modules)
 
     @staticmethod
@@ -984,7 +986,7 @@ class Compiler:
                 return False, cached_modules
             LOG.debug("Module '%s' found in cache at location: %s", module_name, module_path)
 
-        return iterations == exp_iterations, cached_modules
+        return iterations == exp_iterations and exp_iterations > 0, cached_modules
 
     def save_to_cache(self, branch, patch_file, changed_modules):
         cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_modules)
