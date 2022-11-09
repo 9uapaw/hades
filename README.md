@@ -40,8 +40,8 @@ Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev), [CDP](http
 
 ## Terminology
 
--   Service: Hadoop component inside a cluster (HDFS, Yarn etc..)
--   Role: A role type of a service instance (Resource Manager, Name Node, Data Node etc..)
+-   Service: Hadoop component inside a cluster (HDFS, YARN, etc..)
+-   Role: A role is a type of a service instance (Resource Manager, Name Node (NN), Data Node (DN), etc..)
 
 
 <a id="orgc98591d"></a>
@@ -52,7 +52,7 @@ Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev), [CDP](http
 2.  Install dependencies via
     
         pipenv install
-3.  Or install dependencies globally
+3.  Alternatively, install dependencies globally
 4.  Run init command
     
         ./cli.py init
