@@ -121,6 +121,20 @@ class FileUtils:
             LOG.info("Creating file: %s", path)
             open(path, "a").close()
 
+    @staticmethod
+    def get_hash_of_file(file):
+        import hashlib
+        block_size = 65536
+
+        file_hash = hashlib.sha256()
+        with open(file, 'rb') as f:
+            fb = f.read(block_size)
+            while len(fb) > 0:
+                file_hash.update(fb)
+                fb = f.read(block_size)
+
+        return file_hash.hexdigest()
+
 
 class CompressedFileUtils:
     @staticmethod
@@ -171,7 +185,7 @@ class PrintUtils:
 
     @staticmethod
     def print_banner_figlet(string):
-        LOG.info(PrintUtils.HORIZONTAL_LINE)
+        LOG.info(PrintUtils.HORIZONTAL_LINE + "\n\n")
         LOG.info(pyfiglet.figlet_format(string))
         LOG.info(PrintUtils.HORIZONTAL_LINE)
 

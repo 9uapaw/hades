@@ -10,6 +10,7 @@ from hadoop.hadoop_config import HadoopConfigFile, HadoopConfigFileType
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ElementTree, Element
 
+EXTENSION_SEPARATOR = "#EXTENSION\n"
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +52,16 @@ class HadoopConfigBase(ABC, Iterable):
             return HadoopXMLConfig(config, base_path)
         elif config.config_type == HadoopConfigFileType.PROPERTIES:
             return HadoopPropertiesConfig(config, base_path)
+        elif config.config_type == HadoopConfigFileType.SHELL:
+            return HadoopShellScriptConfig(config, base_path)
 
 
 class HadoopXMLConfig(HadoopConfigBase):
     def __init__(self, file: HadoopConfigFile, base_path: str = None):
         self._file = file
         self._extension: Dict[str, str] = {}
+        self._removals: Dict[str, str] = {}
+
         if base_path:
             self._base_xml = ET.parse(base_path)
         else:
@@ -95,9 +100,16 @@ class HadoopXMLConfig(HadoopConfigBase):
     def extend_with_args(self, args: Dict[str, str]):
         self._extension.update(args)
 
+    def remove_confs(self, confs: Dict[str, str]):
+        self._removals = confs
+
     def merge(self):
         if not self._base_xml:
             raise HadesException("Can not merge without base xml. Set base xml before calling merge.")
+
+        intersection = set(self._extension.keys()).intersection(set(self._removals.keys()))
+        if intersection:
+            raise ValueError("Invalid config update, some keys are set to update + remove at the same time. Removals: {}, Updates: {}".format(self._removals, self._extension))
 
         properties_to_set = set(self._extension.keys())
         root = self._get_root()
@@ -111,6 +123,15 @@ class HadoopXMLConfig(HadoopConfigBase):
                     logger.debug("Setting %s to %s", prop_name, prop[1].text)
 
                 properties_to_set.remove(prop_name)
+
+            if prop_name in self._removals:
+                val_to_remove = self._removals[prop_name]
+                if val_to_remove in prop_value:
+                    new_prop_value = prop_value.replace(val_to_remove, "")
+                    if str.isspace(new_prop_value) or len(new_prop_value) == 0:
+                        root.remove(prop)
+                    else:
+                        prop.findall('value')[0].text = new_prop_value
 
         for remaining_prop in properties_to_set:
             new_config_prop = Element('property')
@@ -156,15 +177,15 @@ class HadoopPropertiesConfig(HadoopConfigBase):
 
     @staticmethod
     def _read_file(f: str):
-        cfg = configparser.RawConfigParser(strict=False)
+        config_parser = configparser.RawConfigParser(strict=False)
+        config_parser.optionxform = str
         with open(f) as fp:
-            cfg.read_file(itertools.chain(['[global]'], fp), source=f)
-        return cfg
+            config_parser.read_file(itertools.chain(['[global]'], fp), source=f)
+        return config_parser
 
     def __iter__(self) -> Iterator[Tuple[str, str]]:
         if self._base_conf:
-            # TODO
-            return XMLConfigIterator(self.properties)
+            return self._get_all_props_as_dict().items().__iter__()
         else:
             return self._extension.items().__iter__()
 
@@ -187,8 +208,7 @@ class HadoopPropertiesConfig(HadoopConfigBase):
             raise HadesException("Can not merge without base properties. Set base properties before calling merge.")
 
         properties_to_set = set(self._extension.keys())
-        all_items: List[Tuple[str, str]] = [i for i in self._base_conf['global'].items()]
-        all_items_dict = {i[0]: i[1] for i in all_items}
+        all_items_dict = self._get_all_props_as_dict()
 
         self._base_conf['extension'] = {}
         ext_section = self._base_conf['extension']
@@ -203,6 +223,11 @@ class HadoopPropertiesConfig(HadoopConfigBase):
                 logger.debug("Adding new property %s with value %s", prop_name, prop_value)
                 ext_section[prop_name] = prop_value
 
+    def _get_all_props_as_dict(self):
+        all_items: List[Tuple[str, str]] = [i for i in self._base_conf['global'].items()]
+        all_items_dict = {i[0]: i[1] for i in all_items}
+        return all_items_dict
+
     def commit(self):
         with open(self._file.val, 'w') as configfile:
             self._base_conf.write(configfile)
@@ -211,4 +236,71 @@ class HadoopPropertiesConfig(HadoopConfigBase):
         return str({section: dict(self._base_conf[section]) for section in self._base_conf.sections()})
 
     def to_dict(self) -> dict:
-        return {k: v for k, v in self.__iter__()}
+        return self._get_all_props_as_dict()
+
+
+class HadoopShellScriptConfig(HadoopConfigBase):
+    def __init__(self, file: HadoopConfigFile, base_path: str = None):
+        self._file = file
+        self._extension: Dict[str, str] = {}
+        self._removals: Dict[str, str] = {}
+        if base_path:
+            self._base_conf: List[str] = self._read_file(base_path)
+        else:
+            self._base_conf = None
+
+    @staticmethod
+    def _read_file(f: str):
+        with open(f) as file:
+            lines = [line.rstrip() for line in file]
+        return lines
+
+    def __iter__(self) -> Iterator[str]:
+        if self._base_conf:
+            return self._base_conf.__iter__()
+        else:
+            return self._extension.__iter__()
+
+    @property
+    def file(self) -> str:
+        return str(self._file.val)
+
+    def set_base_config(self, path: str):
+        self._base_conf = self._read_file(path)
+
+    def extend_with_args(self, args: Dict[str, str]):
+        self._extension.update(args)
+
+    def remove_confs(self, confs: Dict[str, str]):
+        self._removals = confs
+
+    def merge(self):
+        if not self._base_conf:
+            raise HadesException("Can not merge without base config. Set base cconfig before calling merge.")
+        # Don't need to do anything fancy here, commit will handle it on its own
+
+    def commit(self):
+        base_conf_set = set(self._base_conf)
+        removals = set([f"{k}={v}" for k, v in self._removals.items()])
+        extensions = set([f"{k}={v}" for k, v in self._extension.items()])
+
+        with open(self._file.val, 'w') as configfile:
+            for line in self._base_conf:
+                if line not in removals:
+                    # Do not write line from base conf if we want to remove it from the file
+                    configfile.write(line + "\n")
+
+            # Do not write Separator if it's already in base conf
+            if EXTENSION_SEPARATOR not in base_conf_set:
+                configfile.write("\n\n" + EXTENSION_SEPARATOR)
+
+            for line in extensions:
+                # Do not write line again if it's already in base conf
+                if line not in base_conf_set:
+                    configfile.write(line + "\n")
+
+    def to_str(self) -> str:
+        return "\n".join(self._base_conf) + EXTENSION_SEPARATOR + "\n".join(self._extension)
+
+    def to_dict(self) -> dict:
+        raise NotImplementedError("This is intentionally not implemented for this config type!")

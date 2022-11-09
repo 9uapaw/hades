@@ -45,6 +45,9 @@ public class JavaKeyStore {
 
         // Save the keyStore
         File file = new File(keyStoreName);
+        File parentDir = new File(file.getParent());
+        parentDir.mkdirs();
+        file.createNewFile();
         this.absolutePath = file.getAbsolutePath();
         FileOutputStream fos = new FileOutputStream(file);
         keyStore.store(fos, pwdArray);
@@ -106,7 +109,16 @@ public class JavaKeyStore {
 
     public static void main(String[] args) throws CertificateException, NoSuchAlgorithmException,
         KeyStoreException, IOException {
-        JavaKeyStore keyStore = new JavaKeyStore(KEY_STORE_TYPE, KEYSTORE_PWD, KEYSTORE_NAME);
+        if (args.length != 3) {
+            System.out.println("Usage: <keystore type> <keystore path> <keystore password>");
+            System.exit(1);
+        }
+        String type = args[0];
+        String path = args[1];
+        String password = args[2];
+        System.out.println(String.format("Creating keystore... Type: %s, Path: %s, Password: %s", type, path, password));
+
+        JavaKeyStore keyStore = new JavaKeyStore(type, password, path);
         keyStore.createEmptyKeyStore();
         //KeyStore result = keyStore.getKeyStore();
         System.out.println(keyStore.absolutePath);

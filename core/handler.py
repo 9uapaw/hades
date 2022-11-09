@@ -70,7 +70,7 @@ class MainCommandHandler:
             raise HadesException("No executor is set. Set cluster config.")
 
         if path.exists(self.ctx.cluster_config_path):
-            logger.info("Cluster manifest already exists.")
+            logger.info("Cluster manifest already exists: %s", self.ctx.cluster_config_path)
             return
 
         cluster_config = self.executor.discover()
@@ -111,11 +111,14 @@ class MainCommandHandler:
             hadoop_modules.copy_modules_to_dist(self.ctx.config.hadoop_jar_path)
 
         if deploy:
-            hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
-            hadoop_modules.extract_changed_modules()
-            self._create_cluster().replace_module_jars("", hadoop_modules)
+            hadoop_modules = self.deploy()
+        return hadoop_modules.get_changed_module_paths()
 
-        return hadoop_modules.get_changed_jar_paths()
+    def deploy(self):
+        hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)
+        hadoop_modules.extract_changed_modules()
+        self._create_cluster().replace_module_jars("", hadoop_modules)
+        return hadoop_modules
 
     def log(self, selector: str, follow: bool, tail: int, grep: str, download: bool):
         cluster = self._create_cluster()
@@ -189,6 +192,10 @@ class MainCommandHandler:
 
     def mutate_yarn_config(self, config: str):
         self._create_cluster().get_rm_api().modify_config(config)
+
+    def cleanup_files(self, dirs: List[str], limit: int):
+        # Limit is in MBs
+        self._create_cluster().cleanup_files(dirs, limit)
 
     def role_action(self, selector: str, action: RoleAction):
         handlers = []

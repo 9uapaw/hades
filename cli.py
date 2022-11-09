@@ -429,6 +429,20 @@ def raw_mutate(ctx, xml: str):
     handler.mutate_yarn_config(xml)
 
 
+@cli.command()
+@click.pass_context
+@click.option('-d', '--dir', multiple=True, help='dirs to clean up')
+@click.option('-l', '--limit', help='File size limit to clean up from (in MB)')
+def cleanup_dirs(ctx, dir: List[str], limit: int):
+    """
+    Read the logs of apps
+    """
+    dirs = list(dir)
+    limit = int(limit)
+    handler: MainCommandHandler = ctx.obj['handler']
+    handler.cleanup_files(dirs, limit)
+
+
 if __name__ == "__main__":
     logger.info("Started application")
     before = time.time()

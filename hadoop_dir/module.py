@@ -2,6 +2,7 @@ import enum
 import glob
 import logging
 import distutils
+import os
 import re
 from distutils import dir_util
 from typing import Dict, List
@@ -26,6 +27,7 @@ class HadoopDir:
     # CHANGED_MODULES_CMD = "git status --porcelain | grep \".*hadoop.*\" | sed -E \"s/.*\\/(.*)\\/src.*/\\1/g\" | sed -E \"s/.*\\/(.*)\\/pom\\.xml/\\1/g\""
     SWITCH_BRANCH_CMD_TEMPLATE = "git checkout {}"
     GET_BRANCH_CMD = "git rev-parse --abbrev-ref HEAD"
+    GET_CURRENT_COMMIT_HASH_CMD = "git rev-parse --short HEAD"
     RESET_HARD_CMD_TEMPLATE = "git reset {} --hard"
     APPLY_PATCH_CMD_TEMPLATE = "git apply {}"
     FIND_JAR_OF_MODULE_TEMPLATE = "find . -name \"*{module}*\" -print | grep \".*{module}/target.*-SNAPSHOT.jar\""
@@ -41,6 +43,16 @@ class HadoopDir:
         self._modules: Dict[str, str] = {}
         self._changed: Dict[str, str] = {}
         self._hadoop_dir = hadoop_dir
+        self.project_version = self._extract_version()
+
+    def _extract_version(self):
+        from xml.etree import ElementTree as et
+        ns = "http://maven.apache.org/POM/4.0.0"
+        et.register_namespace('', ns)
+        tree = et.ElementTree()
+        tree.parse(os.path.join(self._hadoop_dir, "pom.xml"))
+        p = tree.getroot().find("{%s}version" % ns)
+        return p.text
 
     def extract_changed_modules(self, allow_empty: bool = False):
         logger.info("Searching modules in hadoop dir %s", self._hadoop_dir)
@@ -125,7 +137,7 @@ class HadoopDir:
     def get_jar_paths(self) -> Dict[str, str]:
         return self._modules
 
-    def get_changed_jar_paths(self) -> Dict[str, str]:
+    def get_changed_module_paths(self) -> Dict[str, str]:
         return self._changed
 
     def get_modules(self) -> List[str]:
@@ -161,6 +173,17 @@ class HadoopDir:
         if res == "HEAD":
             return fallback
         return res
+
+    def get_current_commit_hash(self):
+        hash_cmd = RunnableCommand(self.GET_CURRENT_COMMIT_HASH_CMD, work_dir=self._hadoop_dir)
+        hash_cmd.run()
+        if not hash_cmd.stdout:
+            raise CommandExecutionException("\n".join(hash_cmd.stdout), hash_cmd)
+
+        if len(hash_cmd.stdout) == 1:
+            return hash_cmd.stdout[0]
+        else:
+            raise HadesException("Cannot determine current git commit hash. Output of command: {}".format(hash_cmd.stdout))
 
     def reset(self, branch):
         logger.info("Resetting branch to %s", branch)

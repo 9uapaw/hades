@@ -42,7 +42,12 @@ class MavenCompiler:
                     err += s + "\n"
 
             if err:
-                raise CommandExecutionException(f"Error while running compilation command\n{err}", cmd)
+                msg = f"Error while running compilation command\n{err}"
+            else:
+                msg = f"Error while running compilation command"
+            raise CommandExecutionException(msg, cmd,
+                                            stdout=compile_cmd.stdout,
+                                            stderr=compile_cmd.stderr)
 
     def compile_single_module(self, hadoop_dir: HadoopDir, module: HadoopModule):
         compile_cmd = RunnableCommand(self._config.compile_cmd, work_dir=hadoop_dir.get_module_abs_path(module))

@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from pprint import pformat
 from typing import List, Type, Dict, Tuple
 
 from pythoncommons.file_utils import FileUtils as CommonFileUtils
@@ -245,29 +246,32 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return [role.host.create_cmd("yarn --daemon stop {role} && yarn --daemon start {role}".format(
             role=role.role_type.value)) for role in args]
 
-    def force_restart_roles(self, *args: HadoopRoleInstance) -> None:
+    def force_restart_roles(self, *args: HadoopRoleInstance, sleep_after: int = 0) -> None:
         for role in args:
             pid = self._get_pid_by_role(role)
-            role.host.create_cmd(f"kill {pid} && sleep 15 && yarn --daemon start {role.role_type.value}").run()
+            cmd = f"kill {pid} && sleep 15 && yarn --daemon start {role.role_type.value}"
+            if sleep_after > 0:
+                cmd += f" && sleep {sleep_after}"
+            role.host.create_cmd(cmd).run()
 
     def get_role_pids(self, *args: 'HadoopRoleInstance'):
         result = {}
         for role in args:
-            pid = self._get_pid_by_role(role)
-            result[role.host.address] = pid
+            result[role] = self._get_pid_by_role(role)
         return result
 
     @staticmethod
     def _get_pid_by_role(role):
         try:
             out = role.host.create_cmd(f"jps | grep -i {role.role_type.value}").run()
+            first_line = out[0]
+            if len(first_line) > 1:
+                raise HadesException("Unexpected output from jps: '{}'. Full output: {}".format(first_line, out))
+            pid = first_line[0].split(" ")[0]
+            return pid
         except CommandExecutionException as e:
-            logger.exception("No '%s' process is running!")
-        first_line = out[0]
-        if len(first_line) > 1:
-            raise HadesException("Unexpected output from jps: '{}'. Full output: {}".format(first_line, out))
-        pid = first_line[0].split(" ")[0]
-        return pid
+            logger.exception("No %s process is running on host %s!", role.role_type.value, role.host)
+            return None
 
     def restart_cluster(self, cluster: str):
         pass
@@ -292,9 +296,9 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
         return configs
 
     def replace_module_jars(self, *args: 'HadoopRoleInstance', modules: HadoopDir):
-        unique_args = {role.host.get_address(): role for role in args}
+        uniqe_roles = {role.host.get_address(): role for role in args}
         cached_found_jar = {}
-        for role in unique_args.values():
+        for role in uniqe_roles.values():
             logger.info("Replacing jars on %s", role.host.get_address())
             for module, jar in modules.get_jar_paths().items():
                 logger.info("Replacing jar %s", jar)
@@ -308,8 +312,20 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
 
                     find_remote_jar = role.host.find_file(remote_jar_dir, f"*{module}*").run()
                     remote_jar = ""
-                    if find_remote_jar[0]:
-                        remote_jar = find_remote_jar[0][0]
+                    # 0th item is stdout, 1st item is stderr
+                    stdout = find_remote_jar[0]
+                    if stdout:
+                        if len(stdout) > 1:
+                            logger.debug("Found ambiguous jars on host '%s' for module '%s': %s", role.host.get_address(), module, "\n".join(stdout))
+                            # Find best match according to project version
+                            module_dir = os.path.join(remote_jar_dir, module)
+                            jar_path = f"{module_dir}-{modules.project_version}.jar"
+                            if jar_path not in stdout:
+                                raise HadesException("Found ambiguous jars on host '{}' for module '{}': {}.\n"
+                                                     "Assumed jar path is not correct: {}", role.host.get_address(), module, "\n".join(stdout), jar_path)
+                            remote_jar = jar_path
+                        else:
+                            remote_jar = stdout[0]
                         cached_found_jar[module] = remote_jar
                 else:
                     remote_jar = cached_found_jar[module]
@@ -343,17 +359,117 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             compile = f"cd {target_dir} && javac -d . *.java"
             role.host.create_cmd(f"{copy_to_target_dir} && {compile}").run()
 
-    def execute_java(self, *args: 'HadoopRoleInstance', classpath: str, working_dir: str, main_class: str):
+    def execute_java(self, *args: 'HadoopRoleInstance', classpath: str, working_dir: str, main_class: str, program_args: List[str]):
         outputs = {}
         for role in args:
             logger.info("Executing Java main class '%s' (classpath: %s, working dir: %s) on host '%s'", main_class, classpath, working_dir, role.host)
-            cmd = f"cd {working_dir} && java -classpath {classpath} {main_class}"
+            args_str = " ".join(program_args)
+            cmd = f"cd {working_dir} && java -classpath {classpath} {main_class} {args_str}"
             cmd_obj = role.host.create_cmd(cmd)
             cmd_obj.run()
-            if len(cmd_obj.stdout) > 1:
-                raise HadesException("Expected a one-line stdout from command '{}'. Output was: {}".format(cmd, cmd_obj.stdout))
-            outputs[role.host] = cmd_obj.stdout[0]
+            if len(cmd_obj.stdout) != 2:
+                raise HadesException("Expected a 2-line stdout from command '{}'. Output was: {}".format(cmd, cmd_obj.stdout))
+            outputs[role.host] = cmd_obj.stdout[1]
         return outputs
+
+    def generate_keypair(self, *args: 'HadoopRoleInstance', dname: str, keystore: str, store_pass: str, alias: str, extensions: List[str],
+                         key_alg="RSA",
+                         keysize=2048,
+                         validity=3650
+                         ):
+        for i, role in enumerate(args):
+            ext_args = ""
+            for ext in extensions:
+                if "$HOSTNAME" in ext:
+                    ext = ext.replace("$HOSTNAME", role.host.address)
+                ext_args += f"-ext {ext} "
+            alias_arg = self._determine_alias_arg(alias, role)
+            cmd_1 = f"keytool -v -genkeypair -dname \"{dname}\" -keystore {keystore} -storepass {store_pass} {alias_arg} " \
+                    f"-keyalg {key_alg} -keysize {keysize} -validity {validity} {ext_args}"
+
+            # Verify
+            cmd_verify = f"keytool -list -keystore {keystore} -storepass {store_pass}"
+            cmd = f"{cmd_1} && {cmd_verify}"
+            cmd_obj = role.host.create_cmd(cmd)
+            cmd_obj.run()
+            StandardUpstreamExecutor._log_all(cmd_obj)
+
+    def export_cert_from_keystore(self, *args: 'HadoopRoleInstance', dest_dir: str, dest_cert_ext: str, alias: str, keystore: str, store_pass: str):
+        for i, role in enumerate(args):
+            alias_arg = self._determine_alias_arg(alias, role)
+            dest_cert_filename = f"{self._auto_generate_server_name(role)}.{dest_cert_ext}"
+
+            cmd_makedir = f"mkdir -p {dest_dir} && rm {dest_dir}/*"
+            cmd_exportcert = f"keytool -v -exportcert -file {dest_dir}/{dest_cert_filename} {alias_arg} -keystore {keystore} -storepass {store_pass} -rfc"
+            cmd_verify = f"ls -la {dest_dir}"
+
+            cmd = f"{cmd_makedir} && {cmd_exportcert} && {cmd_verify}"
+            cmd_obj = role.host.create_cmd(cmd)
+            cmd_obj.run()
+            StandardUpstreamExecutor._log_all(cmd_obj)
+
+    def scp_certs_from_other_hosts(self, *args: 'HadoopRoleInstance', src_dir: str, dest_dir: str, cert_ext: str, run_as_user: str = None):
+        all_roles = set(args)
+        for role in args:
+            other_roles = set(all_roles)
+            other_roles.remove(role)
+            for other_role in other_roles:
+                # TODO Harcoded username 'systest' -> is this a problem?
+                hostname = other_role.host.address
+                cert_filename = f"{self._auto_generate_server_name(other_role)}.{cert_ext}"
+                src_filepath = f"{src_dir}/{cert_filename}"
+                cmd_scp = ""
+                if run_as_user:
+                    cmd_scp += f"sudo -u {run_as_user} "
+                cmd_scp += f"scp -o StrictHostKeyChecking=no systest@{hostname}:{src_filepath} {dest_dir}"
+                cmd_verify = f"ls -la {dest_dir}"
+
+                cmd = f"{cmd_scp} && {cmd_verify}"
+                cmd_obj = role.host.create_cmd(cmd)
+                cmd_obj.run()
+                StandardUpstreamExecutor._log_all(cmd_obj)
+
+    def import_certs(self, *args: 'HadoopRoleInstance', src_dir: str, filename_pattern: str, truststore: str, store_pass: str):
+        for role in args:
+            cmd_obj = role.host.create_cmd(f"find {src_dir}/{filename_pattern}")
+            cmd_obj.run()
+            cert_files = cmd_obj.stdout
+
+            for cert_file in cert_files:
+                alias = os.path.basename(cert_file)
+                cmd_keytool = f"keytool -v -importcert -file {cert_file} -alias {alias} -keystore {truststore} -storepass {store_pass} -noprompt"
+                cmd_verify = f"keytool -list -keystore {truststore} -storepass {store_pass}"
+                cmd = f"{cmd_keytool} && {cmd_verify}"
+                cmd_obj = role.host.create_cmd(cmd)
+                cmd_obj.run()
+                StandardUpstreamExecutor._log_all(cmd_obj)
+
+    def _determine_alias_arg(self, alias, role):
+        if alias == "autogenerated":
+            alias = self._auto_generate_server_name(role)
+        alias_arg = ""
+        if alias:
+            alias_arg = f"-alias {alias}"
+        return alias_arg
+
+    @staticmethod
+    def _auto_generate_server_name(role):
+        nums = list(filter(str.isdigit, role.host.address))
+        if len(nums) == 1:
+            return f"server-{nums[0]}"
+        elif len(nums) == 2:
+            return f"server-{nums[0]}_{nums[1]}"
+        else:
+            # Use last number as ID
+            return f"server-{nums[-1]}"
+
+    def modify_file_permissions(self, *args: 'HadoopRoleInstance', file, owner_group: str, permission: int):
+        if ":" not in owner_group:
+            raise ValueError("Expected the owner_group parameter in format: '<owner>:<group'")
+
+        for role in args:
+            role.host.create_cmd(f"chown {owner_group} {file}").run()
+            role.host.create_cmd(f"chmod {permission} {file}").run()
 
     @staticmethod
     def _create_tar_gz_on_host(app_id: str, role: HadoopRoleInstance, files,
@@ -379,14 +495,29 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             tar_cmd = role.host.create_cmd(
                 "tar -cvf {fname} {files}".format(fname=targz_file_path, files=" ".join(files)))
         try:
-            stdout, stderr = tar_cmd.run()
-            logger.debug("stdout: %s", stdout)
-            logger.debug("stderr: %s", stderr)
+            tar_cmd.run()
+            StandardUpstreamExecutor._log_all(tar_cmd)
         except CommandExecutionException as e:
             # If any of the tar commands fail, raise the Exception
             raise e
 
         return targz_file_path, targz_file_name
+
+    @staticmethod
+    def _log_all(cmd: RunnableCommand):
+        StandardUpstreamExecutor._log_stdout(cmd)
+        StandardUpstreamExecutor._log_stderr(cmd)
+
+    @staticmethod
+    def _log_stdout(cmd: RunnableCommand, info=False):
+        if info:
+            logger.info(pformat(cmd.stdout))
+        else:
+            logger.debug("stdout: %s", pformat(cmd.stdout))
+
+    @staticmethod
+    def _log_stderr(cmd: RunnableCommand):
+        logger.debug("stderr: %s", pformat(cmd.stderr))
 
     @staticmethod
     def _create_tar_gz_of_dir_on_host(dir: str, role: HadoopRoleInstance) -> Tuple[str, str]:
@@ -402,11 +533,46 @@ class StandardUpstreamExecutor(HadoopOperationExecutor):
             "tar -cvf {fname} -C {parent_dir} {dir}".format(fname=targz_file_path, parent_dir=parent_dir, dir=f"./{logs_dir}"))
 
         try:
-            stdout, stderr = tar_cmd.run()
-            logger.debug("stdout: %s", stdout)
-            logger.debug("stderr: %s", stderr)
+            tar_cmd.run()
+            StandardUpstreamExecutor._log_all(tar_cmd)
         except CommandExecutionException as e:
             # If any of the tar commands fail, raise the Exception
             raise e
 
         return targz_file_path, targz_file_name
+
+    def cleanup_files(self, *args: 'HadoopRoleInstance', dirs: List[str], limit: int):
+        for role in args:
+            logger.info("Running cleanup on %s. Dirs: %s", role.host.address, dirs)
+            size_descriptor = f"{limit}M"
+
+            rm_cmd = "rm -rf "
+            for dir in dirs:
+                du_cmd = f"du -sh {dir}/* --block-size=1M | sort -rh"
+
+                logger.debug("Cleaning up files in %s:%s", role.host.address, dir)
+                show_large_files_cmd = role.host.create_cmd(du_cmd)
+                show_large_files_cmd.run()
+                StandardUpstreamExecutor._log_stdout(show_large_files_cmd, info=True)
+
+                rm_large_files_find_cmd = role.host.create_cmd(f"find {dir} -type f -size {size_descriptor} -maxdepth 1 2>/dev/null")
+                rm_large_files_find_cmd.run()
+
+                du_output, _ = role.host.create_cmd(du_cmd).run()
+
+                for line in du_output:
+                    split = line.split("\t")
+                    if len(split) != 2:
+                        raise ValueError("Unexpected output line of du command. Should have 2 parts: size and file name. "
+                                         "Actual line: '%s'", line)
+                    size = split[0]
+                    file = split[1]
+                    if int(size) >= limit:
+                        logger.info("Detected large file: %s\t%s", size, file)
+                        rm_cmd += f"{file} "
+
+            if rm_cmd != "rm -rf ":
+                response = input("Are you sure you want to execute command: {}:{} ? ".format(role.host.address, rm_cmd))
+                if response in ("y", "yes"):
+                    rm_cmd_obj = role.host.create_cmd(rm_cmd)
+                    rm_cmd_obj.run()

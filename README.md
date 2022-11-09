@@ -40,8 +40,8 @@ Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev), [CDP](http
 
 ## Terminology
 
--   Service: Hadoop component inside a cluster (HDFS, Yarn etc..)
--   Role: A role type of a service instance (Resource Manager, Name Node, Data Node etc..)
+-   Service: Hadoop component inside a cluster (HDFS, YARN, etc..)
+-   Role: A role is a type of a service instance (Resource Manager, Name Node (NN), Data Node (DN), etc..)
 
 
 <a id="orgc98591d"></a>
@@ -52,7 +52,7 @@ Hades supports [Hadock](https://github.com/9uapaw/docker-hadoop-dev), [CDP](http
 2.  Install dependencies via
     
         pipenv install
-3.  Or install dependencies globally
+3.  Alternatively, install dependencies globally
 4.  Run init command
     
         ./cli.py init
@@ -403,3 +403,149 @@ which could be run as:
 
     hades run-script test
 
+## Set up Hades on a cluster and run the Netty script
+### 1. Install Python 3.9
+
+Commands are copied from: https://computingforgeeks.com/install-latest-python-on-centos-linux/
+
+```
+sudo yum -y groupinstall "Development Tools"
+sudo yum -y install openssl-devel bzip2-devel libffi-devel xz-devel
+gcc --version
+sudo yum -y install wget
+wget https://www.python.org/ftp/python/3.9.13/Python-3.9.13.tgz
+tar xvf Python-3.9.13.tgz
+cd Python-3.9*/
+./configure --enable-optimizations
+sudo make altinstall
+```
+
+### 2. Make sure you have python and pip installed
+```
+ls -la /usr/local/bin/python3.9
+python3.9 --version
+pip3.9 --version
+```
+
+### 3. Upgrade pip
+```
+/usr/local/bin/python3.9 -m pip install --upgrade pip
+```
+
+### 4. Install pipenv
+```
+pip3.9 install --user pipenv
+```
+
+### 5. Install git
+```
+sudo yum install -y git 
+```
+
+### 6. Clone Hades
+```
+git clone https://github.com/szilard-nemeth/hades.git
+```
+
+### 7. Checkout branch (if required) 
+```
+git checkout netty4-finish
+```
+
+### 8. Install dependencies of Hades
+```
+cd ~/hades
+pipenv install
+```
+
+### 9. Launch a pipenv shell
+```
+cd ~/hades
+pipenv shell
+```
+
+### 10 . Create Hades working dir
+```
+mkdir ~/hades_working_dir
+```
+
+### 11. Generate initial Hades configuration
+```
+cd ~/hades_working_dir
+python ~/hades/cli.py init
+```
+
+### 12. Discover cluster
+```
+CLUSTERHOST1=ccycloud-1.snemeth-netty.root.hwx.site
+python ~/hades/cli.py discover -h $CLUSTERHOST1 -c Standard
+```
+
+### 13. Make sure cluster.json and config.json files are generated correctly
+```
+find ~/hades_working_dir -maxdepth 1 -iname "*.json"
+```
+
+### 14. Make sure that the json config files are indented / formatted
+```
+python -m json.tool ~/hades_working_dir/config.json > /tmp/config.json && cp /tmp/config.json ~/hades_working_dir/config.json
+python -m json.tool ~/hades_working_dir/cluster.json > /tmp/cluster.json && cp /tmp/cluster.json ~/hades_working_dir/cluster.json
+```
+
+### 15. Clone Hadoop repo
+```
+cd ~
+git clone https://github.com/apache/hadoop.git
+```
+
+### 16. Edit config.json to point to the Hadoop repo
+```
+jq -c '.hadoopPath = $newHadoopPath' --arg newHadoopPath '/home/systest/hadoop' ~/hades_working_dir/config.json > /tmp/config.json && mv /tmp/config.json ~/hades_working_dir/config.json
+jq -c '.hadoopJarPath = $hadoopJarPath' --arg hadoopJarPath '/home/systest/hadoop/hadoop-dist/target/hadoop-3.4.0-SNAPSHOT/share' ~/hades_working_dir/config.json > /tmp/config.json && mv /tmp/config.json ~/hades_working_dir/config.json
+```
+
+
+### 17. Install tmux and create new tmux session
+```
+sudo yum install tmux -y
+tmux
+```
+
+### 18. Start pipenv shell again
+```
+cd ~/hades && pipenv shell
+```
+
+NOTE: The remaining steps are specific to the netty4.py script
+
+### 19. scp the patch file or create patch file link (from your local machine)
+```
+scp `readlink ~/netty4patch.patch` ccycloud.snemeth-testing.root.hwx.site:netty4patch.patch
+```
+
+### 20. Make sure that the cluster can communicate with the testing cluster (for all machines)
+```
+ssh root@ccycloud-1.snemeth-netty.root.hwx.site
+exit
+ssh root@ccycloud-2.snemeth-netty.root.hwx.site
+exit
+ssh root@ccycloud-3.snemeth-netty.root.hwx.site
+exit
+ssh root@ccycloud-4.snemeth-netty.root.hwx.site
+exit
+
+scp root@ccycloud-1.snemeth-netty.root.hwx.site:/opt/hadoop/etc/hadoop/yarn-site.xml /tmp/yarn-site1.xml
+scp root@ccycloud-2.snemeth-netty.root.hwx.site:/opt/hadoop/etc/hadoop/yarn-site.xml /tmp/yarn-site2.xml
+scp root@ccycloud-3.snemeth-netty.root.hwx.site:/opt/hadoop/etc/hadoop/yarn-site.xml /tmp/yarn-site3.xml
+scp root@ccycloud-4.snemeth-netty.root.hwx.site:/opt/hadoop/etc/hadoop/yarn-site.xml /tmp/yarn-site4.xml
+```
+
+### 21. Run the Netty script
+```
+cd ~/hades_working_dir/
+python ~/hades/cli.py -d run-script -s netty4
+```
+
+### Notes
+Please refer to [this](https://gist.github.com/miroslavtamas/cdca97f2eafdd6c28b844434eaa3b631) script if you need to install Maven.
+For instance, this is required if compilation needs to be performed for the Netty end to end testing.
