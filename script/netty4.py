@@ -930,21 +930,28 @@ class BuildContext:
     built_modules: Dict[str, str]
 
 
-class CompiledModuleChache:
+@dataclass
+class CompilationContext:
+    branch: str
+    patch_file: str
+    changed_modules: Dict[str, str]
+
+
+class CompiledModuleCache:
     def __init__(self, workdir, hadoop_path):
         self.workdir = workdir
         self.hadoop_path = hadoop_path
         self.build_contexts = {}
         self.db_file = os.path.join(self.workdir, "db", "db.pickle")
 
-    def check_cache_hit(self, branch, patch_file, changed_modules):
-        return self._load_from_cache(branch, patch_file, changed_modules)
+    def check_cache_hit(self, ctx: CompilationContext):
+        return self._load_from_cache(ctx)
 
-    def _load_from_cache(self, branch, patch_file, changed_modules):
+    def _load_from_cache(self, ctx: CompilationContext):
         # TODO this logic also founds very old cached modules  --> Should use commit message in dir name and hash of patch file
-        cached_modules = self._build_cache_path_for_modules(branch, patch_file, changed_modules)
+        cached_modules = self._build_cache_path_for_modules(ctx)
 
-        exp_iterations = len(changed_modules)
+        exp_iterations = len(ctx.changed_modules)
         iterations = 0
         for module_name, module_path in cached_modules.items():
             iterations += 1
@@ -955,31 +962,31 @@ class CompiledModuleChache:
 
         return iterations == exp_iterations and exp_iterations > 0, cached_modules
 
-    def save_modules(self, branch, patch_file, changed_modules):
-        cached_modules = self._build_cache_path_for_modules(branch, patch_file, changed_modules)
+    def save_modules(self, ctx: CompilationContext):
+        cached_modules = self._build_cache_path_for_modules(ctx)
         modules_in_cache = {}
-        cache_key = self._make_key(branch, patch_file)
+        cache_key = self._make_key(ctx)
         for module, module_path in cached_modules.items():
             modules_in_cache[module] = module_path
             FileUtils.ensure_dir_created(os.path.dirname(module_path))
-            shutil.copyfile(changed_modules[module], module_path)
-        build_context = BuildContext(patch_file, cache_key, modules_in_cache)
+            shutil.copyfile(ctx.changed_modules[module], module_path)
+        build_context = BuildContext(ctx.patch_file, cache_key, modules_in_cache)
         self.build_contexts[cache_key] = build_context
         self.write_db()
 
     @staticmethod
-    def _make_key(branch, patch_file):
-        if not patch_file:
-            patch_file = "without_patch"
+    def _make_key(ctx: CompilationContext):
+        if not ctx.patch_file:
+            ctx.patch_file = "without_patch"
 
-        patch_file = os.path.basename(patch_file).replace(".", "_")
-        return f"{branch}_{patch_file}"
+        patch_file = os.path.basename(ctx.patch_file).replace(".", "_")
+        return f"{ctx.branch}_{patch_file}"
 
-    def _build_cache_path_for_modules(self, branch, patch_file, changed_modules):
+    def _build_cache_path_for_modules(self, ctx: CompilationContext):
         cache_paths = {}
-        for module_name, module_path in changed_modules.items():
+        for module_name, module_path in ctx.changed_modules.items():
             module_path = module_path.replace(self.hadoop_path, "").lstrip(os.sep)
-            cache_paths[module_name] = os.path.join(self.workdir, "modulecache", self._make_key(branch, patch_file),
+            cache_paths[module_name] = os.path.join(self.workdir, "modulecache", self._make_key(ctx),
                                                     module_path)
         return cache_paths
 
@@ -1006,7 +1013,7 @@ class Compiler:
         self.context = context
         self.handler = handler
         self.config = config
-        self._cache = CompiledModuleChache(self.workdir, self.handler.ctx.config.hadoop_path)
+        self._cache = CompiledModuleCache(self.workdir, self.handler.ctx.config.hadoop_path)
         self._use_cache = self.config.cache_built_maven_artifacts
 
         if self._use_cache:
@@ -1015,22 +1022,23 @@ class Compiler:
     def compile(self, expect_changed_modules=False, force_compile_if_no_changed_modules=True):
         LOG.info("Compile set to %s, force compile: %s", self.context.compile, self.config.force_compile)
         if self.context.compile:
-            patch_file = self.context.patch_file
             hadoop_dir = HadoopDir(self.handler.ctx.config.hadoop_path)
-            branch = hadoop_dir.get_current_branch(fallback="trunk")
-
             compilation_required = True
             all_loaded = False
+
+            comp_context = CompilationContext(branch=hadoop_dir.get_current_branch(fallback="trunk"),
+                                              patch_file=self.context.patch_file,
+                                              changed_modules=hadoop_dir.get_changed_module_paths())
+
             if not self.config.force_compile and self._use_cache:
                 hadoop_dir.extract_changed_modules(allow_empty=True)
-                changed_modules = hadoop_dir.get_changed_module_paths()
-                if expect_changed_modules and not changed_modules:
+                if expect_changed_modules and not comp_context.changed_modules:
                     if not force_compile_if_no_changed_modules:
                         raise HadesException("Expected changed modules but changed modules not found!")
                     else:
                         compilation_required = True
 
-                all_loaded, cached_modules = self._cache.check_cache_hit(branch, patch_file, changed_modules)
+                all_loaded, cached_modules = self._cache.check_cache_hit(comp_context)
                 if all_loaded:
                     compilation_required = False
                     LOG.info("Found all required modules in the  cache, compilation won't be performed! Jars: %s", cached_modules)
@@ -1044,7 +1052,7 @@ class Compiler:
                                                                        no_copy=True,
                                                                        single=None)
                 if self.config.cache_built_maven_artifacts:
-                    self._cache.save_modules(branch, patch_file, changed_modules)
+                    self._cache.save_modules(comp_context)
             elif expect_changed_modules and all_loaded:
                 # Deploy even if we did not perform compilation
                 self.handler.deploy()
