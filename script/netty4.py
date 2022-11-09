@@ -956,7 +956,7 @@ class Compiler:
                         raise HadesException("Expected changed modules but changed modules not found!")
                     else:
                         compilation_required = True
-                # TODO this logic also founds very old cached jars --> Should use commit message in dir name
+                # TODO this logic also founds very old cached jars --> Should use commit message in dir name or timestamp
                 all_loaded, cached_modules = self.load_from_cache(branch, patch_file, changed_jars)
 
                 if all_loaded:
@@ -1636,4 +1636,5 @@ class Netty4RegressionTestDriver(HadesScriptBase):
                 self.steps.finalize_testcase_data_files()  # 12. Write compressed / decompressed testcase data output files 
                 self.steps.finalize_testcase()  # 13. Finalize testcase
             self.steps.finalize_context()
+            # TODO Only keep latest daemonlog (for last testcase)
         self.steps.compare_results()
