@@ -112,7 +112,7 @@ class MainCommandHandler:
 
         if deploy:
             hadoop_modules = self.deploy()
-        return hadoop_modules.get_changed_jar_paths()
+        return hadoop_modules.get_changed_module_paths()
 
     def deploy(self):
         hadoop_modules = HadoopDir(self.ctx.config.hadoop_path)

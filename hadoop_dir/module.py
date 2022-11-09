@@ -136,7 +136,7 @@ class HadoopDir:
     def get_jar_paths(self) -> Dict[str, str]:
         return self._modules
 
-    def get_changed_jar_paths(self) -> Dict[str, str]:
+    def get_changed_module_paths(self) -> Dict[str, str]:
         return self._changed
 
     def get_modules(self) -> List[str]:
