@@ -4,6 +4,7 @@ import os.path
 import pickle
 import re
 import shutil
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -924,87 +925,114 @@ class GeneratedOutputFiles:
 
 
 @dataclass
-class BuildContext:
-    patch_file_path: str
-    cache_key: str
-    built_modules: Dict[str, str]
+class CompilationContext:
+    branch: str
+    commit_hash: str
+    patch_file: str
+    changed_modules: Dict[str, str]
+    timestamp: int = None
+    patch_file_hash: str or None = None
+
+    def __post_init__(self):
+        if not self.patch_file:
+            self.patch_file = "without_patch"
+        self.patch_file_hash = FileUtils.get_hash_of_file(self.patch_file)
+        self.timestamp = int(time.time())
 
 
 @dataclass
-class CompilationContext:
-    branch: str
-    patch_file: str
-    changed_modules: Dict[str, str]
+class ModuleCacheDbKey:
+    patch_file_hash: str
+    commit_hash: str
+    module_name: str
+
+    @staticmethod
+    def create(ctx: CompilationContext, module_name: str):
+        return ModuleCacheDbKey(ctx.patch_file_hash, ctx.commit_hash, module_name)
+
+    def __key(self):
+        # key: hash of patch file + commit hash
+        return self.patch_file_hash, self.commit_hash, self.module_name
+
+    def __hash__(self):
+        return hash(self.__key())
+
+    def __eq__(self, other):
+        if isinstance(other, ModuleCacheDbKey):
+            return self.__key() == other.__key()
+        return NotImplemented
+
+
+class ModuleCacheDb:
+    def __init__(self):
+        # value: module file path
+        self._modules: Dict[ModuleCacheDbKey, str] = {}
+
+    def add_module(self, db_key: ModuleCacheDbKey, module_path: str):
+        self._modules[db_key] = module_path
+
+    def get_module(self, db_key: ModuleCacheDbKey) -> str or None:
+        if db_key in self._modules:
+            return self._modules[db_key]
+        return None
 
 
 class CompiledModuleCache:
     def __init__(self, workdir, hadoop_path):
         self.workdir = workdir
-        self.hadoop_path = hadoop_path
-        self.build_contexts = {}
-        self.db_file = os.path.join(self.workdir, "db", "db.pickle")
+        self._hadoop_path = hadoop_path
+        self._db_file = os.path.join(self.workdir, "moduledb", "db.pickle")
+        self._db: ModuleCacheDb = None
+
+    def load(self):
+        self._db = self.load_db_file()
 
     def check_cache_hit(self, ctx: CompilationContext):
-        return self._load_from_cache(ctx)
+        found_modules: Dict[str, str] = {}
+        for module_name, module_path in ctx.changed_modules.items():
+            found_module_path = self._db.get_module(ModuleCacheDbKey.create(ctx, module_name))
+            if not found_module_path or not os.path.exists(found_module_path):
+                LOG.info("Module '%s' not found in cache", module_name)
+                return False, found_modules
+            else:
+                found_modules[module_name] = found_module_path
 
-    def _load_from_cache(self, ctx: CompilationContext):
-        # TODO this logic also founds very old cached modules  --> Should use commit message in dir name and hash of patch file
-        cached_modules = self._build_cache_path_for_modules(ctx)
-
-        exp_iterations = len(ctx.changed_modules)
-        iterations = 0
-        for module_name, module_path in cached_modules.items():
-            iterations += 1
-            if not os.path.exists(module_path):
-                LOG.info("Module '%s' not found in cache at location: %s", module_name, module_path)
-                return False, cached_modules
-            LOG.debug("Module '%s' found in cache at location: %s", module_name, module_path)
-
-        return iterations == exp_iterations and exp_iterations > 0, cached_modules
+        return True, found_modules
 
     def save_modules(self, ctx: CompilationContext):
-        cached_modules = self._build_cache_path_for_modules(ctx)
+        cached_modules: Dict[str, str] = self._build_cache_path_for_modules(ctx)
         modules_in_cache = {}
-        cache_key = self._make_key(ctx)
+
         for module, module_path in cached_modules.items():
             modules_in_cache[module] = module_path
             FileUtils.ensure_dir_created(os.path.dirname(module_path))
             shutil.copyfile(ctx.changed_modules[module], module_path)
-        build_context = BuildContext(ctx.patch_file, cache_key, modules_in_cache)
-        self.build_contexts[cache_key] = build_context
-        self.write_db()
+            db_key = ModuleCacheDbKey.create(ctx, module)
+            self._db.add_module(db_key, module_path)
 
-    @staticmethod
-    def _make_key(ctx: CompilationContext):
-        if not ctx.patch_file:
-            ctx.patch_file = "without_patch"
+        self.write_db_file()
 
-        patch_file = os.path.basename(ctx.patch_file).replace(".", "_")
-        return f"{ctx.branch}_{patch_file}"
-
-    def _build_cache_path_for_modules(self, ctx: CompilationContext):
-        cache_paths = {}
+    def _build_cache_path_for_modules(self, ctx: CompilationContext) -> Dict[str, str]:
+        cache_paths: Dict[str, str] = {}
         for module_name, module_path in ctx.changed_modules.items():
-            module_path = module_path.replace(self.hadoop_path, "").lstrip(os.sep)
-            cache_paths[module_name] = os.path.join(self.workdir, "modulecache", self._make_key(ctx),
-                                                    module_path)
+            module_path = module_path.replace(self._hadoop_path, "").lstrip(os.sep)
+            cache_paths[module_name] = os.path.join(self.workdir, "modulecache", str(ctx.timestamp), module_path)
         return cache_paths
 
-    def load_db(self):
-        LOG.debug("Loading DB from file: %s", self.db_file)
-        if os.path.exists(self.db_file):
-            with open(self.db_file, "rb") as db:
+    def load_db_file(self):
+        LOG.debug("Loading DB from file: %s", self._db_file)
+        if os.path.exists(self._db_file):
+            with open(self._db_file, "rb") as db:
                 return pickle.load(db)
-        return {}
 
-    def write_db(self):
-        LOG.debug("Writing DB to file: %s", self.db_file)
-        FileUtils.ensure_dir_created(os.path.dirname(self.db_file))
-        with open(self.db_file, "wb") as db:
-            pickle.dump(self.build_contexts, db)
+        # Create empty DB
+        return ModuleCacheDb()
 
-    def load(self):
-        self.build_contexts = self.load_db()
+    def write_db_file(self):
+        LOG.debug("Writing DB to file: %s", self._db_file)
+        FileUtils.ensure_dir_created(os.path.dirname(self._db_file))
+        with open(self._db_file, "wb") as db:
+            pickle.dump(self._db, db)
 
 
 class Compiler:
@@ -1027,6 +1055,7 @@ class Compiler:
             all_loaded = False
 
             comp_context = CompilationContext(branch=hadoop_dir.get_current_branch(fallback="trunk"),
+                                              commit_hash=hadoop_dir.get_current_commit_hash(),
                                               patch_file=self.context.patch_file,
                                               changed_modules=hadoop_dir.get_changed_module_paths())
 
@@ -1041,17 +1070,17 @@ class Compiler:
                 all_loaded, cached_modules = self._cache.check_cache_hit(comp_context)
                 if all_loaded:
                     compilation_required = False
-                    LOG.info("Found all required modules in the  cache, compilation won't be performed! Jars: %s", cached_modules)
+                    LOG.info("Found all required modules in the cache, compilation won't be performed! Modules: %s", cached_modules)
 
             if compilation_required:
                 LOG.info("[%s] Starting compilation...", self.context)
-                changed_modules: Dict[str, str] = self.handler.compile(all=True,
-                                                                       changed=False,
-                                                                       deploy=True,
-                                                                       modules=None,
-                                                                       no_copy=True,
-                                                                       single=None)
-                if self.config.cache_built_maven_artifacts:
+                self.handler.compile(all=True,
+                                     changed=False,
+                                     deploy=True,
+                                     modules=None,
+                                     no_copy=True,
+                                     single=None)
+                if self._use_cache:
                     self._cache.save_modules(comp_context)
             elif expect_changed_modules and all_loaded:
                 # Deploy even if we did not perform compilation

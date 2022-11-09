@@ -27,6 +27,7 @@ class HadoopDir:
     # CHANGED_MODULES_CMD = "git status --porcelain | grep \".*hadoop.*\" | sed -E \"s/.*\\/(.*)\\/src.*/\\1/g\" | sed -E \"s/.*\\/(.*)\\/pom\\.xml/\\1/g\""
     SWITCH_BRANCH_CMD_TEMPLATE = "git checkout {}"
     GET_BRANCH_CMD = "git rev-parse --abbrev-ref HEAD"
+    GET_CURRENT_COMMIT_HASH_CMD = "git rev-parse --short HEAD"
     RESET_HARD_CMD_TEMPLATE = "git reset {} --hard"
     APPLY_PATCH_CMD_TEMPLATE = "git apply {}"
     FIND_JAR_OF_MODULE_TEMPLATE = "find . -name \"*{module}*\" -print | grep \".*{module}/target.*-SNAPSHOT.jar\""
@@ -172,6 +173,17 @@ class HadoopDir:
         if res == "HEAD":
             return fallback
         return res
+
+    def get_current_commit_hash(self):
+        hash_cmd = RunnableCommand(self.GET_CURRENT_COMMIT_HASH_CMD, work_dir=self._hadoop_dir)
+        hash_cmd.run()
+        if not hash_cmd.stdout:
+            raise CommandExecutionException("\n".join(hash_cmd.stdout), hash_cmd)
+
+        if len(hash_cmd.stdout) == 1:
+            return hash_cmd.stdout[0]
+        else:
+            raise HadesException("Cannot determine current git commit hash. Output of command: {}".format(hash_cmd.stdout))
 
     def reset(self, branch):
         logger.info("Resetting branch to %s", branch)
