@@ -658,7 +658,8 @@ class Netty4TestConfig:
     only_run_testcases = []
     LIMIT_TESTCASES = False
     QUICK_MODE = False
-    testcase_limit = 1 if QUICK_MODE or LIMIT_TESTCASES else TC_LIMIT_UNLIMITED
+    # testcase_limit = 1 if QUICK_MODE or LIMIT_TESTCASES else TC_LIMIT_UNLIMITED
+    testcase_limit = 2
     enable_compilation = False if QUICK_MODE else True
     allow_verification_failure = True if QUICK_MODE else False
 
@@ -956,7 +957,7 @@ class Compiler:
                         raise HadesException("Expected changed modules but changed modules not found!")
                     else:
                         compilation_required = True
-                # TODO this logic also founds very old cached jars --> Should use commit message in dir name or timestamp
+                # TODO this logic also founds very old cached jars --> Should use commit message in dir name and hash of patch file
                 all_loaded, cached_modules = self.load_from_cache(branch, patch_file, changed_jars)
 
                 if all_loaded:
@@ -991,7 +992,7 @@ class Compiler:
     def load_from_cache(self, branch, patch_file, changed_jars):
         cached_modules = self._build_cache_path_for_jars(branch, patch_file, changed_jars)
 
-        exp_iterations = len(cached_modules)
+        exp_iterations = len(changed_jars)
         iterations = 0
         for module_name, module_path in cached_modules.items():
             iterations += 1
